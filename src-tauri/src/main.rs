@@ -508,6 +508,7 @@ fn main() {
             api::commands::get_memory_repair_progress,
             api::commands::get_memory_debug_inspector,
             api::commands::evaluate_recent_memory_quality,
+            api::commands::get_capture_quality_dashboard,
             api::commands::rebuild_memory_context_for_range,
             api::commands::run_memory_retrieval_eval,
             api::commands::get_storage_reclaim_progress,

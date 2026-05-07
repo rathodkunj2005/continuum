@@ -28,17 +28,22 @@ pub fn macos_frontmost_app_name() -> Option<String> {
 use crate::config::{DEFAULT_CAPTURE_EMBEDDING_CACHE_SIZE, DEFAULT_IMAGE_EMBEDDING_DIM};
 use crate::context_runtime;
 use crate::embed::{Embedder, EmbeddingBackend, EMBEDDING_DIM};
+use crate::inference::StructuredMemoryExtraction;
 use crate::memory_compaction::{
     build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
     support_embedding_texts,
 };
+use crate::memory_quality::{deterministic_dedup_fingerprint, is_supported_dedup_fingerprint};
 use crate::ocr::{OcrEngine, RecognizedText};
 use crate::privacy::Blocklist;
 use crate::store::{MemoryRecord, SearchResult, Task, TaskType};
 use crate::summariser::narration_filter::clean_or_fallback_display_summary;
 use crate::tasks::parse_tasks_from_llm_response;
+use crate::telemetry::quality_logger::append_quality_event;
 use crate::AppState;
-use chrono::Local;
+use chrono::{Local, Timelike};
+use regex::Regex;
+use serde_json::json;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -114,8 +119,569 @@ pub(crate) fn should_skip_capture_context(
         || Blocklist::is_context_blocked(url, Some(window_title), blocklist)
 }
 
-fn extract_ocr_text(app_name: &str, ocr_result: &RecognizedText) -> String {
-    text_cleanup::reduce_chrome_noise_for_app(app_name, &ocr_result.text)
+fn extract_ocr_text(app_name: &str, ocr_result: &RecognizedText) -> text_cleanup::HighSignalText {
+    text_cleanup::build_high_signal_text_for_app(app_name, &ocr_result.text)
+}
+
+fn normalize_evidence_text(value: &str) -> String {
+    value
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn compute_window_title_hash(url: Option<&str>, window_title: &str, timestamp_ms: i64) -> String {
+    let mut hasher = DefaultHasher::new();
+    url.unwrap_or_default().hash(&mut hasher);
+    window_title.hash(&mut hasher);
+    timestamp_ms.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CaptureSurfacePolicy {
+    Normal,
+    UrlOnly,
+    SkipFrame,
+}
+
+fn classify_capture_surface_policy(
+    app_name: &str,
+    window_title: &str,
+    url: Option<&str>,
+) -> CaptureSurfacePolicy {
+    if !is_browser_app(app_name) {
+        return CaptureSurfacePolicy::Normal;
+    }
+    let Some(url) = url else {
+        return CaptureSurfacePolicy::Normal;
+    };
+    let lower_url = url.to_ascii_lowercase();
+    let lower_title = window_title.to_ascii_lowercase();
+    let domain = extract_domain(url).unwrap_or_default().to_ascii_lowercase();
+    let path_query = lower_url
+        .split("://")
+        .nth(1)
+        .unwrap_or(lower_url.as_str())
+        .split_once('/')
+        .map(|(_, rest)| format!("/{}", rest))
+        .unwrap_or_else(|| "/".to_string());
+
+    if is_skip_surface(&domain, &path_query, &lower_title) {
+        return CaptureSurfacePolicy::SkipFrame;
+    }
+    if is_url_only_surface(&domain, &path_query, &lower_title) {
+        return CaptureSurfacePolicy::UrlOnly;
+    }
+    CaptureSurfacePolicy::Normal
+}
+
+fn is_browser_app(app_name: &str) -> bool {
+    let app = app_name.to_ascii_lowercase();
+    matches!(
+        app.as_str(),
+        value if value.contains("chrome")
+            || value.contains("safari")
+            || value.contains("firefox")
+            || value.contains("arc")
+            || value.contains("edge")
+            || value.contains("brave")
+            || value.contains("opera")
+    )
+}
+
+fn is_skip_surface(domain: &str, path_query: &str, title: &str) -> bool {
+    if domain.contains("youtube.com")
+        && (path_query.starts_with("/results?")
+            || path_query.starts_with("/feed/")
+            || path_query.starts_with("/hashtag/")
+            || path_query.contains("search_query="))
+    {
+        return true;
+    }
+    if domain.contains("google.") && path_query.starts_with("/search?") && path_query.contains("q=")
+    {
+        return true;
+    }
+    if domain.contains("bing.com") && path_query.starts_with("/search?") {
+        return true;
+    }
+    if domain.contains("duckduckgo.com") && path_query.contains("q=") {
+        return true;
+    }
+    if (domain == "x.com" || domain.ends_with(".x.com") || domain.contains("twitter.com"))
+        && (path_query.starts_with("/home")
+            || path_query.starts_with("/explore")
+            || path_query.starts_with("/search"))
+    {
+        return true;
+    }
+    if domain.contains("linkedin.com")
+        && (path_query.starts_with("/feed") || path_query.starts_with("/search/results"))
+    {
+        return true;
+    }
+    title.contains("new tab") || title.contains("start page")
+}
+
+fn is_url_only_surface(domain: &str, path_query: &str, title: &str) -> bool {
+    if domain.contains("youtube.com")
+        && ((path_query.starts_with("/@")
+            || path_query.starts_with("/channel/")
+            || path_query.starts_with("/c/")
+            || path_query.starts_with("/user/"))
+            && path_query.contains("/videos"))
+    {
+        return true;
+    }
+    if domain.contains("youtube.com")
+        && (path_query.starts_with("/@")
+            || path_query.starts_with("/channel/")
+            || path_query.starts_with("/c/")
+            || path_query.starts_with("/user/"))
+    {
+        return true;
+    }
+    if domain.contains("reddit.com")
+        && (path_query.starts_with("/r/")
+            || path_query.starts_with("/search")
+            || path_query.starts_with("/best")
+            || path_query.starts_with("/top"))
+    {
+        return true;
+    }
+    if (domain == "x.com" || domain.ends_with(".x.com") || domain.contains("twitter.com"))
+        && path_query.starts_with("/@")
+    {
+        return true;
+    }
+    title.contains("search results") || title.contains("videos - youtube")
+}
+
+fn entity_regex() -> &'static Regex {
+    static ENTITY_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    ENTITY_RE.get_or_init(|| {
+        Regex::new(r"\b(?:[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+){0,2}|[A-Z]{2,}(?:\s+[A-Z]{2,})?)\b")
+            .expect("valid entity regex")
+    })
+}
+
+fn lightweight_entities_from_text(text: &str) -> Vec<String> {
+    const STOP_ENTITIES: &[&str] = &[
+        "The",
+        "This",
+        "That",
+        "And",
+        "For",
+        "With",
+        "From",
+        "You",
+        "Your",
+        "Google Chrome",
+        "Safari",
+        "YouTube",
+        "Page",
+        "Menu",
+        "Home",
+        "Search",
+        "Results",
+    ];
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for cap in entity_regex().find_iter(text) {
+        let value = cap.as_str().trim();
+        if value.len() < 3 || value.len() > 48 {
+            continue;
+        }
+        if STOP_ENTITIES
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(value))
+        {
+            continue;
+        }
+        let key = value.to_ascii_lowercase();
+        if seen.insert(key) {
+            out.push(value.to_string());
+        }
+        if out.len() >= 12 {
+            break;
+        }
+    }
+    out
+}
+
+fn build_structured_from_browser_semantics(
+    _app_name: &str,
+    window_title: &str,
+    url: Option<&str>,
+    semantic: &macos::BrowserSemanticContent,
+) -> Option<StructuredMemoryExtraction> {
+    if !semantic.has_signal() {
+        return None;
+    }
+    let content_text = semantic.content_text();
+    if content_text.trim().is_empty() {
+        return None;
+    }
+    let mut entities = lightweight_entities_from_text(&content_text);
+    if let Some(domain) = url.and_then(extract_domain) {
+        if !entities
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(&domain))
+        {
+            entities.push(domain);
+        }
+    }
+    let topic = if !semantic.h1.trim().is_empty() {
+        semantic.h1.trim().to_string()
+    } else if !window_title.trim().is_empty() {
+        window_title.trim().to_string()
+    } else {
+        semantic.title.trim().to_string()
+    };
+    let mut memory_context = String::new();
+    if !topic.is_empty() {
+        memory_context.push_str(&topic);
+    }
+    if !semantic.meta_description.trim().is_empty() {
+        if !memory_context.is_empty() {
+            memory_context.push_str(". ");
+        }
+        memory_context.push_str(semantic.meta_description.trim());
+    }
+    if memory_context.trim().is_empty() {
+        memory_context = content_text
+            .split_terminator(['.', '!', '?'])
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+    }
+    Some(StructuredMemoryExtraction {
+        activity_type: "research".to_string(),
+        project: String::new(),
+        topic,
+        memory_context,
+        workflow: "researching".to_string(),
+        user_intent: "researching".to_string(),
+        entities,
+        search_aliases: Vec::new(),
+        confidence: semantic.content_signal_score.clamp(0.35, 0.90),
+        dedup_fingerprint: String::new(),
+        ..Default::default()
+    })
+}
+
+fn field_supported_by_evidence(field: &str, evidence_norm: &str) -> bool {
+    let normalized_field = normalize_evidence_text(field);
+    let terms = normalized_field
+        .split_whitespace()
+        .filter(|term| term.len() >= 3)
+        .filter(|term| !matches!(*term, "unknown" | "none" | "null"))
+        .collect::<Vec<_>>();
+    if terms.is_empty() {
+        return true;
+    }
+    let matched = terms
+        .iter()
+        .filter(|term| evidence_norm.contains(**term))
+        .count();
+    let ratio = matched as f32 / terms.len() as f32;
+    matched >= 1 && ratio >= 0.34
+}
+
+fn strip_unsupported_values(
+    values: &mut Vec<String>,
+    evidence_norm: &str,
+    issues: &mut Vec<String>,
+    issue_label: &str,
+) {
+    let mut kept = Vec::new();
+    let mut removed = 0usize;
+    for value in values.iter() {
+        if field_supported_by_evidence(value, evidence_norm) {
+            kept.push(value.clone());
+        } else {
+            removed += 1;
+        }
+    }
+    if removed > 0 {
+        issues.push(format!("{issue_label}:{removed}"));
+    }
+    *values = kept;
+}
+
+fn validate_structured_memory_extraction(
+    extraction: &mut StructuredMemoryExtraction,
+    app_name: &str,
+    window_title: &str,
+    clean_text: &str,
+) -> (f32, Vec<String>) {
+    let evidence_norm = normalize_evidence_text(&format!("{app_name} {window_title} {clean_text}"));
+    let mut issues = Vec::new();
+    let mut supported = 0usize;
+    let mut total = 0usize;
+
+    let mut maybe_scrub = |value: &mut String, label: &str| {
+        if value.trim().is_empty() {
+            return;
+        }
+        total += 1;
+        if field_supported_by_evidence(value, &evidence_norm) {
+            supported += 1;
+        } else {
+            issues.push(format!("unsupported_{label}"));
+            if extraction.confidence < 0.8 {
+                value.clear();
+            }
+        }
+    };
+
+    maybe_scrub(&mut extraction.project, "project");
+    maybe_scrub(&mut extraction.topic, "topic");
+    maybe_scrub(&mut extraction.workflow, "workflow");
+    maybe_scrub(&mut extraction.user_intent, "intent");
+    maybe_scrub(&mut extraction.memory_context, "memory_context");
+    maybe_scrub(&mut extraction.outcome, "outcome");
+
+    total += extraction.entities.len()
+        + extraction.files_touched.len()
+        + extraction.search_aliases.len();
+    strip_unsupported_values(
+        &mut extraction.entities,
+        &evidence_norm,
+        &mut issues,
+        "unsupported_entities",
+    );
+    strip_unsupported_values(
+        &mut extraction.files_touched,
+        &evidence_norm,
+        &mut issues,
+        "unsupported_files",
+    );
+    strip_unsupported_values(
+        &mut extraction.search_aliases,
+        &evidence_norm,
+        &mut issues,
+        "unsupported_aliases",
+    );
+
+    supported += extraction.entities.len()
+        + extraction.files_touched.len()
+        + extraction.search_aliases.len();
+    if !is_supported_dedup_fingerprint(&extraction.dedup_fingerprint) {
+        if !extraction.dedup_fingerprint.trim().is_empty() {
+            issues.push("unsupported_dedup_fingerprint".to_string());
+        }
+        extraction.dedup_fingerprint.clear();
+    }
+
+    let support_ratio = if total == 0 {
+        0.0
+    } else {
+        supported as f32 / total as f32
+    };
+    let grounding_confidence =
+        (support_ratio * 0.72 + extraction.confidence.clamp(0.0, 1.0) * 0.28).clamp(0.0, 1.0);
+
+    if grounding_confidence < 0.55 {
+        issues.push("structured_fields_weakly_grounded".to_string());
+    }
+    if grounding_confidence < 0.8 {
+        issues.push("possible_ungrounded_extraction".to_string());
+    }
+
+    extraction.confidence = extraction.confidence.clamp(0.0, 1.0);
+    (grounding_confidence, issues)
+}
+
+fn build_grounded_memory_context(
+    extraction: Option<&StructuredMemoryExtraction>,
+    app_name: &str,
+    window_title: &str,
+    clean_text: &str,
+    display_summary: &str,
+) -> String {
+    if let Some(mem) = extraction {
+        if !mem.memory_context.trim().is_empty() {
+            return mem.memory_context.trim().to_string();
+        }
+        let mut parts = Vec::new();
+        if !mem.user_intent.trim().is_empty() {
+            parts.push(format!("You were {}.", mem.user_intent.trim()));
+        }
+        if !mem.project.trim().is_empty() {
+            parts.push(format!("This was work on {}.", mem.project.trim()));
+        } else if !mem.topic.trim().is_empty() {
+            parts.push(format!("Topic: {}.", mem.topic.trim()));
+        }
+        if !mem.files_touched.is_empty() {
+            parts.push(format!(
+                "Files involved: {}.",
+                mem.files_touched
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !mem.next_steps.is_empty() {
+            parts.push(format!(
+                "Next steps: {}.",
+                mem.next_steps
+                    .iter()
+                    .take(3)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
+        if !parts.is_empty() {
+            return parts.join(" ");
+        }
+    }
+
+    let fallback = text_cleanup::concise_fallback_snippet(app_name, window_title, clean_text);
+    if !fallback.trim().is_empty() {
+        fallback
+    } else if !display_summary.trim().is_empty() {
+        display_summary.trim().to_string()
+    } else {
+        clean_text.chars().take(240).collect::<String>()
+    }
+}
+
+fn compose_primary_embedding_text(
+    extraction: Option<&StructuredMemoryExtraction>,
+    app_name: &str,
+    window_title: &str,
+    memory_context: &str,
+    display_summary: &str,
+    clean_text: &str,
+    lexical_shadow: &str,
+) -> String {
+    let mut segments = Vec::new();
+    if let Some(mem) = extraction {
+        if !mem.user_intent.trim().is_empty() {
+            segments.push(format!("intent: {}", mem.user_intent.trim()));
+        }
+        if !mem.project.trim().is_empty() {
+            segments.push(format!("project: {}", mem.project.trim()));
+        }
+        if !mem.topic.trim().is_empty() {
+            segments.push(format!("topic: {}", mem.topic.trim()));
+        }
+        if !mem.workflow.trim().is_empty() {
+            segments.push(format!("workflow: {}", mem.workflow.trim()));
+        }
+        if !mem.entities.is_empty() {
+            segments.push(format!(
+                "entities: {}",
+                mem.entities
+                    .iter()
+                    .take(8)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !mem.files_touched.is_empty() {
+            segments.push(format!(
+                "files: {}",
+                mem.files_touched
+                    .iter()
+                    .take(8)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !mem.results.is_empty() {
+            segments.push(format!(
+                "results: {}",
+                mem.results
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
+    }
+    if !memory_context.trim().is_empty() {
+        segments.push(format!("context: {}", memory_context.trim()));
+    }
+    if !display_summary.trim().is_empty() {
+        segments.push(format!("summary: {}", display_summary.trim()));
+    }
+    segments.push(format!(
+        "app: {} | window: {}",
+        app_name.trim(),
+        window_title.trim()
+    ));
+    let evidence_tail = clean_text.chars().take(320).collect::<String>();
+    if !evidence_tail.trim().is_empty() {
+        segments.push(format!("evidence: {}", evidence_tail.trim()));
+    }
+    let shadow = lexical_shadow.chars().take(220).collect::<String>();
+    if !shadow.trim().is_empty() {
+        segments.push(format!("shadow: {}", shadow.trim()));
+    }
+    segments.join("\n")
+}
+
+fn weighted_primary_embedding(primary: &[f32], snippet: &[f32], support: &[f32]) -> Vec<f32> {
+    let dim = primary
+        .len()
+        .max(snippet.len())
+        .max(support.len())
+        .max(EMBEDDING_DIM);
+    let mut out = vec![0.0f32; dim];
+    for i in 0..dim {
+        let p = primary.get(i).copied().unwrap_or(0.0);
+        let s = snippet.get(i).copied().unwrap_or(0.0);
+        let u = support.get(i).copied().unwrap_or(0.0);
+        out[i] = p * 0.62 + s * 0.23 + u * 0.15;
+    }
+    normalize_embedding_vector(&mut out);
+    out
+}
+
+fn normalize_embedding_vector(vector: &mut [f32]) {
+    let norm = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
+    if norm <= 1e-6 {
+        return;
+    }
+    for value in vector {
+        *value /= norm;
+    }
+}
+
+fn emit_capture_quality_signal(state: &AppState, payload: serde_json::Value) {
+    let _ = append_quality_event(
+        state.app_data_dir.as_path(),
+        "signals.jsonl",
+        &json!({
+            "kind": "Capture",
+            "payload": payload
+        }),
+    );
+}
+
+fn emit_extraction_quality_anomaly(state: &AppState, payload: serde_json::Value) {
+    let _ = append_quality_event(
+        state.app_data_dir.as_path(),
+        "anomalies.jsonl",
+        &json!({
+            "kind": "Extraction",
+            "payload": payload
+        }),
+    );
 }
 
 /// Run the main capture loop
@@ -215,6 +781,8 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         let app_context = macos::get_frontmost_app_info();
         let app_name = app_context.app_name.clone();
         let window_title = app_context.window_title.clone();
+        let force_capture =
+            last_forced_capture.elapsed().as_secs() >= config.forced_capture_interval;
 
         let url = macos::get_browser_url(&app_name);
         if let Some(ref u) = url {
@@ -238,6 +806,134 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             continue;
         }
 
+        let surface_policy =
+            classify_capture_surface_policy(&app_name, &window_title, url.as_deref());
+        if surface_policy == CaptureSurfacePolicy::SkipFrame {
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "domain": url.as_deref().and_then(extract_domain).unwrap_or_default(),
+                    "surface_policy": "skip_frame",
+                    "low_signal": true,
+                    "stored_or_skipped": "skipped_surface_policy",
+                }),
+            );
+            tokio::time::sleep(sleep_duration).await;
+            continue;
+        }
+        if surface_policy == CaptureSurfacePolicy::UrlOnly {
+            let mut h = DefaultHasher::new();
+            app_name.hash(&mut h);
+            window_title.hash(&mut h);
+            url.hash(&mut h);
+            let semantic_hash = h.finish();
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            if semantic_window.should_skip(
+                semantic_hash,
+                now_ms,
+                config.capture_pipeline.semantic_dedup_window_ms,
+            ) && !force_capture
+            {
+                tokio::time::sleep(sleep_duration).await;
+                continue;
+            }
+            let now = Local::now();
+            let session_key = build_session_key(&app_name, &window_title, url.as_deref());
+            let session_id = build_session_id(
+                &now,
+                &app_name,
+                app_context.bundle_id.as_deref(),
+                &session_key,
+            );
+            let domain = url
+                .as_deref()
+                .and_then(extract_domain)
+                .unwrap_or_else(|| "unknown_domain".to_string());
+            let snippet = if !window_title.trim().is_empty() {
+                window_title.trim().to_string()
+            } else {
+                format!("Visited {}", domain)
+            };
+            let memory_context = format!("URL-only surface capture for {} at {}", domain, snippet);
+            let mut record = MemoryRecord {
+                id: uuid::Uuid::new_v4().to_string(),
+                timestamp: now.timestamp_millis(),
+                day_bucket: now.format("%Y-%m-%d").to_string(),
+                app_name: app_name.clone(),
+                bundle_id: app_context.bundle_id.clone(),
+                window_title: window_title.clone(),
+                session_id,
+                text: String::new(),
+                clean_text: String::new(),
+                ocr_confidence: 0.0,
+                ocr_block_count: 0,
+                snippet: snippet.clone(),
+                display_summary: snippet.clone(),
+                internal_context: memory_context.clone(),
+                summary_source: "url_only".to_string(),
+                noise_score: 0.0,
+                session_key,
+                lexical_shadow: build_lexical_shadow(&window_title, &snippet, "", url.as_deref()),
+                embedding: vec![0.0; EMBEDDING_DIM],
+                image_embedding: vec![0.0; DEFAULT_IMAGE_EMBEDDING_DIM],
+                screenshot_path: None,
+                url: url.clone(),
+                snippet_embedding: vec![0.0; EMBEDDING_DIM],
+                support_embedding: vec![0.0; EMBEDDING_DIM],
+                decay_score: 1.0,
+                last_accessed_at: 0,
+                timestamp_start: now.timestamp_millis(),
+                timestamp_end: now.timestamp_millis(),
+                source_type: "browser_url_only".to_string(),
+                topic: "navigation_surface".to_string(),
+                workflow: "browsing".to_string(),
+                user_intent: "navigating".to_string(),
+                memory_context: memory_context.clone(),
+                raw_evidence: json!({
+                    "surface_policy": "url_only",
+                    "timestamp_ms": now.timestamp_millis(),
+                    "app_name": app_name,
+                    "window_title": window_title,
+                    "url": url,
+                })
+                .to_string(),
+                schema_version: 2,
+                activity_type: "browsing".to_string(),
+                embedding_text: format!("url: {} | title: {}", domain, snippet),
+                embedding_model: "bge-large-en-v1.5".to_string(),
+                embedding_dim: EMBEDDING_DIM as u32,
+                ..Default::default()
+            };
+            record.dedup_fingerprint =
+                deterministic_dedup_fingerprint(&record, Some(&record.memory_context));
+            batch.push(record);
+            if force_capture {
+                last_forced_capture = Instant::now();
+            }
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": now.timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "domain": domain,
+                    "surface_policy": "url_only",
+                    "low_signal": false,
+                    "stored_or_skipped": "stored_url_only_surface",
+                    "grounding_confidence": 0.0
+                }),
+            );
+            state.frames_captured.fetch_add(1, Ordering::Relaxed);
+            state
+                .last_capture_time
+                .store(now.timestamp_millis() as u64, Ordering::Relaxed);
+            tokio::time::sleep(sleep_duration).await;
+            continue;
+        }
+
         // Capture screen
         let capture_result = macos::capture_screen();
         let image_data = match capture_result {
@@ -250,8 +946,6 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         };
 
         // Deduplication check
-        let force_capture =
-            last_forced_capture.elapsed().as_secs() >= config.forced_capture_interval;
         let is_duplicate = hasher.is_duplicate(&image_data, config.dedupe_threshold);
 
         if is_duplicate && !force_capture {
@@ -266,37 +960,188 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             last_forced_capture = Instant::now();
         }
 
-        // OCR
-        let ocr_start = Instant::now();
-        let (ocr_result, qwen_cleaned_text) = match ocr.recognize_with_metadata(&image_data) {
-            Ok(result) => result,
-            Err(e) => {
-                tracing::warn!("OCR failed: {}", e);
+        let semantic_page = if surface_policy == CaptureSurfacePolicy::Normal {
+            macos::get_browser_semantic_content(&app_name)
+        } else {
+            None
+        };
+        if let Some(page) = semantic_page.as_ref() {
+            if page.nav_ratio > 0.58 && page.content_signal_score < 0.18 {
+                emit_capture_quality_signal(
+                    state.as_ref(),
+                    json!({
+                        "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                        "app_name": app_name,
+                        "bundle_id": app_context.bundle_id.clone(),
+                        "domain": url.as_deref().and_then(extract_domain).unwrap_or_default(),
+                        "surface_policy": "skip_frame",
+                        "source_kind": "browser_semantic",
+                        "semantic_nav_ratio": page.nav_ratio,
+                        "semantic_content_score": page.content_signal_score,
+                        "stored_or_skipped": "skipped_surface_policy",
+                        "low_signal": true
+                    }),
+                );
                 tokio::time::sleep(sleep_duration).await;
                 continue;
             }
-        };
-        let text = extract_ocr_text(&app_name, &ocr_result);
+        }
+        let mut source_kind = "ocr";
+        let mut source_low_signal = false;
+        let ocr_start = Instant::now();
+        let (text, qwen_cleaned_text, capture_quality, observed_confidence, observed_block_count) =
+            if let Some(semantic) = semantic_page.as_ref().filter(|page| page.has_signal()) {
+                source_kind = "browser_semantic";
+                let semantic_text = semantic.content_text();
+                let high_signal =
+                    text_cleanup::build_high_signal_text_for_app(&app_name, &semantic_text);
+                let mut stats = high_signal.stats.clone();
+                if stats.total_lines == 0 {
+                    stats.total_lines = 1;
+                }
+                if stats.kept_lines == 0 && !high_signal.text.trim().is_empty() {
+                    stats.kept_lines = 1;
+                }
+                stats.low_conf_lines = 0;
+                stats.avg_line_score = (0.68 + semantic.content_signal_score * 0.28
+                    - semantic.nav_ratio * 0.18)
+                    .clamp(0.0, 1.0);
+                (
+                    high_signal.text.clone(),
+                    high_signal.text,
+                    stats,
+                    (0.62 + semantic.content_signal_score * 0.30 - semantic.nav_ratio * 0.12)
+                        .clamp(0.0, 1.0),
+                    high_signal.stats.kept_lines.max(1),
+                )
+            } else {
+                let (ocr_result, qwen_cleaned) = match ocr.recognize_with_metadata(&image_data) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        tracing::warn!("OCR failed: {}", e);
+                        tokio::time::sleep(sleep_duration).await;
+                        continue;
+                    }
+                };
+                source_low_signal = ocr_result.is_low_signal(config.min_text_length);
+                let high_signal = extract_ocr_text(&app_name, &ocr_result);
+                (
+                    high_signal.text.clone(),
+                    qwen_cleaned,
+                    high_signal.stats,
+                    ocr_result.confidence,
+                    ocr_result.block_count,
+                )
+            };
         let ocr_latency = ocr_start.elapsed();
         tracing::info!(
-            "OCR result: {} chars in {:?} (confidence {:.2}, blocks {})",
+            "Capture text source={} chars={} latency_ms={} confidence={:.2} blocks={}",
+            source_kind,
             text.len(),
-            ocr_latency,
-            ocr_result.confidence,
-            ocr_result.block_count
+            ocr_latency.as_millis(),
+            observed_confidence,
+            observed_block_count
         );
 
-        // Skip if OCR output is too weak/noisy to improve recall.
-        if ocr_result.is_low_signal(config.min_text_length) {
+        // Skip if source output is too weak/noisy to improve recall.
+        if source_low_signal {
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "ocr_confidence": observed_confidence,
+                    "ocr_block_count": observed_block_count,
+                    "clean_text_len": text.len(),
+                    "noise_score": 1.0,
+                    "low_signal": true,
+                    "stored_or_skipped": "skipped_low_signal",
+                    "source_kind": source_kind,
+                }),
+            );
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
         if text.len() < config.min_text_length {
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "ocr_confidence": observed_confidence,
+                    "ocr_block_count": observed_block_count,
+                    "clean_text_len": text.len(),
+                    "noise_score": 1.0,
+                    "low_signal": true,
+                    "stored_or_skipped": "skipped_low_signal",
+                    "source_kind": source_kind,
+                    "quality_stats": {
+                        "total_lines": capture_quality.total_lines,
+                        "kept_lines": capture_quality.kept_lines,
+                        "low_conf_lines": capture_quality.low_conf_lines,
+                        "dropped_noise_lines": capture_quality.dropped_noise_lines,
+                        "dropped_low_signal_lines": capture_quality.dropped_low_signal_lines,
+                        "avg_line_score": capture_quality.avg_line_score
+                    }
+                }),
+            );
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
         let noise_score = text_cleanup::estimate_noise_score(&app_name, &text);
+        let keep_ratio = if capture_quality.total_lines == 0 {
+            0.0
+        } else {
+            capture_quality.kept_lines as f32 / capture_quality.total_lines as f32
+        };
+        if capture_quality.avg_line_score < 0.30 || (keep_ratio < 0.12 && text.len() < 220) {
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "ocr_confidence": observed_confidence,
+                    "ocr_block_count": observed_block_count,
+                    "clean_text_len": text.len(),
+                    "noise_score": noise_score,
+                    "low_signal": true,
+                    "stored_or_skipped": "skipped_low_signal",
+                    "source_kind": source_kind,
+                    "quality_stats": {
+                        "total_lines": capture_quality.total_lines,
+                        "kept_lines": capture_quality.kept_lines,
+                        "avg_line_score": capture_quality.avg_line_score,
+                        "keep_ratio": keep_ratio
+                    }
+                }),
+            );
+            tokio::time::sleep(sleep_duration).await;
+            continue;
+        }
         if noise_score > config.capture_pipeline.noise_skip_threshold {
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "ocr_confidence": observed_confidence,
+                    "ocr_block_count": observed_block_count,
+                    "clean_text_len": text.len(),
+                    "noise_score": noise_score,
+                    "low_signal": false,
+                    "stored_or_skipped": "skipped_noise",
+                    "source_kind": source_kind,
+                    "quality_stats": {
+                        "total_lines": capture_quality.total_lines,
+                        "kept_lines": capture_quality.kept_lines,
+                        "avg_line_score": capture_quality.avg_line_score
+                    }
+                }),
+            );
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -342,13 +1187,128 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             }
         };
 
-        let structured_memory = if let Some(engine) = engine.as_ref() {
+        let browser_structured_seed = semantic_page.as_ref().and_then(|page| {
+            build_structured_from_browser_semantics(&app_name, &window_title, url.as_deref(), page)
+        });
+        let mut structured_memory = if let Some(engine) = engine.as_ref() {
             engine
                 .extract_structured_memory(&app_name, &window_title, &qwen_cleaned_text)
                 .await
         } else {
             None
         };
+        if structured_memory.is_none() {
+            structured_memory = browser_structured_seed.clone();
+        } else if let (Some(existing), Some(seed)) =
+            (structured_memory.as_mut(), browser_structured_seed.as_ref())
+        {
+            if existing.memory_context.trim().is_empty() {
+                existing.memory_context = seed.memory_context.clone();
+            }
+            if existing.topic.trim().is_empty() {
+                existing.topic = seed.topic.clone();
+            }
+            if existing.user_intent.trim().is_empty() {
+                existing.user_intent = seed.user_intent.clone();
+            }
+            if existing.activity_type.trim().is_empty() {
+                existing.activity_type = seed.activity_type.clone();
+            }
+            if existing.entities.is_empty() {
+                existing.entities = seed.entities.clone();
+            }
+            if existing.confidence < 0.55 {
+                existing.confidence = existing
+                    .confidence
+                    .max((seed.confidence * 0.9).clamp(0.0, 1.0));
+            }
+        }
+        let (extraction_grounding_confidence, extraction_issues) =
+            if let Some(memory) = structured_memory.as_mut() {
+                validate_structured_memory_extraction(memory, &app_name, &window_title, &text)
+            } else {
+                (0.0, vec!["structured_extraction_unavailable".to_string()])
+            };
+        if !extraction_issues.is_empty() {
+            emit_extraction_quality_anomaly(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "record_id": uuid::Uuid::new_v4().to_string(),
+                    "schema_version": 2,
+                    "activity_type": structured_memory
+                        .as_ref()
+                        .map(|m| m.activity_type.clone())
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    "project_present": structured_memory
+                        .as_ref()
+                        .map(|m| !m.project.trim().is_empty())
+                        .unwrap_or(false),
+                    "summary_present": structured_memory
+                        .as_ref()
+                        .map(|m| !m.memory_context.trim().is_empty())
+                        .unwrap_or(false),
+                    "files_touched_count": structured_memory
+                        .as_ref()
+                        .map(|m| m.files_touched.len())
+                        .unwrap_or(0),
+                    "symbols_changed_count": structured_memory
+                        .as_ref()
+                        .map(|m| m.symbols_changed.len())
+                        .unwrap_or(0),
+                    "errors_count": structured_memory
+                        .as_ref()
+                        .map(|m| m.errors.len())
+                        .unwrap_or(0),
+                    "next_steps_count": structured_memory
+                        .as_ref()
+                        .map(|m| m.next_steps.len())
+                        .unwrap_or(0),
+                    "extraction_confidence": structured_memory
+                        .as_ref()
+                        .map(|m| m.confidence)
+                        .unwrap_or(0.0),
+                    "parse_failed": structured_memory.is_none(),
+                    "grounding_confidence": extraction_grounding_confidence,
+                    "context_conflict": structured_memory
+                        .as_ref()
+                        .map(|m| m.memory_context.trim().is_empty() && !m.topic.trim().is_empty())
+                        .unwrap_or(false),
+                    "anomaly_labels": extraction_issues,
+                    "app_name": app_name
+                }),
+            );
+        }
+        if extraction_grounding_confidence <= 0.10 {
+            emit_capture_quality_signal(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                    "app_name": app_name,
+                    "bundle_id": app_context.bundle_id.clone(),
+                    "domain": url.as_deref().and_then(extract_domain).unwrap_or_default(),
+                    "ocr_confidence": observed_confidence,
+                    "ocr_block_count": observed_block_count,
+                    "clean_text_len": text.len(),
+                    "noise_score": noise_score,
+                    "low_signal": false,
+                    "surface_policy": "normal",
+                    "source_kind": source_kind,
+                    "stored_or_skipped": "skipped_grounding_gate",
+                    "grounding_confidence": extraction_grounding_confidence,
+                    "quality_stats": {
+                        "total_lines": capture_quality.total_lines,
+                        "kept_lines": capture_quality.kept_lines,
+                        "low_conf_lines": capture_quality.low_conf_lines,
+                        "dropped_noise_lines": capture_quality.dropped_noise_lines,
+                        "dropped_low_signal_lines": capture_quality.dropped_low_signal_lines,
+                        "avg_line_score": capture_quality.avg_line_score,
+                    }
+                }),
+            );
+            tokio::time::sleep(sleep_duration).await;
+            continue;
+        }
 
         let vlm_analysis: Option<String> = None;
 
@@ -363,7 +1323,14 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             } else {
                 mem.topic.trim().to_string()
             };
-            (candidate, "llm".to_string())
+            (
+                candidate,
+                if source_kind == "browser_semantic" {
+                    "browser_semantic".to_string()
+                } else {
+                    "llm".to_string()
+                },
+            )
         } else if let Some(ref vlm_text) = vlm_analysis {
             (vlm_text.clone(), "vlm".to_string())
         } else {
@@ -392,11 +1359,13 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 "capture_pipeline:display_summary_narration_filter_hit"
             );
         }
-        let internal_context = structured_memory
-            .as_ref()
-            .map(|memory| memory.memory_context.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| final_snippet.clone());
+        let internal_context = build_grounded_memory_context(
+            structured_memory.as_ref(),
+            &app_name,
+            &window_title,
+            &text,
+            &display_summary,
+        );
 
         // --- Proactive Privacy Check ---
         if Blocklist::is_sensitive_context(url.as_deref(), Some(&window_title)) {
@@ -444,6 +1413,15 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             &enriched_clean_text,
             url.as_deref(),
         );
+        let primary_embed_input = compose_primary_embedding_text(
+            structured_memory.as_ref(),
+            &app_name,
+            &window_title,
+            &internal_context,
+            &display_summary,
+            &enriched_clean_text,
+            &lexical_shadow,
+        );
         let snippet_embed_input = compact_summary_embedding_text(
             &summary_source,
             &display_summary,
@@ -457,7 +1435,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             &lexical_shadow,
         );
 
-        let mut embedding_inputs = vec![enriched_clean_text.clone(), snippet_embed_input.clone()];
+        let mut embedding_inputs = vec![primary_embed_input.clone(), snippet_embed_input.clone()];
         embedding_inputs.extend(support_texts.iter().cloned());
         let semantic_embeddings_available = semantic_embeddings_enabled(text_embedder.as_ref());
         let embed_start = Instant::now();
@@ -469,7 +1447,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             &embedding_inputs,
         );
         let embed_latency = embed_start.elapsed();
-        let text_embedding = embedding_vectors
+        let primary_embedding = embedding_vectors
             .first()
             .cloned()
             .unwrap_or_else(|| vec![0.0; EMBEDDING_DIM]);
@@ -482,6 +1460,8 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         } else {
             vec![0.0; EMBEDDING_DIM]
         };
+        let text_embedding =
+            weighted_primary_embedding(&primary_embedding, &snippet_embedding, &support_embedding);
         *state.last_embedding.write() = if semantic_embeddings_available {
             text_embedding.clone()
         } else {
@@ -536,6 +1516,75 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 .store(0, std::sync::atomic::Ordering::Relaxed);
         }
 
+        let mut dedup_fingerprint = structured_memory
+            .as_ref()
+            .map(|m| m.dedup_fingerprint.trim().to_string())
+            .unwrap_or_default();
+        if !is_supported_dedup_fingerprint(&dedup_fingerprint) {
+            dedup_fingerprint = deterministic_dedup_fingerprint(
+                &MemoryRecord {
+                    app_name: app_name.clone(),
+                    window_title: window_title.clone(),
+                    project: structured_memory
+                        .as_ref()
+                        .map(|m| m.project.clone())
+                        .unwrap_or_default(),
+                    topic: structured_memory
+                        .as_ref()
+                        .map(|m| m.topic.clone())
+                        .unwrap_or_default(),
+                    activity_type: structured_memory
+                        .as_ref()
+                        .map(|m| m.activity_type.clone())
+                        .unwrap_or_default(),
+                    url: url.clone(),
+                    clean_text: enriched_clean_text.clone(),
+                    ..Default::default()
+                },
+                Some(&internal_context),
+            );
+        }
+
+        let raw_evidence_payload = json!({
+            "timestamp_ms": now.timestamp_millis(),
+            "app_name": app_name.clone(),
+            "window_title": window_title.clone(),
+            "url": url.clone(),
+            "source_kind": source_kind,
+            "ocr_confidence": observed_confidence,
+            "ocr_block_count": observed_block_count,
+            "semantic_page": semantic_page.as_ref().map(|page| {
+                json!({
+                    "title": page.title.chars().take(200).collect::<String>(),
+                    "h1": page.h1.chars().take(220).collect::<String>(),
+                    "meta_description": page.meta_description.chars().take(280).collect::<String>(),
+                    "nav_ratio": page.nav_ratio,
+                    "content_signal_score": page.content_signal_score,
+                })
+            }),
+            "ocr_quality": {
+                "total_lines": capture_quality.total_lines,
+                "kept_lines": capture_quality.kept_lines,
+                "low_conf_lines": capture_quality.low_conf_lines,
+                "dropped_noise_lines": capture_quality.dropped_noise_lines,
+                "dropped_low_signal_lines": capture_quality.dropped_low_signal_lines,
+                "avg_line_score": capture_quality.avg_line_score,
+            },
+            "extraction_grounding_confidence": extraction_grounding_confidence,
+            "extraction_issues": extraction_issues.clone(),
+            "primary_embed_input": primary_embed_input.chars().take(900).collect::<String>(),
+            "internal_context": internal_context.chars().take(700).collect::<String>(),
+            "clean_text_excerpt": enriched_clean_text.chars().take(700).collect::<String>(),
+        })
+        .to_string();
+
+        let clean_text_len = enriched_clean_text.len();
+        let session_id = build_session_id(
+            &now,
+            &app_name,
+            app_context.bundle_id.as_deref(),
+            &session_key,
+        );
         let record = MemoryRecord {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: now.timestamp_millis(),
@@ -543,18 +1592,11 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             app_name: app_name.clone(),
             bundle_id: app_context.bundle_id.clone(),
             window_title: window_title.clone(),
-            session_id: format!(
-                "{}-{}",
-                now.format("%Y%m%d"),
-                app_context
-                    .bundle_id
-                    .clone()
-                    .unwrap_or_else(|| app_name.to_lowercase().replace(' ', "_"))
-            ),
+            session_id,
             text: String::new(),
             clean_text: enriched_clean_text,
-            ocr_confidence: ocr_result.confidence,
-            ocr_block_count: ocr_result.ocr_stats.lines_used as u32,
+            ocr_confidence: observed_confidence,
+            ocr_block_count: observed_block_count as u32,
             snippet: display_summary.clone(),
             display_summary: display_summary.clone(),
             internal_context,
@@ -635,7 +1677,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             related_tools: Vec::new(),
             related_agents: Vec::new(),
             related_projects: Vec::new(),
-            raw_evidence: String::new(),
+            raw_evidence: raw_evidence_payload,
             search_aliases: structured_memory
                 .as_ref()
                 .map(|m| m.search_aliases.clone())
@@ -648,7 +1690,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             workflow_confidence: 0.0,
             project_evidence: Vec::new(),
             related_project_ids: Vec::new(),
-            evidence_confidence: ocr_result.confidence,
+            evidence_confidence: observed_confidence,
             confidence_score: 0.0,
             importance_score: 0.0,
             specificity_score: 0.0,
@@ -721,9 +1763,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             content_hash: String::new(),
             dedup_fingerprint: structured_memory
                 .as_ref()
-                .map(|m| m.dedup_fingerprint.clone())
-                .unwrap_or_default(),
-            embedding_text: String::new(), // Populated in the vector pipeline if needed
+                .map(|_| dedup_fingerprint.clone())
+                .unwrap_or(dedup_fingerprint),
+            embedding_text: primary_embed_input,
             embedding_model: "bge-large-en-v1.5".to_string(), // Default assumption, actual model set in pipeline
             embedding_dim: EMBEDDING_DIM as u32,
             is_consolidated: false,
@@ -732,6 +1774,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             related_ids: Vec::new(),
             consolidated_from: Vec::new(),
         };
+        let incoming_record_id = record.id.clone();
         let merged_or_new = match merge_or_append_memory_record(
             state.as_ref(),
             &mut batch,
@@ -749,6 +1792,21 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 record
             }
         };
+        if merged_or_new.id != incoming_record_id {
+            emit_extraction_quality_anomaly(
+                state.as_ref(),
+                json!({
+                    "timestamp_ms": now.timestamp_millis(),
+                    "app_name": app_name,
+                    "schema_version": 2,
+                    "record_id": incoming_record_id,
+                    "merged_into_id": merged_or_new.id,
+                    "grounding_confidence": extraction_grounding_confidence,
+                    "source_kind": source_kind,
+                    "anomaly_labels": ["merge_audit_event"],
+                }),
+            );
+        }
         // Fire-and-forget: auto-link to a task cluster based on embedding similarity.
         if semantic_embeddings_available {
             let record_clone = merged_or_new.clone();
@@ -766,6 +1824,35 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         {
             tracing::debug!("Auto task extraction skipped: {}", err);
         }
+
+        emit_capture_quality_signal(
+            state.as_ref(),
+            json!({
+                "timestamp_ms": now.timestamp_millis(),
+                "app_name": app_name,
+                "bundle_id": app_context.bundle_id.clone(),
+                "domain": url.as_deref().and_then(extract_domain).unwrap_or_default(),
+                "window_title_hash": compute_window_title_hash(url.as_deref(), &window_title, now.timestamp_millis()),
+                "ocr_confidence": observed_confidence,
+                "ocr_block_count": observed_block_count,
+                "clean_text_len": clean_text_len,
+                "noise_score": noise_score,
+                "low_signal": false,
+                "stored_or_skipped": "stored_candidate",
+                "source_kind": source_kind,
+                "grounding_confidence": extraction_grounding_confidence,
+                "semantic_nav_ratio": semantic_page.as_ref().map(|page| page.nav_ratio).unwrap_or(0.0),
+                "semantic_content_score": semantic_page.as_ref().map(|page| page.content_signal_score).unwrap_or(0.0),
+                "quality_stats": {
+                    "total_lines": capture_quality.total_lines,
+                    "kept_lines": capture_quality.kept_lines,
+                    "low_conf_lines": capture_quality.low_conf_lines,
+                    "dropped_noise_lines": capture_quality.dropped_noise_lines,
+                    "dropped_low_signal_lines": capture_quality.dropped_low_signal_lines,
+                    "avg_line_score": capture_quality.avg_line_score,
+                }
+            }),
+        );
 
         state.frames_captured.fetch_add(1, Ordering::Relaxed);
         state
@@ -2251,6 +3338,47 @@ fn build_session_key(app_name: &str, window_title: &str, url: Option<&str>) -> S
     }
 }
 
+fn build_session_id(
+    now: &chrono::DateTime<Local>,
+    app_name: &str,
+    bundle_id: Option<&str>,
+    session_key: &str,
+) -> String {
+    let app = bundle_id
+        .unwrap_or(app_name)
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let slot = ((now.hour() * 60 + now.minute()) / 30).min(47);
+    let session_anchor = session_key
+        .split(':')
+        .nth(1)
+        .unwrap_or("general")
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!(
+        "{}-{}-{}-s{:02}",
+        now.format("%Y%m%d"),
+        app,
+        session_anchor,
+        slot
+    )
+}
+
 fn extract_domain(url: &str) -> Option<String> {
     let without_scheme = url.split("://").nth(1).unwrap_or(url);
     let host = without_scheme.split('/').next()?.trim();
@@ -2320,6 +3448,87 @@ mod tests {
             Some("https://docs.example.com/fndr"),
             &blocklist,
         ));
+    }
+
+    #[test]
+    fn surface_policy_skips_known_navigation_results_pages() {
+        let policy = classify_capture_surface_policy(
+            "Google Chrome",
+            "Search results - YouTube",
+            Some("https://www.youtube.com/results?search_query=screenpipe"),
+        );
+        assert_eq!(policy, CaptureSurfacePolicy::SkipFrame);
+    }
+
+    #[test]
+    fn surface_policy_uses_url_only_for_channel_listing_pages() {
+        let policy = classify_capture_surface_policy(
+            "Google Chrome",
+            "screen_pipe - YouTube",
+            Some("https://www.youtube.com/@screen_pipe/videos"),
+        );
+        assert_eq!(policy, CaptureSurfacePolicy::UrlOnly);
+    }
+
+    #[test]
+    fn surface_policy_allows_normal_article_capture() {
+        let policy = classify_capture_surface_policy(
+            "Google Chrome",
+            "Screenpipe Architecture Deep Dive",
+            Some("https://docs.screenpi.pe/architecture/memory-cards"),
+        );
+        assert_eq!(policy, CaptureSurfacePolicy::Normal);
+    }
+
+    #[test]
+    fn session_id_is_sub_day_and_domain_anchored() {
+        let now = chrono::TimeZone::with_ymd_and_hms(&Local, 2026, 5, 6, 21, 46, 0)
+            .single()
+            .expect("local datetime");
+        let id = build_session_id(
+            &now,
+            "Google Chrome",
+            Some("com.google.Chrome"),
+            "google_chrome:youtube_com:screenpipe",
+        );
+        assert!(id.starts_with("20260506-com.google.chrome-youtube_com-s"));
+    }
+
+    #[test]
+    fn semantic_structured_fallback_builds_grounded_fields() {
+        let semantic = macos::BrowserSemanticContent {
+            title: "Screenpipe architecture deep dive".to_string(),
+            meta_description: "A walkthrough of memory card indexing and retrieval.".to_string(),
+            h1: "Screenpipe architecture deep dive".to_string(),
+            article_excerpt:
+                "Screenpipe memory cards connect OCR cleanup, retrieval ranking, and context grounding."
+                    .to_string(),
+            nav_ratio: 0.08,
+            content_signal_score: 0.84,
+        };
+        let extraction = build_structured_from_browser_semantics(
+            "Google Chrome",
+            "Screenpipe architecture deep dive",
+            Some("https://docs.screenpi.pe/architecture"),
+            &semantic,
+        )
+        .expect("semantic extraction");
+
+        assert!(!extraction.topic.trim().is_empty());
+        assert!(!extraction.memory_context.trim().is_empty());
+        assert!(extraction.confidence >= 0.35);
+        assert!(!extraction.entities.is_empty());
+    }
+
+    #[test]
+    fn lightweight_entities_extracts_named_tokens() {
+        let entities = lightweight_entities_from_text(
+            "Screenpipe integrates Obsidian, Apple Intelligence, and Toggl reports.",
+        );
+        assert!(entities
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case("Screenpipe")));
+        assert!(entities.iter().any(|e| e.eq_ignore_ascii_case("Obsidian")));
     }
 
     #[tokio::test]
@@ -2403,5 +3612,114 @@ mod tests {
                 "src-tauri/src/capture/mod.rs".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn extraction_validator_strips_unsupported_fields_when_low_confidence() {
+        let mut extraction = StructuredMemoryExtraction {
+            confidence: 0.42,
+            project: "Skunkworks".to_string(),
+            user_intent: "Finalize launch budget".to_string(),
+            topic: "Revenue model".to_string(),
+            files_touched: vec!["src-tauri/src/capture/mod.rs".to_string()],
+            entities: vec!["Jane Doe".to_string()],
+            dedup_fingerprint: "bad fingerprint ###".to_string(),
+            ..Default::default()
+        };
+
+        let (grounding, issues) = validate_structured_memory_extraction(
+            &mut extraction,
+            "Google Chrome",
+            "Random docs page",
+            "Navigation links and generic toolbar labels",
+        );
+
+        assert!(grounding < 0.55);
+        assert!(issues
+            .iter()
+            .any(|item| item == "structured_fields_weakly_grounded"));
+        assert!(issues
+            .iter()
+            .any(|item| item == "possible_ungrounded_extraction"));
+        assert!(issues
+            .iter()
+            .any(|item| item == "unsupported_dedup_fingerprint"));
+        assert!(extraction.project.is_empty());
+        assert!(extraction.user_intent.is_empty());
+        assert!(extraction.topic.is_empty());
+        assert!(extraction.files_touched.is_empty());
+        assert!(extraction.entities.is_empty());
+        assert!(extraction.dedup_fingerprint.is_empty());
+    }
+
+    #[test]
+    fn extraction_validator_keeps_supported_fields_when_grounded() {
+        let mut extraction = StructuredMemoryExtraction {
+            confidence: 0.91,
+            project: "FNDR".to_string(),
+            user_intent: "Improve memory card search ranking".to_string(),
+            topic: "ranking quality".to_string(),
+            files_touched: vec!["src-tauri/src/search/memory_cards.rs".to_string()],
+            entities: vec!["MemoryCardSynthesizer".to_string()],
+            dedup_fingerprint: "fndr:ranking:memory_cards".to_string(),
+            ..Default::default()
+        };
+
+        let (grounding, issues) = validate_structured_memory_extraction(
+            &mut extraction,
+            "Codex",
+            "memory_cards.rs",
+            "Improved memory card search ranking quality in src-tauri/src/search/memory_cards.rs using MemoryCardSynthesizer",
+        );
+
+        assert!(grounding > 0.80);
+        assert!(!issues
+            .iter()
+            .any(|item| item == "possible_ungrounded_extraction"));
+        assert_eq!(extraction.project, "FNDR");
+        assert_eq!(extraction.user_intent, "Improve memory card search ranking");
+        assert_eq!(extraction.files_touched.len(), 1);
+        assert_eq!(extraction.entities.len(), 1);
+        assert_eq!(extraction.dedup_fingerprint, "fndr:ranking:memory_cards");
+    }
+
+    #[test]
+    fn primary_embedding_text_is_structured_first_with_capped_evidence() {
+        let extraction = StructuredMemoryExtraction {
+            user_intent: "Refactor OCR scoring".to_string(),
+            project: "FNDR".to_string(),
+            topic: "capture quality".to_string(),
+            entities: vec!["Apple Vision".to_string()],
+            files_touched: vec!["src-tauri/src/capture/text_cleanup.rs".to_string()],
+            results: vec!["Reduced low-signal capture writes".to_string()],
+            ..Default::default()
+        };
+        let long_text = "evidence ".repeat(120);
+        let text = compose_primary_embedding_text(
+            Some(&extraction),
+            "Codex",
+            "capture/text_cleanup.rs",
+            "Improved OCR cleanup and grounding checks.",
+            "Implemented structured-first embedding context.",
+            &long_text,
+            "ocr cleanup grounding quality",
+        );
+
+        assert!(text.contains("intent: Refactor OCR scoring"));
+        assert!(text.contains("project: FNDR"));
+        assert!(text.contains("files: src-tauri/src/capture/text_cleanup.rs"));
+        assert!(text.contains("evidence: "));
+        assert!(!text.contains(&"evidence ".repeat(80)));
+    }
+
+    #[test]
+    fn weighted_primary_embedding_prefers_primary_vector() {
+        let merged = weighted_primary_embedding(&[1.0, 0.0], &[0.0, 1.0], &[0.0, 1.0]);
+        assert!(
+            merged[0] > merged[1],
+            "primary component should dominate weighted output"
+        );
+        let norm = (merged.iter().map(|value| value * value).sum::<f32>()).sqrt();
+        assert!((norm - 1.0).abs() < 1e-3);
     }
 }

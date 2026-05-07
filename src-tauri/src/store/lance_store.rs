@@ -12,11 +12,13 @@ use super::schema::{
 use crate::config::{
     DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_STORE_KEYWORD_QUERY_MULTIPLIER,
     DEFAULT_STORE_MAX_KEYWORD_SCAN, DEFAULT_STORE_VECTOR_QUERY_MULTIPLIER,
-    DEFAULT_TEXT_EMBEDDING_DIM, DEFAULT_PRIMARY_MEMORY_AGENT_USEFULNESS_MIN,
-    DEFAULT_PRIMARY_MEMORY_INTENT_MIN, DEFAULT_PRIMARY_MEMORY_OCR_NOISE_MAX,
-    DEFAULT_PRIMARY_MEMORY_SPECIFICITY_MIN,
+    DEFAULT_TEXT_EMBEDDING_DIM,
 };
 use crate::memory_compaction::{build_lexical_shadow, compact_memory_record_payload};
+use crate::memory_quality::{
+    classify_storage_outcome, default_memory_quality_config, deterministic_dedup_fingerprint,
+    is_supported_dedup_fingerprint, quality_gate_reason as shared_quality_gate_reason,
+};
 use arrow_array::{
     builder::{Int64Builder, ListBuilder, StringBuilder},
     Array, BooleanArray, FixedSizeListArray, Float32Array, Int64Array, ListArray, RecordBatch,
@@ -4399,6 +4401,12 @@ fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
     if normalized.internal_context.trim().is_empty() {
         normalized.internal_context = normalized.clean_text.clone();
     }
+    normalized.clean_text = strip_low_conf_markers(&normalized.clean_text);
+    normalized.snippet = strip_low_conf_markers(&normalized.snippet);
+    normalized.display_summary = strip_low_conf_markers(&normalized.display_summary);
+    normalized.internal_context = strip_low_conf_markers(&normalized.internal_context);
+    normalized.memory_context = strip_low_conf_markers(&normalized.memory_context);
+    normalized.embedding_text = strip_low_conf_markers(&normalized.embedding_text);
     if normalized.timestamp_start <= 0 {
         normalized.timestamp_start = normalized.timestamp;
     }
@@ -4428,6 +4436,10 @@ fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
     }
     if normalized.embedding_text.trim().is_empty() {
         normalized.embedding_text = compose_embedding_text(&normalized);
+    }
+    if !is_supported_dedup_fingerprint(&normalized.dedup_fingerprint) {
+        normalized.dedup_fingerprint =
+            deterministic_dedup_fingerprint(&normalized, Some(&normalized.memory_context));
     }
     if normalized.search_aliases.is_empty() {
         normalized.search_aliases = generate_search_aliases(&normalized);
@@ -4493,10 +4505,11 @@ fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
             .clamp(0.0, 1.0);
     }
     if normalized.storage_outcome.trim().is_empty() {
-        normalized.storage_outcome = quality_storage_outcome(&normalized);
+        normalized.storage_outcome =
+            classify_storage_outcome(&normalized, &default_memory_quality_config());
     }
     if normalized.quality_gate_reason.trim().is_empty() {
-        normalized.quality_gate_reason = quality_gate_reason(&normalized);
+        normalized.quality_gate_reason = shared_quality_gate_reason(&normalized);
     }
     normalized.anchor_coverage_score = normalized.anchor_coverage_score.clamp(0.0, 1.0);
     if normalized.content_hash.trim().is_empty() {
@@ -4507,6 +4520,14 @@ fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
         );
     }
     normalized
+}
+
+fn strip_low_conf_markers(value: &str) -> String {
+    value
+        .replace("[LOW_CONF]", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn normalize_event_fields(record: &mut MemoryRecord) {
@@ -5083,43 +5104,6 @@ fn estimate_agent_usefulness_score(record: &MemoryRecord) -> f32 {
     score += record.evidence_confidence * 0.10;
     score -= record.noise_score.clamp(0.0, 1.0) * 0.14;
     score.clamp(0.0, 1.0)
-}
-
-fn quality_storage_outcome(record: &MemoryRecord) -> String {
-    let is_primary = record.specificity_score >= DEFAULT_PRIMARY_MEMORY_SPECIFICITY_MIN
-        && record.intent_score >= DEFAULT_PRIMARY_MEMORY_INTENT_MIN
-        && record.agent_usefulness_score >= DEFAULT_PRIMARY_MEMORY_AGENT_USEFULNESS_MIN
-        && record.ocr_noise_score <= DEFAULT_PRIMARY_MEMORY_OCR_NOISE_MAX;
-    if is_primary {
-        "primary_memory_card".to_string()
-    } else if !record.dedup_fingerprint.trim().is_empty()
-        && record.specificity_score < DEFAULT_PRIMARY_MEMORY_SPECIFICITY_MIN
-    {
-        "merge_into_existing_memory".to_string()
-    } else if !record.related_memory_ids.is_empty()
-        && record.retrieval_value_score < 0.35
-        && record.evidence_confidence < 0.50
-    {
-        "discard_duplicate".to_string()
-    } else if record.agent_usefulness_score >= 0.45 {
-        "enriched_memory_card".to_string()
-    } else if record.evidence_confidence >= 0.45 {
-        "low_quality_evidence".to_string()
-    } else {
-        "defer_until_more_context".to_string()
-    }
-}
-
-fn quality_gate_reason(record: &MemoryRecord) -> String {
-    format!(
-        "specificity={:.2}, intent={:.2}, entities={:.2}, usefulness={:.2}, evidence={:.2}, noise={:.2}",
-        record.specificity_score,
-        record.intent_score,
-        record.entity_score,
-        record.agent_usefulness_score,
-        record.evidence_confidence,
-        record.ocr_noise_score
-    )
 }
 
 fn basename(path: &str) -> String {
@@ -6148,5 +6132,41 @@ mod tests {
             .snippet_embedding
             .iter()
             .all(|value| *value == 0.0));
+    }
+
+    #[test]
+    fn normalize_record_for_index_strips_low_confidence_markers() {
+        let mut source = record(
+            Some("https://example.com/research"),
+            "Research notes",
+            "Summarized the research notes for memory card storage.",
+        );
+        source.clean_text = "[LOW_CONF] Toolbar\nImplemented OCR grounding checks".to_string();
+        source.embedding_text =
+            "[LOW_CONF] toolbar noise\nintent: improve extraction quality".to_string();
+        source.display_summary = "[LOW_CONF] random nav\nImproved extraction quality".to_string();
+
+        let normalized = normalize_record_for_index(&source);
+        assert!(!normalized.clean_text.contains("[LOW_CONF]"));
+        assert!(!normalized.embedding_text.contains("[LOW_CONF]"));
+        assert!(!normalized.display_summary.contains("[LOW_CONF]"));
+    }
+
+    #[test]
+    fn normalize_record_for_index_builds_fingerprint_fallback_when_invalid() {
+        let mut source = record(
+            Some("https://docs.example.com/fndr/search"),
+            "Search quality",
+            "Improved search quality for memory cards",
+        );
+        source.project = "FNDR".to_string();
+        source.activity_type = "coding".to_string();
+        source.dedup_fingerprint = "invalid fingerprint ###".to_string();
+
+        let normalized = normalize_record_for_index(&source);
+        assert!(!normalized.dedup_fingerprint.trim().is_empty());
+        assert!(is_supported_dedup_fingerprint(
+            &normalized.dedup_fingerprint
+        ));
     }
 }

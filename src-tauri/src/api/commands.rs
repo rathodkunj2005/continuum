@@ -11,6 +11,7 @@ use crate::memory_compaction::{
     best_embedding_text, best_snippet_embedding_text, best_support_embedding_texts,
     compact_memory_record_payload, is_low_signal_embedding, mean_pool_embeddings,
 };
+use crate::memory_quality::classify_storage_outcome;
 use crate::privacy::Blocklist;
 use crate::store::MemoryRecord;
 
@@ -22,9 +23,11 @@ use crate::search::{
 };
 use crate::speech;
 use crate::store::{MeetingSession, SearchResult, Stats, Task, TaskType};
+use crate::telemetry::quality_logger::read_quality_events;
 use crate::AppState;
 use chrono::{TimeZone, Timelike};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -106,6 +109,10 @@ pub struct MemoryDebugInspector {
     pub entities: Vec<String>,
     pub actions: Vec<String>,
     pub quality_scores: MemoryScoreBreakdown,
+    pub grounding_confidence: f32,
+    pub extraction_issues: Vec<String>,
+    pub ocr_quality_stats: OcrQualityStats,
+    pub embedding_diagnostics: EmbeddingDiagnostics,
     pub embedding_text: String,
     pub search_aliases: Vec<String>,
     pub raw_ocr_evidence: serde_json::Value,
@@ -114,6 +121,49 @@ pub struct MemoryDebugInspector {
     pub quality_gate_reason: String,
     pub query_match_reasons: Vec<String>,
     pub related_knowledge_pages: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OcrQualityStats {
+    pub total_lines: usize,
+    pub kept_lines: usize,
+    pub low_conf_lines: usize,
+    pub dropped_noise_lines: usize,
+    pub dropped_low_signal_lines: usize,
+    pub avg_line_score: f32,
+    pub ocr_confidence: f32,
+    pub ocr_blocks: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EmbeddingDiagnostics {
+    pub structured_prefix_ratio: f32,
+    pub evidence_tail_chars: usize,
+    pub dominated_by_raw_ocr: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QualityCountRow {
+    pub label: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CaptureQualityDashboard {
+    pub generated_at: i64,
+    pub lookback_minutes: u32,
+    pub signals_rows: usize,
+    pub anomalies_rows: usize,
+    pub malformed_signal_rows: usize,
+    pub malformed_anomaly_rows: usize,
+    pub stored_candidates: usize,
+    pub skipped_low_signal: usize,
+    pub skipped_noise: usize,
+    pub avg_ocr_confidence: f32,
+    pub grounding_confidence_lt_05: usize,
+    pub grounding_confidence_lt_08: usize,
+    pub top_anomalies: Vec<QualityCountRow>,
+    pub top_apps: Vec<QualityCountRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -501,9 +551,9 @@ fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         evidence_ids: vec![memory_id],
         confidence: score.clamp(0.0, 1.0),
         anchor_coverage_score: result.anchor_coverage_score.clamp(0.0, 1.0),
-        activity_type: String::new(),
-        files_touched: Vec::new(),
-        session_duration_mins: 0,
+        activity_type: result.activity_type.clone(),
+        files_touched: result.files_touched.clone(),
+        session_duration_mins: result.session_duration_mins,
     }
 }
 
@@ -768,6 +818,110 @@ fn dedupe_trimmed_strings(values: impl IntoIterator<Item = String>, limit: usize
     out
 }
 
+fn raw_evidence_json(raw_evidence: &str) -> Option<Value> {
+    let trimmed = raw_evidence.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    serde_json::from_str::<Value>(trimmed).ok()
+}
+
+fn derive_grounding_confidence(memory: &MemoryRecord, evidence: Option<&Value>) -> f32 {
+    evidence
+        .and_then(|value| {
+            value
+                .get("extraction_grounding_confidence")
+                .and_then(Value::as_f64)
+                .map(|value| value as f32)
+        })
+        .unwrap_or(memory.extraction_confidence.clamp(0.0, 1.0))
+        .clamp(0.0, 1.0)
+}
+
+fn derive_extraction_issues(evidence: Option<&Value>) -> Vec<String> {
+    evidence
+        .and_then(|value| value.get("extraction_issues"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string)
+                .take(24)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn derive_ocr_quality_stats(memory: &MemoryRecord, evidence: Option<&Value>) -> OcrQualityStats {
+    let quality = evidence
+        .and_then(|value| value.get("ocr_quality"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    OcrQualityStats {
+        total_lines: quality
+            .get("total_lines")
+            .and_then(Value::as_u64)
+            .unwrap_or(memory.ocr_block_count as u64) as usize,
+        kept_lines: quality
+            .get("kept_lines")
+            .and_then(Value::as_u64)
+            .unwrap_or(memory.ocr_block_count as u64) as usize,
+        low_conf_lines: quality
+            .get("low_conf_lines")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize,
+        dropped_noise_lines: quality
+            .get("dropped_noise_lines")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize,
+        dropped_low_signal_lines: quality
+            .get("dropped_low_signal_lines")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize,
+        avg_line_score: quality
+            .get("avg_line_score")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0) as f32,
+        ocr_confidence: memory.ocr_confidence,
+        ocr_blocks: memory.ocr_block_count,
+    }
+}
+
+fn derive_embedding_diagnostics(memory: &MemoryRecord) -> EmbeddingDiagnostics {
+    let embedding_norm = normalize_debug_text(&memory.embedding_text);
+    let clean_norm = normalize_debug_text(&memory.clean_text);
+    let evidence_index = embedding_norm
+        .find("evidence ")
+        .unwrap_or(embedding_norm.len());
+    let prefix = &embedding_norm[..evidence_index];
+    let structured_markers = [
+        "intent", "project", "topic", "workflow", "context", "entities", "files",
+    ];
+    let marker_hits = structured_markers
+        .iter()
+        .filter(|marker| prefix.contains(*marker))
+        .count();
+    let structured_prefix_ratio =
+        (marker_hits as f32 / structured_markers.len() as f32).clamp(0.0, 1.0);
+    let clean_prefix = clean_norm.chars().take(42).collect::<String>();
+    let dominated = embedding_norm.len() > 60
+        && !clean_prefix.is_empty()
+        && embedding_norm.starts_with(&clean_prefix);
+    EmbeddingDiagnostics {
+        structured_prefix_ratio,
+        evidence_tail_chars: embedding_norm
+            .split("evidence:")
+            .nth(1)
+            .map(str::trim)
+            .map(str::len)
+            .unwrap_or(0),
+        dominated_by_raw_ocr: dominated,
+    }
+}
+
 fn is_vague_memory_context(value: &str) -> bool {
     let normalized = normalize_debug_text(value);
     if normalized.split_whitespace().count() < 10 {
@@ -781,7 +935,9 @@ fn is_vague_memory_context(value: &str) -> bool {
         "general browsing",
         "some activity",
     ];
-    vague_markers.iter().any(|marker| normalized.contains(marker))
+    vague_markers
+        .iter()
+        .any(|marker| normalized.contains(marker))
 }
 
 fn compose_rebuild_embedding_text(record: &MemoryRecord) -> String {
@@ -817,7 +973,10 @@ fn compose_rebuild_embedding_text(record: &MemoryRecord) -> String {
         parts.push(format!("next_steps: {}", record.next_steps.join("; ")));
     }
     if !record.clean_text.trim().is_empty() {
-        parts.push(format!("evidence: {}", truncate_chars(record.clean_text.trim(), 420)));
+        parts.push(format!(
+            "evidence: {}",
+            truncate_chars(record.clean_text.trim(), 420)
+        ));
     }
     truncate_chars(&parts.join(" | "), 2_200)
 }
@@ -855,7 +1014,8 @@ fn derive_rebuild_memory_context(
     current: &MemoryRecord,
     next: Option<&MemoryRecord>,
 ) -> String {
-    if !current.memory_context.trim().is_empty() && !is_vague_memory_context(&current.memory_context)
+    if !current.memory_context.trim().is_empty()
+        && !is_vague_memory_context(&current.memory_context)
     {
         return current.memory_context.trim().to_string();
     }
@@ -870,7 +1030,10 @@ fn derive_rebuild_memory_context(
         clauses.push(format!("The user was {}.", intent));
     }
     if !current.project.trim().is_empty() {
-        clauses.push(format!("This belonged to the {} project.", current.project.trim()));
+        clauses.push(format!(
+            "This belonged to the {} project.",
+            current.project.trim()
+        ));
     } else if !current.topic.trim().is_empty() && current.topic != "unknown" {
         clauses.push(format!("Topic focus: {}.", current.topic.trim()));
     }
@@ -886,10 +1049,7 @@ fn derive_rebuild_memory_context(
         5,
     );
     if !artifacts.is_empty() {
-        clauses.push(format!(
-            "Key artifacts involved: {}.",
-            artifacts.join(", ")
-        ));
+        clauses.push(format!("Key artifacts involved: {}.", artifacts.join(", ")));
     }
 
     let outcomes = dedupe_trimmed_strings(
@@ -944,28 +1104,7 @@ fn classify_storage_outcome_with_config(
     record: &MemoryRecord,
     config: &crate::config::MemoryQualityConfig,
 ) -> String {
-    let primary = record.specificity_score >= config.primary_memory_specificity_min
-        && record.intent_score >= config.primary_memory_intent_min
-        && record.agent_usefulness_score >= config.primary_memory_agent_usefulness_min
-        && record.ocr_noise_score <= config.primary_memory_ocr_noise_max;
-    if primary {
-        "primary_memory_card".to_string()
-    } else if !record.dedup_fingerprint.trim().is_empty()
-        && record.specificity_score < config.primary_memory_specificity_min
-    {
-        "merge_into_existing_memory".to_string()
-    } else if !record.related_memory_ids.is_empty()
-        && record.retrieval_value_score < 0.35
-        && record.evidence_confidence < 0.50
-    {
-        "discard_duplicate".to_string()
-    } else if record.agent_usefulness_score >= 0.45 {
-        "enriched_memory_card".to_string()
-    } else if record.evidence_confidence >= 0.45 {
-        "low_quality_evidence".to_string()
-    } else {
-        "defer_until_more_context".to_string()
-    }
+    classify_storage_outcome(record, config)
 }
 
 fn memory_quality_scores(memory: &MemoryRecord) -> MemoryScoreBreakdown {
@@ -1169,6 +1308,11 @@ pub async fn get_memory_debug_inspector(
             })
         })
         .collect::<Vec<_>>();
+    let evidence = raw_evidence_json(&memory.raw_evidence);
+    let grounding_confidence = derive_grounding_confidence(&memory, evidence.as_ref());
+    let extraction_issues = derive_extraction_issues(evidence.as_ref());
+    let ocr_quality_stats = derive_ocr_quality_stats(&memory, evidence.as_ref());
+    let embedding_diagnostics = derive_embedding_diagnostics(&memory);
 
     Ok(MemoryDebugInspector {
         memory_id: memory.id.clone(),
@@ -1181,6 +1325,10 @@ pub async fn get_memory_debug_inspector(
         entities,
         actions,
         quality_scores: memory_quality_scores(&memory),
+        grounding_confidence,
+        extraction_issues,
+        ocr_quality_stats,
+        embedding_diagnostics,
         embedding_text: memory.embedding_text.clone(),
         search_aliases: memory.search_aliases.clone(),
         raw_ocr_evidence: serde_json::json!({
@@ -1188,6 +1336,7 @@ pub async fn get_memory_debug_inspector(
             "clean_text": truncate_chars(&memory.clean_text, 1800),
             "internal_context": truncate_chars(&memory.internal_context, 1400),
             "raw_evidence": truncate_chars(&memory.raw_evidence, 2200),
+            "parsed_raw_evidence": evidence,
         }),
         graph,
         storage_outcome: memory.storage_outcome.clone(),
@@ -1239,7 +1388,8 @@ pub async fn evaluate_recent_memory_quality(
         if memory.user_intent.trim().is_empty() {
             issues.push("missing_intent".to_string());
         }
-        if memory.project.trim().is_empty() && (memory.topic.trim().is_empty() || memory.topic == "unknown")
+        if memory.project.trim().is_empty()
+            && (memory.topic.trim().is_empty() || memory.topic == "unknown")
         {
             issues.push("missing_project_or_topic".to_string());
         }
@@ -1296,6 +1446,144 @@ pub async fn evaluate_recent_memory_quality(
     })
 }
 
+fn event_timestamp_ms(row: &Value) -> Option<i64> {
+    row.get("payload")
+        .and_then(|payload| payload.get("timestamp_ms"))
+        .and_then(Value::as_i64)
+        .or_else(|| row.get("timestamp_ms").and_then(Value::as_i64))
+}
+
+fn top_rows(map: HashMap<String, usize>, cap: usize) -> Vec<QualityCountRow> {
+    let mut rows = map
+        .into_iter()
+        .map(|(label, count)| QualityCountRow { label, count })
+        .collect::<Vec<_>>();
+    rows.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.label.cmp(&b.label)));
+    rows.truncate(cap.max(1));
+    rows
+}
+
+#[tauri::command]
+pub async fn get_capture_quality_dashboard(
+    state: State<'_, Arc<AppState>>,
+    lookback_minutes: Option<u32>,
+    limit: Option<usize>,
+) -> Result<CaptureQualityDashboard, String> {
+    let lookback = lookback_minutes.unwrap_or(240).clamp(30, 7 * 24 * 60);
+    let limit = limit.unwrap_or(800).clamp(40, 20_000);
+    let now = chrono::Utc::now().timestamp_millis();
+    let earliest = now - chrono::Duration::minutes(lookback as i64).num_milliseconds();
+
+    let (signal_rows_raw, malformed_signal_rows) =
+        read_quality_events(state.inner().app_data_dir.as_path(), "signals.jsonl", limit)?;
+    let (anomaly_rows_raw, malformed_anomaly_rows) = read_quality_events(
+        state.inner().app_data_dir.as_path(),
+        "anomalies.jsonl",
+        limit,
+    )?;
+
+    let signal_rows = signal_rows_raw
+        .into_iter()
+        .filter(|row| {
+            event_timestamp_ms(row)
+                .map(|ts| ts >= earliest)
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+    let anomaly_rows = anomaly_rows_raw
+        .into_iter()
+        .filter(|row| {
+            event_timestamp_ms(row)
+                .map(|ts| ts >= earliest)
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+
+    let mut stored_candidates = 0usize;
+    let mut skipped_low_signal = 0usize;
+    let mut skipped_noise = 0usize;
+    let mut confidence_sum = 0.0f32;
+    let mut confidence_count = 0usize;
+    let mut app_counts: HashMap<String, usize> = HashMap::new();
+    let mut anomaly_counts: HashMap<String, usize> = HashMap::new();
+    let mut grounding_confidence_lt_05 = 0usize;
+    let mut grounding_confidence_lt_08 = 0usize;
+
+    for row in &signal_rows {
+        let Some(payload) = row.get("payload") else {
+            continue;
+        };
+        if let Some(outcome) = payload.get("stored_or_skipped").and_then(Value::as_str) {
+            match outcome {
+                "stored_candidate" => stored_candidates += 1,
+                "skipped_low_signal" => skipped_low_signal += 1,
+                "skipped_noise" => skipped_noise += 1,
+                _ => {}
+            }
+        }
+        if let Some(conf) = payload.get("ocr_confidence").and_then(Value::as_f64) {
+            confidence_sum += conf as f32;
+            confidence_count += 1;
+        }
+        if let Some(app) = payload.get("app_name").and_then(Value::as_str) {
+            *app_counts.entry(app.to_string()).or_insert(0) += 1;
+        }
+        if let Some(grounding) = payload.get("grounding_confidence").and_then(Value::as_f64) {
+            let grounding = grounding as f32;
+            if grounding < 0.5 {
+                grounding_confidence_lt_05 += 1;
+            }
+            if grounding < 0.8 {
+                grounding_confidence_lt_08 += 1;
+            }
+        }
+    }
+
+    for row in &anomaly_rows {
+        let Some(payload) = row.get("payload") else {
+            continue;
+        };
+        if let Some(app) = payload.get("app_name").and_then(Value::as_str) {
+            *app_counts.entry(app.to_string()).or_insert(0) += 1;
+        }
+        if let Some(labels) = payload.get("anomaly_labels").and_then(Value::as_array) {
+            for label in labels.iter().filter_map(Value::as_str) {
+                *anomaly_counts.entry(label.to_string()).or_insert(0) += 1;
+            }
+        }
+        if let Some(grounding) = payload.get("grounding_confidence").and_then(Value::as_f64) {
+            let grounding = grounding as f32;
+            if grounding < 0.5 {
+                grounding_confidence_lt_05 += 1;
+            }
+            if grounding < 0.8 {
+                grounding_confidence_lt_08 += 1;
+            }
+        }
+    }
+
+    Ok(CaptureQualityDashboard {
+        generated_at: now,
+        lookback_minutes: lookback,
+        signals_rows: signal_rows.len(),
+        anomalies_rows: anomaly_rows.len(),
+        malformed_signal_rows,
+        malformed_anomaly_rows,
+        stored_candidates,
+        skipped_low_signal,
+        skipped_noise,
+        avg_ocr_confidence: if confidence_count == 0 {
+            0.0
+        } else {
+            confidence_sum / confidence_count as f32
+        },
+        grounding_confidence_lt_05,
+        grounding_confidence_lt_08,
+        top_anomalies: top_rows(anomaly_counts, 8),
+        top_apps: top_rows(app_counts, 8),
+    })
+}
+
 #[tauri::command]
 pub async fn rebuild_memory_context_for_range(
     state: State<'_, Arc<AppState>>,
@@ -1322,7 +1610,11 @@ pub async fn rebuild_memory_context_for_range(
             continue;
         }
 
-        let previous = if index > 0 { Some(&all[index - 1]) } else { None };
+        let previous = if index > 0 {
+            Some(&all[index - 1])
+        } else {
+            None
+        };
         let next = all.get(index + 1);
         let before = all[index].clone();
         let mut rebuilt = all[index].clone();
@@ -1374,7 +1666,12 @@ pub async fn rebuild_memory_context_for_range(
             .filter(|memory| memory.timestamp >= start && memory.timestamp <= end)
             .cloned()
             .collect::<Vec<_>>();
-        let _ = context_runtime::sync_memory_records(state.inner().as_ref(), &touched, Some("backfill")).await;
+        let _ = context_runtime::sync_memory_records(
+            state.inner().as_ref(),
+            &touched,
+            Some("backfill"),
+        )
+        .await;
         state.inner().invalidate_memory_derived_caches();
     }
 
@@ -8296,5 +8593,46 @@ mod daily_summary_tests {
         assert!(embedding
             .as_ref()
             .is_some_and(|vector| vector.iter().any(|value| *value != 0.0)));
+    }
+
+    #[test]
+    fn list_card_builder_preserves_activity_files_and_duration() {
+        let mut source = result(
+            "list-1",
+            chrono::Utc::now().timestamp_millis(),
+            "VS Code",
+            "capture/mod.rs",
+            "Updated structured extraction validation",
+            None,
+        );
+        source.activity_type = "coding".to_string();
+        source.files_touched = vec![
+            "src-tauri/src/capture/mod.rs".to_string(),
+            "src-tauri/src/api/commands.rs".to_string(),
+        ];
+        source.session_duration_mins = 37;
+
+        let card = memory_card_from_result(source);
+        assert_eq!(card.activity_type, "coding");
+        assert_eq!(card.files_touched.len(), 2);
+        assert_eq!(card.session_duration_mins, 37);
+    }
+
+    #[test]
+    fn api_storage_classifier_matches_shared_classifier() {
+        let config = crate::memory_quality::default_memory_quality_config();
+        let record = MemoryRecord {
+            specificity_score: 0.33,
+            intent_score: 0.78,
+            agent_usefulness_score: 0.64,
+            evidence_confidence: 0.28,
+            ocr_noise_score: 0.25,
+            dedup_fingerprint: "fndr:debug:ocr".to_string(),
+            ..Default::default()
+        };
+
+        let api_outcome = classify_storage_outcome_with_config(&record, &config);
+        let shared_outcome = crate::memory_quality::classify_storage_outcome(&record, &config);
+        assert_eq!(api_outcome, shared_outcome);
     }
 }

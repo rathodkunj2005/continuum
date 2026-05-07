@@ -5,9 +5,9 @@ use crate::store::{
     ActivityEvent, CodeContext, CommandEvent, CommitRef, ContextDelta, ContextPack,
     ContextPackItemReason, ContextRuntimeStatus, ContextTask, DecisionLedgerEntry, DecisionSummary,
     EdgeType, EntityAliasRecord, EntityRef, ErrorEvent, EvidenceRef, ExcludedContextItem,
-    FailureSummary, GraphEdge, GraphNode, HealthStatus, IssueSummary, MemoryRecord, NodeType,
-    PrivacyClass, ProjectContext, RelevantFile, SearchResult, WorkingState, KnowledgePage,
-    KnowledgePageType, KnowledgeStability,
+    FailureSummary, GraphEdge, GraphNode, HealthStatus, IssueSummary, KnowledgePage,
+    KnowledgePageType, KnowledgeStability, MemoryRecord, NodeType, PrivacyClass, ProjectContext,
+    RelevantFile, SearchResult, WorkingState,
 };
 use crate::AppState;
 use once_cell::sync::Lazy;
@@ -1020,7 +1020,10 @@ pub async fn compile_knowledge_pages(
     let mut by_project: HashMap<String, Vec<ActivityEvent>> = HashMap::new();
     for event in &events {
         if let Some(project) = event.project.as_deref() {
-            by_project.entry(project.to_string()).or_default().push(event.clone());
+            by_project
+                .entry(project.to_string())
+                .or_default()
+                .push(event.clone());
         }
     }
     for (project, project_events) in by_project {
@@ -1097,7 +1100,9 @@ pub async fn compile_knowledge_pages(
             stability: page_stability_from_support(decision_events.len()),
             first_seen,
             last_updated,
-            project: decision_events.first().and_then(|event| event.project.clone()),
+            project: decision_events
+                .first()
+                .and_then(|event| event.project.clone()),
             topic: None,
             workflow: None,
         });
@@ -1148,7 +1153,9 @@ pub async fn compile_knowledge_pages(
             stability: page_stability_from_support(breakthrough_events.len()),
             first_seen,
             last_updated,
-            project: breakthrough_events.first().and_then(|event| event.project.clone()),
+            project: breakthrough_events
+                .first()
+                .and_then(|event| event.project.clone()),
             topic: None,
             workflow: None,
         });
@@ -1285,7 +1292,10 @@ pub async fn compile_knowledge_pages(
                     normalize_alias_key(&right.page_id)
                 ),
                 page_type: KnowledgePageType::ContradictionPage,
-                title: compact_claim_title("Contradiction", &format!("{} vs {}", left.title, right.title)),
+                title: compact_claim_title(
+                    "Contradiction",
+                    &format!("{} vs {}", left.title, right.title),
+                ),
                 page_context: format!(
                     "Newer evidence suggests a contradiction between '{}' and '{}'.",
                     left.title, right.title
@@ -1312,7 +1322,8 @@ pub async fn compile_knowledge_pages(
                         .collect(),
                 ),
                 related_page_ids: vec![left.page_id.clone(), right.page_id.clone()],
-                confidence_score: ((left.confidence_score + right.confidence_score) / 2.0).clamp(0.0, 1.0),
+                confidence_score: ((left.confidence_score + right.confidence_score) / 2.0)
+                    .clamp(0.0, 1.0),
                 stability: KnowledgeStability::Contradicted,
                 first_seen: left.first_seen.min(right.first_seen),
                 last_updated: left.last_updated.max(right.last_updated),
@@ -1732,7 +1743,11 @@ async fn upsert_runtime_graph(
 
     for evidence in &event.evidence {
         let evidence_node_id = if evidence.id.trim().is_empty() {
-            format!("evidence:{}:{}", event.id, normalize_alias_key(&evidence.source_id))
+            format!(
+                "evidence:{}:{}",
+                event.id,
+                normalize_alias_key(&evidence.source_id)
+            )
         } else {
             evidence.id.clone()
         };
@@ -1754,7 +1769,11 @@ async fn upsert_runtime_graph(
             }),
         });
         edges.push(GraphEdge {
-            id: format!("edge:{}:evidence:{}", event.id, normalize_alias_key(&evidence_node_id)),
+            id: format!(
+                "edge:{}:evidence:{}",
+                event.id,
+                normalize_alias_key(&evidence_node_id)
+            ),
             source: event_node_id.clone(),
             target: evidence_node_id,
             edge_type: EdgeType::InformedBy,

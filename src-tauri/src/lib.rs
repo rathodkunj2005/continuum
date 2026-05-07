@@ -15,6 +15,7 @@ pub mod inference;
 pub mod mcp;
 pub mod meeting;
 pub mod memory_compaction;
+pub mod memory_quality;
 pub mod models;
 pub mod ocr;
 pub mod privacy;

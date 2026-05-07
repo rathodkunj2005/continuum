@@ -1525,4 +1525,49 @@ mod tests {
         let groups = group_results(&[a, b], 6);
         assert_eq!(groups.len(), 2);
     }
+
+    #[tokio::test]
+    async fn llm_group_policy_still_returns_deterministic_cards_without_inference() {
+        let base = SearchResult {
+            id: "r1".to_string(),
+            timestamp: 3_000_000,
+            app_name: "VS Code".to_string(),
+            bundle_id: None,
+            window_title: "memory_cards.rs".to_string(),
+            session_id: "s42".to_string(),
+            text: "Refined memory card synthesis fallback behavior".to_string(),
+            clean_text: "Refined memory card synthesis fallback behavior".to_string(),
+            ocr_confidence: 0.93,
+            ocr_block_count: 7,
+            snippet: "Refined memory card synthesis fallback behavior".to_string(),
+            summary_source: "fallback".to_string(),
+            noise_score: 0.08,
+            session_key: "vscode:fndr:memory_cards".to_string(),
+            lexical_shadow: String::new(),
+            score: 0.84,
+            screenshot_path: None,
+            url: None,
+            decay_score: 1.0,
+            ..Default::default()
+        };
+        let mut second = base.clone();
+        second.id = "r2".to_string();
+        second.timestamp -= 120_000;
+        second.snippet =
+            "Added deterministic fallback when LLM synthesis is unavailable".to_string();
+
+        let cards = MemoryCardSynthesizer::from_results_with_policy(
+            None,
+            "fallback",
+            &[base, second],
+            6,
+            3,
+            Duration::from_millis(2),
+        )
+        .await;
+
+        assert!(!cards.is_empty());
+        assert!(cards.iter().all(|card| !card.summary.trim().is_empty()));
+        assert!(cards.iter().all(|card| card.source_count >= 1));
+    }
 }

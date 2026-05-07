@@ -2706,11 +2706,8 @@ async fn run_memory_warm_start(
     let claim_pages = filter_pages_by_type(&pages, crate::store::KnowledgePageType::ClaimPage, 8);
     let decision_pages =
         filter_pages_by_type(&pages, crate::store::KnowledgePageType::DecisionPage, 8);
-    let breakthrough_pages = filter_pages_by_type(
-        &pages,
-        crate::store::KnowledgePageType::BreakthroughPage,
-        8,
-    );
+    let breakthrough_pages =
+        filter_pages_by_type(&pages, crate::store::KnowledgePageType::BreakthroughPage, 8);
 
     let pack = context_runtime::build_context_pack(
         app_state.as_ref(),
@@ -2737,11 +2734,7 @@ async fn run_memory_warm_start(
     let memory_map = load_memories_for_results(&app_state, &recent_results).await?;
     let recent_contexts = if args.include_recent_activity {
         build_result_rows(
-            &recent_results
-                .iter()
-                .take(12)
-                .cloned()
-                .collect::<Vec<_>>(),
+            &recent_results.iter().take(12).cloned().collect::<Vec<_>>(),
             &memory_map,
             false,
         )
@@ -2786,11 +2779,8 @@ async fn run_memory_agent_onboarding(
         filter_pages_by_type(&pages, crate::store::KnowledgePageType::ProjectPage, 8);
     let decision_pages =
         filter_pages_by_type(&pages, crate::store::KnowledgePageType::DecisionPage, 8);
-    let breakthrough_pages = filter_pages_by_type(
-        &pages,
-        crate::store::KnowledgePageType::BreakthroughPage,
-        8,
-    );
+    let breakthrough_pages =
+        filter_pages_by_type(&pages, crate::store::KnowledgePageType::BreakthroughPage, 8);
     let contradiction_pages = filter_pages_by_type(
         &pages,
         crate::store::KnowledgePageType::ContradictionPage,

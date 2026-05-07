@@ -51,7 +51,7 @@ pub const DEFAULT_FOCUS_DRIFT_SIMILARITY_THRESHOLD: f32 = 0.30;
 pub const DEFAULT_FOCUS_DRIFT_CAPTURE_COUNT: u32 = 3;
 
 pub const DEFAULT_MEMORY_CARD_MAX_GROUPS: usize = 6;
-pub const DEFAULT_MEMORY_CARD_MAX_LLM_GROUPS: usize = 0;
+pub const DEFAULT_MEMORY_CARD_MAX_LLM_GROUPS: usize = 3;
 pub const DEFAULT_MEMORY_CARD_MAX_GROUP_SNIPPETS: usize = 6;
 pub const DEFAULT_MEMORY_CARD_GROUPING_TIMEOUT_MS: u64 = 350;
 pub const DEFAULT_MEMORY_CARD_LLM_TIMEOUT_MS: u64 = 1_500;
@@ -1055,5 +1055,11 @@ mod tests {
             .expect_err("zeroed hybrid weights should not pass validation");
 
         assert!(err.contains("hybrid search weight"));
+    }
+
+    #[test]
+    fn memory_card_defaults_enable_llm_group_synthesis() {
+        let config = Config::default().normalized();
+        assert!(config.memory_cards.max_llm_groups > 0);
     }
 }

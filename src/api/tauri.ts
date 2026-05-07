@@ -69,6 +69,10 @@ export interface MemoryDebugInspector {
     entities: string[];
     actions: string[];
     quality_scores: MemoryScoreBreakdown;
+    grounding_confidence: number;
+    extraction_issues: string[];
+    ocr_quality_stats: OcrQualityStats;
+    embedding_diagnostics: EmbeddingDiagnostics;
     embedding_text: string;
     search_aliases: string[];
     raw_ocr_evidence: unknown;
@@ -81,6 +85,23 @@ export interface MemoryDebugInspector {
     quality_gate_reason: string;
     query_match_reasons: string[];
     related_knowledge_pages: unknown[];
+}
+
+export interface OcrQualityStats {
+    total_lines: number;
+    kept_lines: number;
+    low_conf_lines: number;
+    dropped_noise_lines: number;
+    dropped_low_signal_lines: number;
+    avg_line_score: number;
+    ocr_confidence: number;
+    ocr_blocks: number;
+}
+
+export interface EmbeddingDiagnostics {
+    structured_prefix_ratio: number;
+    evidence_tail_chars: number;
+    dominated_by_raw_ocr: boolean;
 }
 
 export interface MemoryQualityFlag {
@@ -98,6 +119,28 @@ export interface MemoryValidationReport {
     lookback_minutes: number;
     total_memories: number;
     flagged_memories: MemoryQualityFlag[];
+}
+
+export interface QualityCountRow {
+    label: string;
+    count: number;
+}
+
+export interface CaptureQualityDashboard {
+    generated_at: number;
+    lookback_minutes: number;
+    signals_rows: number;
+    anomalies_rows: number;
+    malformed_signal_rows: number;
+    malformed_anomaly_rows: number;
+    stored_candidates: number;
+    skipped_low_signal: number;
+    skipped_noise: number;
+    avg_ocr_confidence: number;
+    grounding_confidence_lt_05: number;
+    grounding_confidence_lt_08: number;
+    top_anomalies: QualityCountRow[];
+    top_apps: QualityCountRow[];
 }
 
 export interface RebuildMemoryPreview {
@@ -645,6 +688,13 @@ export async function evaluateRecentMemoryQuality(
     limit = 180
 ): Promise<MemoryValidationReport> {
     return invoke<MemoryValidationReport>("evaluate_recent_memory_quality", { lookbackMinutes, limit });
+}
+
+export async function getCaptureQualityDashboard(
+    lookbackMinutes = 240,
+    limit = 800
+): Promise<CaptureQualityDashboard> {
+    return invoke<CaptureQualityDashboard>("get_capture_quality_dashboard", { lookbackMinutes, limit });
 }
 
 export async function rebuildMemoryContextForRange(

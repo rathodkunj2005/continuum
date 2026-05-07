@@ -205,7 +205,15 @@ impl QueryProfile {
             parts.push(with_numbers);
         }
 
-        parts.join(" ").trim().to_string()
+        let joined = parts.join(" ").trim().to_string();
+        if joined.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "Represent this sentence for searching relevant passages: {}",
+                joined
+            )
+        }
     }
 
     fn is_short_intent_query(&self) -> bool {

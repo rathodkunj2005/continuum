@@ -10,6 +10,22 @@ use std::collections::HashSet;
 const MIN_LINE_LEN: usize = 7;
 const MAX_FALLBACK_SNIPPET_CHARS: usize = 220;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CaptureQualityStats {
+    pub total_lines: usize,
+    pub kept_lines: usize,
+    pub low_conf_lines: usize,
+    pub dropped_noise_lines: usize,
+    pub dropped_low_signal_lines: usize,
+    pub avg_line_score: f32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct HighSignalText {
+    pub text: String,
+    pub stats: CaptureQualityStats,
+}
+
 const GENERIC_BROWSER_LABELS: &[&str] = &[
     "new tab",
     "home",
@@ -168,6 +184,10 @@ fn looks_like_animation_fragment(line: &str) -> bool {
 
 fn normalize_inline(line: &str) -> String {
     line.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn strip_low_conf_marker(line: &str) -> String {
+    normalize_inline(&line.replace("[LOW_CONF]", " "))
 }
 
 fn truncate_snippet(text: &str, max_chars: usize) -> String {
@@ -419,6 +439,83 @@ pub fn reduce_chrome_noise_for_app(app_name: &str, text: &str) -> String {
     out
 }
 
+pub fn build_high_signal_text_for_app(app_name: &str, text: &str) -> HighSignalText {
+    let mut stats = CaptureQualityStats::default();
+    let mut out = String::new();
+    let mut seen = HashSet::new();
+    let mut score_sum = 0.0f32;
+    let mut scored_lines = 0usize;
+
+    for line in text.lines() {
+        let has_low_conf = line.contains("[LOW_CONF]");
+        let normalized = strip_low_conf_marker(line.trim());
+        if normalized.is_empty() {
+            continue;
+        }
+        stats.total_lines += 1;
+        if has_low_conf {
+            stats.low_conf_lines += 1;
+        }
+
+        let quality = line_quality_score(app_name, &normalized, has_low_conf);
+        score_sum += quality;
+        scored_lines += 1;
+
+        if should_drop_line(app_name, &normalized) {
+            stats.dropped_noise_lines += 1;
+            continue;
+        }
+        if quality < 0.36 || normalized.len() < MIN_LINE_LEN {
+            stats.dropped_low_signal_lines += 1;
+            continue;
+        }
+        let dedup_key = snippet_dedup_key(&normalized);
+        if !seen.insert(dedup_key) {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&normalized);
+        stats.kept_lines += 1;
+    }
+
+    stats.avg_line_score = if scored_lines == 0 {
+        0.0
+    } else {
+        (score_sum / scored_lines as f32).clamp(0.0, 1.0)
+    };
+
+    if out.trim().is_empty() {
+        out = reduce_chrome_noise_for_app(app_name, &text.replace("[LOW_CONF]", " "));
+    }
+
+    HighSignalText { text: out, stats }
+}
+
+fn line_quality_score(app_name: &str, line: &str, has_low_conf: bool) -> f32 {
+    let symbol = symbol_ratio(line).clamp(0.0, 1.0);
+    let alpha = if line.is_empty() {
+        0.0
+    } else {
+        line.chars().filter(|ch| ch.is_alphanumeric()).count() as f32 / line.len() as f32
+    };
+    let len_score = (line.len().min(180) as f32 / 180.0).clamp(0.0, 1.0);
+    let mut score = alpha * 0.52 + (1.0 - symbol) * 0.28 + len_score * 0.20;
+
+    if has_low_conf {
+        score *= 0.78;
+    }
+    if should_drop_line(app_name, line) {
+        score *= 0.16;
+    }
+    if !is_code_app(app_name) && looks_like_file_inventory(line) {
+        score *= 0.25;
+    }
+
+    score.clamp(0.0, 1.0)
+}
+
 /// Backward-compatible wrapper when app context is unavailable.
 pub fn reduce_chrome_noise(text: &str) -> String {
     reduce_chrome_noise_for_app("", text)
@@ -492,5 +589,42 @@ mod tests {
         let raw = "New Tab\nHome\nTrending\nNotifications\nSuggested for you";
         let score = estimate_noise_score("Chrome", raw);
         assert!(score > 0.7);
+    }
+
+    #[test]
+    fn high_signal_builder_strips_low_conf_markers_and_keeps_signal_lines() {
+        let raw = "[LOW_CONF] New Tab\n[LOW_CONF] Home\nImplement robust OCR cleanup for capture pipeline\n[LOW_CONF] src/main.rs src/lib.rs src/api.ts";
+        let out = build_high_signal_text_for_app("Chrome", raw);
+        assert!(out.text.contains("Implement robust OCR cleanup"));
+        assert!(!out.text.contains("[LOW_CONF]"));
+        assert!(out.stats.total_lines >= 3);
+        assert!(out.stats.kept_lines >= 1);
+    }
+
+    #[test]
+    fn high_signal_builder_degrades_noisy_browser_frames() {
+        let raw = "New Tab\nHome\nTrending\nSuggested for you\nNotifications\nExplore";
+        let out = build_high_signal_text_for_app("Google Chrome", raw);
+        assert!(out.stats.total_lines >= 5);
+        assert_eq!(out.text.trim(), "");
+        assert!(out.stats.kept_lines <= 1);
+    }
+
+    #[test]
+    fn high_signal_builder_preserves_code_lines_in_developer_apps() {
+        let raw = "cargo check\nsrc-tauri/src/capture/mod.rs\nfn validate_structured_memory_extraction(...)";
+        let out = build_high_signal_text_for_app("Terminal", raw);
+        assert!(out.text.contains("cargo check"));
+        assert!(out.text.contains("validate_structured_memory_extraction"));
+        assert!(out.stats.kept_lines >= 2);
+    }
+
+    #[test]
+    fn high_signal_builder_keeps_email_semantics_without_navigation_noise() {
+        let raw = "Inbox\nStarred\nSubject: Updated deployment plan\nPlease review the rollout risks before 4 PM.";
+        let out = build_high_signal_text_for_app("Mail", raw);
+        assert!(out.text.contains("Subject: Updated deployment plan"));
+        assert!(out.text.contains("Please review the rollout risks"));
+        assert!(!out.text.to_lowercase().contains("starred"));
     }
 }
