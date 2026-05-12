@@ -1,0 +1,36 @@
+FNDR Source LOC Snapshot: after
+Generated at: 2026-05-12T16:32:53.753786+00:00
+Inclusion roots: src/, src-tauri/src/, docs/, README.md, CONTEXT.md
+Included extensions: .ts .tsx .css .rs .md
+Excluded: Cargo.lock, package lockfiles, node_modules/, target/, dist/, build/, coverage/, cache/
+
+Total files counted: 143
+Total LOC counted: 72911
+
+Top 25 files by LOC
+LOC	PATH
+  6433	src-tauri/src/store/lance_store.rs
+  4335	src-tauri/src/mcp/mod.rs
+  4103	src-tauri/src/capture/mod.rs
+  3456	src-tauri/src/api/commands/mod.rs
+  2998	src-tauri/src/context_runtime/mod.rs
+  2526	src-tauri/src/meeting/mod.rs
+  2345	src-tauri/src/search/hybrid.rs
+  1824	src-tauri/src/api/commands/hermes_agent.rs
+  1641	src-tauri/src/search/memory_cards.rs
+  1589	src-tauri/src/api/commands/maintenance.rs
+  1285	src-tauri/src/store/schema.rs
+  1278	src-tauri/src/inference/mod.rs
+  1250	src/components/AgentPanel.css
+  1237	src/components/ControlPanel.tsx
+  1237	src/components/AutofillOverlay.tsx
+  1202	src/api/tauri.ts
+  1128	src/components/AgentPanel.tsx
+  1092	src-tauri/src/config.rs
+  1013	src/styles/App.css
+   919	src-tauri/src/embed/onnx.rs
+   910	src-tauri/src/capture/text_cleanup.rs
+   885	src/components/ControlPanel.css
+   854	src-tauri/src/api/onboarding.rs
+   793	src-tauri/src/graph/mod.rs
+   787	src/components/StatsPanel.css

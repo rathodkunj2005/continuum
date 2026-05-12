@@ -148,41 +148,31 @@ function matchesFilters(
         if (perspectiveFilter === "web") return card.activity_type === "browsing";
     }
 
-    // Fall back to haystack matching
-    const app = card.app_name.toLowerCase();
-    const windowTitle = (card.window_title || "").toLowerCase();
-    const context = card.context.join(" ").toLowerCase();
-    const summary = (card.summary || "").toLowerCase();
-    const haystack = `${app} ${windowTitle} ${context} ${summary}`;
+    // Fall back to generic text signals when structured activity_type is absent.
+    const text = normalizeText(
+        `${card.window_title ?? ""} ${(card.context ?? []).join(" ")} ${card.summary ?? ""}`
+    ).toLowerCase();
+    const url = (card.url ?? "").toLowerCase();
+    const hasAny = (terms: string[]) => terms.some((term) => text.includes(term));
 
     if (perspectiveFilter === "web") {
-        return Boolean(card.url) || includesAny(haystack, [
-            "chrome", "safari", "firefox", "brave", "arc browser", "edge", "url:", "site:",
-        ]);
+        return Boolean(card.url) || /^https?:\/\//i.test(url);
     }
 
     if (perspectiveFilter === "coding") {
-        return includesAny(haystack, [
-            "code", "codex", "cursor", "terminal", "iterm", "xcode", "intellij", "pycharm", "webstorm", "android studio", "git",
-        ]);
+        return hasAny(["code", "debug", "build", "compile", "branch", "commit", "pull request", "repo"]);
     }
 
     if (perspectiveFilter === "meetings") {
-        return includesAny(haystack, [
-            "meeting", "zoom", "teams", "meet.google", "call", "transcript", "fndr meetings",
-        ]);
+        return hasAny(["meeting", "agenda", "call", "transcript", "attendee", "follow-up"]);
     }
 
     if (perspectiveFilter === "communication") {
-        return includesAny(haystack, [
-            "slack", "mail", "gmail", "messages", "discord", "inbox", "outlook", "chat",
-        ]);
+        return hasAny(["message", "email", "chat", "inbox", "reply", "thread"]);
     }
 
     if (perspectiveFilter === "docs") {
-        return includesAny(haystack, [
-            "notion", "docs", "word", "pages", "pdf", "preview", "obsidian", "confluence", "readme", "document",
-        ]);
+        return hasAny(["doc", "document", "summary", "outline", "spec", "readme", "note", "draft", "pdf"]);
     }
 
     return true;

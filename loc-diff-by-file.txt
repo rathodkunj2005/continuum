@@ -1,0 +1,14 @@
+FNDR loc-diff-by-file (commands area — this pass)
+Generated with same roots/extensions as loc-before/after snapshots.
+
+api/commands (split impact)
+- src-tauri/src/api/commands.rs (monolith, baseline list) → directory module
+- mod.rs: was ~7,488 LOC pre-pass in prior report; now ~3,456 LOC after extracting maintenance, todos, hermes_agent
+- Added: maintenance.rs (~1,589), hermes_agent.rs (~1,824), todos.rs (~668), existing common.rs + search.rs
+
+Net tracked source LOC (143 files, .ts/.tsx/.css/.rs/.md under src/, src-tauri/src/, docs/ + README/CONTEXT)
+- loc-before.txt total: 74,850
+- loc-after.txt total: 72,911
+- Delta this measurement: -1,939
+
+Note: prior loc-after snapshot (72,862) used a slightly different counting run; authoritative pair for this pass is the regenerated loc-after.txt committed alongside this file.

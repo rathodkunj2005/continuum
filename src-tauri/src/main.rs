@@ -481,11 +481,11 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            api::commands::search,
-            api::commands::search_raw_results,
-            api::commands::search_memory_cards,
-            api::commands::list_memory_cards,
-            api::commands::summarize_search,
+            api::commands::search::search,
+            api::commands::search::search_raw_results,
+            api::commands::search::search_memory_cards,
+            api::commands::search::list_memory_cards,
+            api::commands::search::summarize_search,
             api::commands::get_fun_greeting,
             api::commands::get_status,
             // MCP
@@ -494,7 +494,6 @@ fn main() {
             api::commands::stop_mcp_server,
             api::commands::get_context_runtime_status,
             api::commands::list_recent_context_packs,
-            api::commands::get_context_pack_detail,
             api::commands::fndr_subscribe,
             api::commands::fndr_unsubscribe,
             // Meetings
@@ -505,12 +504,10 @@ fn main() {
             api::commands::delete_meeting,
             api::commands::get_meeting_transcript,
             api::commands::retranscribe_meeting,
-            api::commands::export_meeting_pdf,
             api::commands::export_daily_summary_pdf,
             api::commands::open_exported_pdf,
             // Voice / Speech
             api::commands::transcribe_voice_input,
-            api::commands::speak_text,
             // Capture control
             api::commands::pause_capture,
             api::commands::resume_capture,
@@ -530,7 +527,6 @@ fn main() {
             api::commands::get_memory_repair_progress,
             api::commands::get_memory_debug_inspector,
             api::commands::evaluate_recent_memory_quality,
-            api::commands::get_capture_quality_dashboard,
             api::commands::rebuild_memory_context_for_range,
             api::commands::run_memory_retrieval_eval,
             api::commands::get_storage_reclaim_progress,
@@ -543,7 +539,6 @@ fn main() {
             api::commands::get_todos,
             api::commands::update_todo,
             api::commands::dismiss_todo,
-            api::commands::execute_todo,
             // Agent SDK
             api::commands::start_agent_task,
             api::commands::get_agent_status,
@@ -557,7 +552,6 @@ fn main() {
             api::commands::send_hermes_message,
             api::commands::send_direct_chat,
             api::commands::quick_setup_ollama,
-            api::commands::link_audio_to_memories,
             api::commands::generate_daily_briefing,
             api::commands::generate_daily_summary_for_date,
             // Time tracking & Focus Mode
@@ -569,7 +563,6 @@ fn main() {
             api::commands::set_autofill_settings,
             api::commands::set_autofill_overlay_ready,
             api::commands::take_pending_autofill_payload,
-            api::commands::show_autofill_overlay_window,
             api::commands::resolve_autofill,
             api::commands::inject_text,
             api::commands::dismiss_autofill,

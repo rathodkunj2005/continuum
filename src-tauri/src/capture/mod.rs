@@ -4,6 +4,7 @@
 //! Apple Vision text, embeds cleaned chunks, and batches memory records into
 //! LanceDB.
 
+mod admission;
 pub mod clipboard;
 mod dedupe;
 pub(crate) mod macos;
@@ -11,6 +12,7 @@ pub mod permissions;
 mod sampling;
 pub mod text_cleanup;
 
+use admission::{classify_capture_surface_policy, CaptureSurfacePolicy};
 pub use dedupe::PerceptualHasher;
 pub use sampling::AdaptiveSampler;
 
@@ -140,126 +142,6 @@ fn compute_window_title_hash(url: Option<&str>, window_title: &str, timestamp_ms
     window_title.hash(&mut hasher);
     timestamp_ms.hash(&mut hasher);
     format!("{:x}", hasher.finish())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CaptureSurfacePolicy {
-    Normal,
-    UrlOnly,
-    SkipFrame,
-}
-
-fn classify_capture_surface_policy(
-    app_name: &str,
-    window_title: &str,
-    url: Option<&str>,
-) -> CaptureSurfacePolicy {
-    if !is_browser_app(app_name) {
-        return CaptureSurfacePolicy::Normal;
-    }
-    let Some(url) = url else {
-        return CaptureSurfacePolicy::Normal;
-    };
-    let lower_url = url.to_ascii_lowercase();
-    let lower_title = window_title.to_ascii_lowercase();
-    let domain = extract_domain(url).unwrap_or_default().to_ascii_lowercase();
-    let path_query = lower_url
-        .split("://")
-        .nth(1)
-        .unwrap_or(lower_url.as_str())
-        .split_once('/')
-        .map(|(_, rest)| format!("/{}", rest))
-        .unwrap_or_else(|| "/".to_string());
-
-    if is_skip_surface(&domain, &path_query, &lower_title) {
-        return CaptureSurfacePolicy::SkipFrame;
-    }
-    if is_url_only_surface(&domain, &path_query, &lower_title) {
-        return CaptureSurfacePolicy::UrlOnly;
-    }
-    CaptureSurfacePolicy::Normal
-}
-
-fn is_browser_app(app_name: &str) -> bool {
-    let app = app_name.to_ascii_lowercase();
-    matches!(
-        app.as_str(),
-        value if value.contains("chrome")
-            || value.contains("safari")
-            || value.contains("firefox")
-            || value.contains("arc")
-            || value.contains("edge")
-            || value.contains("brave")
-            || value.contains("opera")
-    )
-}
-
-fn is_skip_surface(domain: &str, path_query: &str, title: &str) -> bool {
-    if domain.contains("youtube.com")
-        && (path_query.starts_with("/results?")
-            || path_query.starts_with("/feed/")
-            || path_query.starts_with("/hashtag/")
-            || path_query.contains("search_query="))
-    {
-        return true;
-    }
-    if domain.contains("google.") && path_query.starts_with("/search?") && path_query.contains("q=")
-    {
-        return true;
-    }
-    if domain.contains("bing.com") && path_query.starts_with("/search?") {
-        return true;
-    }
-    if domain.contains("duckduckgo.com") && path_query.contains("q=") {
-        return true;
-    }
-    if (domain == "x.com" || domain.ends_with(".x.com") || domain.contains("twitter.com"))
-        && (path_query.starts_with("/home")
-            || path_query.starts_with("/explore")
-            || path_query.starts_with("/search"))
-    {
-        return true;
-    }
-    if domain.contains("linkedin.com")
-        && (path_query.starts_with("/feed") || path_query.starts_with("/search/results"))
-    {
-        return true;
-    }
-    title.contains("new tab") || title.contains("start page")
-}
-
-fn is_url_only_surface(domain: &str, path_query: &str, title: &str) -> bool {
-    if domain.contains("youtube.com")
-        && ((path_query.starts_with("/@")
-            || path_query.starts_with("/channel/")
-            || path_query.starts_with("/c/")
-            || path_query.starts_with("/user/"))
-            && path_query.contains("/videos"))
-    {
-        return true;
-    }
-    if domain.contains("youtube.com")
-        && (path_query.starts_with("/@")
-            || path_query.starts_with("/channel/")
-            || path_query.starts_with("/c/")
-            || path_query.starts_with("/user/"))
-    {
-        return true;
-    }
-    if domain.contains("reddit.com")
-        && (path_query.starts_with("/r/")
-            || path_query.starts_with("/search")
-            || path_query.starts_with("/best")
-            || path_query.starts_with("/top"))
-    {
-        return true;
-    }
-    if (domain == "x.com" || domain.ends_with(".x.com") || domain.contains("twitter.com"))
-        && path_query.starts_with("/@")
-    {
-        return true;
-    }
-    title.contains("search results") || title.contains("videos - youtube")
 }
 
 fn entity_regex() -> &'static Regex {
@@ -805,10 +687,7 @@ pub(crate) fn build_durable_memory_context(
         combined = pad_with_structured(&combined, extraction, app_name, clean_text, min_chars);
     }
     if combined.chars().count() > max_chars {
-        let mut truncated: String = combined
-            .chars()
-            .take(max_chars.saturating_sub(3))
-            .collect();
+        let mut truncated: String = combined.chars().take(max_chars.saturating_sub(3)).collect();
         truncated.push_str("...");
         combined = truncated;
     }
@@ -945,8 +824,7 @@ fn compose_primary_embedding_text(
         app_name.trim(),
         window_title.trim()
     ));
-    let evidence_tail =
-        text_cleanup::compress_to_salient_evidence(clean_text, app_name, 320);
+    let evidence_tail = text_cleanup::compress_to_salient_evidence(clean_text, app_name, 320);
     if !evidence_tail.trim().is_empty() {
         segments.push(format!("evidence: {}", evidence_tail.trim()));
     }
@@ -1720,9 +1598,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             {
                 Ok(rows) => rows,
                 Err(err) => {
-                    tracing::debug!(
-                        "memory_context:prior_chain_fetch_skipped err={err}"
-                    );
+                    tracing::debug!("memory_context:prior_chain_fetch_skipped err={err}");
                     Vec::new()
                 }
             }

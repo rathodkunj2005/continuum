@@ -1963,22 +1963,13 @@ fn infer_repo_slug_from_url(url: Option<&str>) -> Option<String> {
         .unwrap_or(raw)
         .trim_start_matches('/');
     let mut parts = without_scheme.split('/');
-    let host = parts.next()?.to_lowercase();
+    parts.next()?;
     let path_segments = parts
         .filter_map(|segment| {
             let trimmed = segment.trim();
             (!trimmed.is_empty()).then(|| trimmed.trim_end_matches(".git").to_string())
         })
         .collect::<Vec<_>>();
-
-    if matches!(
-        host.as_str(),
-        "github.com" | "www.github.com" | "gitlab.com" | "www.gitlab.com" | "bitbucket.org"
-    ) && path_segments.len() >= 2
-        && is_meaningful_project_segment(&path_segments[1])
-    {
-        return Some(path_segments[1].clone());
-    }
 
     for marker in [
         "project",
@@ -1993,6 +1984,46 @@ fn infer_repo_slug_from_url(url: Option<&str>) -> Option<String> {
             .position(|segment| segment.eq_ignore_ascii_case(marker))
         {
             if let Some(candidate) = path_segments.get(index + 1) {
+                if is_meaningful_project_segment(candidate) {
+                    return Some(candidate.clone());
+                }
+            }
+        }
+    }
+
+    // Generic `owner/repo/<resource>/...` paths (GitHub, GitLab, Gitea, etc.) — no host allowlist.
+    const REPO_CHILD_SEGMENTS: &[&str] = &[
+        "pull",
+        "pulls",
+        "issues",
+        "merge_requests",
+        "mr",
+        "commit",
+        "commits",
+        "tree",
+        "blob",
+        "compare",
+        "actions",
+        "wiki",
+        "security",
+        "releases",
+        "tags",
+        "branches",
+        "graphs",
+        "pulse",
+        "network",
+        "stargazers",
+        "forks",
+        "watchers",
+    ];
+    if path_segments.len() >= 3 {
+        let third = path_segments[2].to_lowercase();
+        if REPO_CHILD_SEGMENTS
+            .iter()
+            .copied()
+            .any(|marker| marker == third.as_str())
+        {
+            if let Some(candidate) = path_segments.get(1) {
                 if is_meaningful_project_segment(candidate) {
                     return Some(candidate.clone());
                 }

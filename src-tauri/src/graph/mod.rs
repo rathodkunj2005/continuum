@@ -567,36 +567,6 @@ fn classify_memory_type(app_name: &str, url: Option<&str>, summary_source: &str)
         return "web";
     }
 
-    if app.contains("meeting") || app.contains("zoom") || app.contains("teams") {
-        return "meeting";
-    }
-
-    if app.contains("code")
-        || app.contains("terminal")
-        || app.contains("xcode")
-        || app.contains("iterm")
-    {
-        return "development";
-    }
-
-    if app.contains("mail")
-        || app.contains("slack")
-        || app.contains("messages")
-        || app.contains("discord")
-    {
-        return "communication";
-    }
-
-    if app.contains("docs")
-        || app.contains("notion")
-        || app.contains("word")
-        || app.contains("pages")
-        || app.contains("preview")
-        || app.contains("pdf")
-    {
-        return "documents";
-    }
-
     if summary_source.eq_ignore_ascii_case("vlm") {
         return "visual";
     }

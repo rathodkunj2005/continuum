@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { MemoryCard } from "../api/tauri";
-import { cleanupCardsForRender } from "../lib/cardCleanup";
+import { cleanupCardsForRender, tokenOverlap } from "../lib/cardCleanup";
 import { extractAnchorTerms, scoreAnchorCoverage } from "../lib/search";
 import "./Timeline.css";
 
@@ -112,8 +112,6 @@ export function Timeline({
                     const cleanSummary = stripLegacySources(result.display_summary ?? result.summary);
                     const displayTitle = preferredTitle(result);
                     const primaryText = cleanSummary || displayTitle || "Captured memory";
-                    const storyMode = isStoryStyleApp(result);
-                    const story = storyMode ? buildStorySummary(result) : "";
                     const matchReason = preferredMatchReason(result, query);
                     const domain = domainFromUrl(result.url);
                     const confidence = result.confidence ?? result.score;
@@ -172,17 +170,11 @@ export function Timeline({
                                     {displayTitle}
                                 </h3>
                             )}
-                            {storyMode ? (
-                                <p className="result-primary">
-                                    {story}
-                                </p>
-                            ) : (
-                                <p className="result-primary">
-                                    {!isLowSignalPreview(primaryText, result.app_name)
-                                        ? primaryText
-                                        : (displayTitle || "Untitled memory")}
-                                </p>
-                            )}
+                            <p className="result-primary">
+                                {!isLowSignalPreview(primaryText, result.app_name)
+                                    ? primaryText
+                                    : (displayTitle || "Untitled memory")}
+                            </p>
                             <div className="result-context-chips" aria-label="Match details">
                                 {matchReason && <span className="result-chip">{matchReason}</span>}
                                 <span className="result-chip">{qualityLabel(result, query, confidence)}</span>
@@ -238,28 +230,6 @@ function preferredTitle(result: MemoryCard): string {
     }
 
     return title || windowTitle;
-}
-
-function isStoryStyleApp(result: MemoryCard): boolean {
-    const app = result.app_name.toLowerCase();
-    const title = (result.window_title || "").toLowerCase();
-    const haystack = `${app} ${title}`;
-    return includesAny(haystack, [
-        "codex",
-        "antigravity",
-        "chatgpt",
-        "gemini",
-        "claude",
-        "cursor",
-        "visual studio code",
-        "vscode",
-        "vs code",
-        "terminal",
-        "iterm",
-        "zed",
-        "xcode",
-        "intellij",
-    ]);
 }
 
 function includesAny(haystack: string, needles: string[]): boolean {
@@ -319,27 +289,6 @@ function qualityLabel(result: MemoryCard, query: string, confidence: number): st
     return "Contextual";
 }
 
-function normalizeStoryText(value: string | undefined | null): string {
-    if (!value) {
-        return "";
-    }
-    return value
-        .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
-        .replace(/^\s*(then|and then|after that|next)\s*[,:-]?\s+/i, "")
-        .replace(/\.\s*(then|and then|after that|next)\s+/gi, ". ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-function buildStorySummary(result: MemoryCard): string {
-    return (
-        normalizeStoryText(stripLegacySources(result.summary))
-        || normalizeStoryText(result.title)
-        || normalizeStoryText(result.window_title)
-        || "Captured continuity context."
-    );
-}
-
 function filterConsecutiveSimilar(results: MemoryCard[]): MemoryCard[] {
     if (results.length <= 1) return results;
 
@@ -363,35 +312,4 @@ function filterConsecutiveSimilar(results: MemoryCard[]): MemoryCard[] {
         filtered.push(curr);
     }
     return filtered;
-}
-
-function tokenOverlap(left: string, right: string): number {
-    const leftTokens = tokenize(left);
-    const rightTokens = tokenize(right);
-    if (leftTokens.size === 0 || rightTokens.size === 0) {
-        return 0;
-    }
-
-    let intersection = 0;
-    for (const token of leftTokens) {
-        if (rightTokens.has(token)) {
-            intersection += 1;
-        }
-    }
-    const union = new Set([...leftTokens, ...rightTokens]).size;
-    if (union === 0) {
-        return 0;
-    }
-    return intersection / union;
-}
-
-function tokenize(value: string): Set<string> {
-    return new Set(
-        value
-            .toLowerCase()
-            .replace(/[^a-z0-9\\s]/g, " ")
-            .split(/\\s+/)
-            .map((token) => token.trim())
-            .filter((token) => token.length > 1)
-    );
 }

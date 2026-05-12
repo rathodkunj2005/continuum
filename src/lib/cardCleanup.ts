@@ -20,7 +20,7 @@ function tokenize(text: string): Set<string> {
     );
 }
 
-function tokenOverlap(left: string, right: string): number {
+export function tokenOverlap(left: string, right: string): number {
     const leftTokens = tokenize(left);
     const rightTokens = tokenize(right);
     if (leftTokens.size === 0 || rightTokens.size === 0) {

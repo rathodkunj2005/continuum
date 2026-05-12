@@ -133,28 +133,6 @@ export interface MemoryValidationReport {
     flagged_memories: MemoryQualityFlag[];
 }
 
-export interface QualityCountRow {
-    label: string;
-    count: number;
-}
-
-export interface CaptureQualityDashboard {
-    generated_at: number;
-    lookback_minutes: number;
-    signals_rows: number;
-    anomalies_rows: number;
-    malformed_signal_rows: number;
-    malformed_anomaly_rows: number;
-    stored_candidates: number;
-    skipped_low_signal: number;
-    skipped_noise: number;
-    avg_ocr_confidence: number;
-    grounding_confidence_lt_05: number;
-    grounding_confidence_lt_08: number;
-    top_anomalies: QualityCountRow[];
-    top_apps: QualityCountRow[];
-}
-
 export interface RebuildMemoryPreview {
     memory_id: string;
     before_memory_context: string;
@@ -397,12 +375,6 @@ export interface MemoryRepairSummary {
     chars_before: number;
     chars_after: number;
     chars_reclaimed: number;
-    spotify_merges: number;
-    youtube_merges: number;
-    codex_merges: number;
-    discord_merges: number;
-    gitlab_merges: number;
-    antigravity_merges: number;
     app_merges: AppMergeCount[];
 }
 
@@ -625,11 +597,6 @@ export interface VoiceTranscriptionResult {
     backend: string;
 }
 
-export interface SpeechSynthesisResult {
-    audio_path: string;
-    voice_id: string;
-}
-
 // Search functions
 export async function search(
     query: string,
@@ -702,13 +669,6 @@ export async function evaluateRecentMemoryQuality(
     return invoke<MemoryValidationReport>("evaluate_recent_memory_quality", { lookbackMinutes, limit });
 }
 
-export async function getCaptureQualityDashboard(
-    lookbackMinutes = 240,
-    limit = 800
-): Promise<CaptureQualityDashboard> {
-    return invoke<CaptureQualityDashboard>("get_capture_quality_dashboard", { lookbackMinutes, limit });
-}
-
 export async function rebuildMemoryContextForRange(
     start: number,
     end: number,
@@ -754,10 +714,6 @@ export async function getContextRuntimeStatus(): Promise<ContextRuntimeStatus> {
 
 export async function listRecentContextPacks(limit = 8): Promise<ContextPack[]> {
     return invoke<ContextPack[]>("list_recent_context_packs", { limit });
-}
-
-export async function getContextPackDetail(packId: string): Promise<ContextPack | null> {
-    return invoke<ContextPack | null>("get_context_pack_detail", { packId });
 }
 
 export async function fndrSubscribe(sessionId: string): Promise<boolean> {
@@ -809,10 +765,6 @@ export async function getMeetingTranscript(meetingId: string): Promise<MeetingTr
     return invoke<MeetingTranscript>("get_meeting_transcript", { meetingId });
 }
 
-export async function exportMeetingPdf(meetingId: string): Promise<string> {
-    return invoke<string>("export_meeting_pdf", { meetingId });
-}
-
 export async function retranscribeMeeting(meetingId: string): Promise<void> {
     return invoke<void>("retranscribe_meeting", { meetingId });
 }
@@ -823,13 +775,6 @@ export async function transcribeVoiceInput(
     mimeType?: string
 ): Promise<VoiceTranscriptionResult> {
     return invoke<VoiceTranscriptionResult>("transcribe_voice_input", { audioBytes, mimeType });
-}
-
-export async function speakText(
-    text: string,
-    voiceId?: string
-): Promise<SpeechSynthesisResult> {
-    return invoke<SpeechSynthesisResult>("speak_text", { text, voiceId });
 }
 
 export async function pauseCapture(): Promise<void> {
@@ -918,10 +863,6 @@ export async function addTodo(
 
 export async function dismissTodo(taskId: string): Promise<boolean> {
     return invoke<boolean>("dismiss_todo", { taskId });
-}
-
-export async function executeTodo(taskId: string): Promise<Task> {
-    return invoke<Task>("execute_todo", { taskId });
 }
 
 export async function updateTodo(
@@ -1242,10 +1183,6 @@ export async function injectText(text: string): Promise<void> {
 
 export async function dismissAutofill(): Promise<void> {
     return invoke("dismiss_autofill");
-}
-
-export async function showAutofillOverlayWindow(): Promise<void> {
-    return invoke("show_autofill_overlay_window");
 }
 
 export async function setAutofillOverlayReady(
