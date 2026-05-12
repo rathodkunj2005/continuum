@@ -1,12 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { STORAGE_KEYS } from "./lib/config";
 import { applyPalette, isPaletteKey, type PaletteMode } from "./theme/cinematic-palettes";
 import "./styles/index.css";
 
-const storedTheme = localStorage.getItem("fndr-theme") as PaletteMode | null;
+const storedTheme = localStorage.getItem(STORAGE_KEYS.theme) as PaletteMode | null;
 const theme = storedTheme === "light" ? "light" : "dark";
-const storedPalette = localStorage.getItem("fndr-palette");
+const storedPalette = localStorage.getItem(STORAGE_KEYS.palette);
 
 document.documentElement.setAttribute("data-theme", theme);
 applyPalette(isPaletteKey(storedPalette) ? storedPalette : "matrix", theme);

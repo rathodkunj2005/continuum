@@ -89,7 +89,7 @@ impl Default for McpRuntime {
         Self {
             running: false,
             mode: McpDeploymentMode::Local,
-            host: "127.0.0.1".to_string(),
+            host: LOOPBACK_HOST.to_string(),
             port: 0,
             endpoint: String::new(),
             public_endpoint: None,

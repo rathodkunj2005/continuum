@@ -1,29 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { MemoryCard, searchMemoryCards } from "../api/tauri";
-
-const BASE_SEARCH_TIMEOUT_MS = 6_000;
-const SEARCH_RESULT_LIMIT = 12;
+import { searchMemoryCards, type MemoryCard } from "../api/tauri";
+import { SEARCH_LIMITS } from "../lib/config";
 
 function getAdaptiveDebounceMs(query: string): number {
     if (!query.trim()) {
         return 0;
     }
-    return 40;
+    return SEARCH_LIMITS.typingDebounceMs;
 }
 
 function getAdaptiveTimeoutMs(query: string, attempt: number): number {
     const words = query.trim().split(/\s+/).filter(Boolean).length;
-    const extraForLength = Math.min(6000, query.length * 20);
-    const extraForWords = Math.min(6000, words * 450);
-    const retryBonus = attempt > 0 ? 4000 : 0;
-    return BASE_SEARCH_TIMEOUT_MS + extraForLength + extraForWords + retryBonus;
+    const extraForLength = Math.min(
+        SEARCH_LIMITS.timeoutBonusCapMs,
+        query.length * SEARCH_LIMITS.perCharBonusMs
+    );
+    const extraForWords = Math.min(
+        SEARCH_LIMITS.timeoutBonusCapMs,
+        words * SEARCH_LIMITS.perWordBonusMs
+    );
+    const retryBonus = attempt > 0 ? SEARCH_LIMITS.retryBonusMs : 0;
+    return SEARCH_LIMITS.baseTimeoutMs + extraForLength + extraForWords + retryBonus;
 }
 
-export function useSearch(
-    query: string,
-    timeFilter: string | null,
-    appFilter: string | null
-) {
+export function useSearch(query: string, timeFilter: string | null, appFilter: string | null) {
     const [results, setResults] = useState<MemoryCard[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -45,27 +45,26 @@ export function useSearch(
         setIsLoading(true);
         setError(null);
 
-        // Debounce search
         const timer = setTimeout(async () => {
             try {
                 const timeoutMs = getAdaptiveTimeoutMs(trimmedQuery, 0);
                 const timeoutPromise = new Promise<never>((_, reject) => {
                     setTimeout(() => reject(new Error("Search timed out")), timeoutMs);
                 });
-                const res = await Promise.race([
-                    searchMemoryCards(
-                        trimmedQuery,
-                        timeFilter ?? undefined,
-                        appFilter ?? undefined,
-                        SEARCH_RESULT_LIMIT
-                    ),
-                    timeoutPromise,
-                ]);
+
+                const searchPromise = searchMemoryCards(
+                    trimmedQuery,
+                    timeFilter ?? undefined,
+                    appFilter ?? undefined,
+                    SEARCH_LIMITS.resultLimit
+                );
+
+                const res = await Promise.race([searchPromise, timeoutPromise]);
 
                 if (cancelled || requestId !== requestIdRef.current) {
                     return;
                 }
-                setResults(res.slice(0, SEARCH_RESULT_LIMIT)); // Top-k results
+                setResults(res.slice(0, SEARCH_LIMITS.resultLimit));
             } catch (e) {
                 if (cancelled || requestId !== requestIdRef.current) {
                     return;

@@ -1,0 +1,20 @@
+---
+description: Mandatory FNDR portable engineering skills and AGENTS.md defaults
+alwaysApply: true
+---
+
+# FNDR agent defaults
+
+You are working in the FNDR repository.
+
+1. **Read and follow `AGENTS.md` at the repo root** on every task. It is the single cross-tool contract (Cursor, Claude Code, Codex, Antigravity).
+
+2. **Do not wait for the user to name a skill.** Open the matching `SKILL.md` under `.agent-skills/portable-engineering/` using the routing table in `AGENTS.md`, then execute that workflow.
+
+3. **Honor `CONTEXT.md`** for domain vocabulary and doc pointers.
+
+4. **Anti-bloat:** before adding code, apply the gate in `AGENTS.md` (prefer delete/reuse/tests/names over new layers).
+
+5. **Verification:** after substantive edits, run the smallest relevant checks (`make test` or a justified subset) and report commands run.
+
+If file access is limited, use `.agent-skills/portable-engineering/ALL_SKILLS_COMBINED.md` as the bundled fallback.

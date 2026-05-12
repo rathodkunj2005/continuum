@@ -26,7 +26,9 @@ capture -> OCR -> chunking -> embedding -> LanceDB storage -> hybrid search -> M
 | `embed/` | OCR-aware chunking and local ONNX embedding generation |
 | `store/` | LanceDB schema, migration checks, persistence, and vector normalization |
 | `search/` | Hybrid vector/keyword retrieval, ranking, reranking, and MemoryCards |
+| `http_util/` | Bounded `reqwest` clients for local probes (Ollama, Hermes) and agent LLM HTTP |
 | `api/` | Tauri commands connecting the Rust pipeline to the frontend |
+| `http_util` | Bounded `reqwest` client builders and JSON POST helper used by agent/provider HTTP from `api/` |
 | `frontend/` | React UI for capture status, search, MemoryCards, timeline, and controls |
 
 ## Core Boundaries

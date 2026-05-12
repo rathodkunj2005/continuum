@@ -9,8 +9,33 @@ use fndr_lib::{
     api, capture, config::Config, graph::GraphStore, store::Store, AppState, ProactiveSuggestion,
 };
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+// Tokio worker stack size — deep async chains through LanceDB, whisper
+// transcription, and embedding can overflow the default 2 MB stack.
+const TOKIO_WORKER_STACK_BYTES: usize = 8 * 1024 * 1024;
+// Tunable background-task cadences. Kept here so the scheduling story for the
+// whole process is visible at a glance.
+const MAINTENANCE_FIRST_DELAY: Duration = Duration::from_secs(60);
+const STORAGE_RECLAIM_INTERVAL: Duration = Duration::from_secs(6 * 3600);
+const DECAY_INTERVAL: Duration = Duration::from_secs(6 * 3600);
+const DECAY_LOOKBACK_MS: i64 = 24 * 3600 * 1000;
+const DECAY_FLOOR: f32 = 0.15;
+const MS_PER_DAY: f64 = 86_400_000.0;
+const PROACTIVE_NOTIFICATION_STARTUP_DELAY: Duration = Duration::from_secs(60);
+const PROACTIVE_NOTIFICATION_TICK: Duration = Duration::from_secs(30);
+const STALE_TASK_CHECK_INTERVAL: Duration = Duration::from_secs(7200);
+const STALE_TASK_THRESHOLD_MS: i64 = 3 * 86_400_000;
+const STALE_TASK_TITLES_SHOWN: usize = 3;
+const APP_SWITCH_SAMPLE_INTERVAL: Duration = Duration::from_secs(10);
+const APP_SWITCH_WINDOW: usize = 15;
+const APP_SWITCH_RECENT_CAPACITY: usize = 20;
+const APP_SWITCH_THRESHOLD: usize = 8;
+const APP_SWITCH_UNIQUE_THRESHOLD: usize = 6;
+const BRIEFING_MIN_MEMORIES: usize = 3;
+const BRIEFING_MAX_CARD_LINES: usize = 20;
 
 fn main() {
     // Install default TLS crypto provider (required by rustls 0.23+)
@@ -30,11 +55,10 @@ fn main() {
 
     tracing::info!("Starting FNDR...");
 
-    // Build a tokio runtime with 8 MB per worker thread (default is 2 MB).
-    // Deep async chains through LanceDB, whisper transcription, and embedding
-    // can overflow the default stack size, causing SIGABRT on tokio-rt-worker threads.
+    // Build a tokio runtime with a bigger worker stack (default is 2 MB) to
+    // prevent SIGABRT on deep async chains.
     let rt = tokio::runtime::Builder::new_multi_thread()
-        .thread_stack_size(8 * 1024 * 1024)
+        .thread_stack_size(TOKIO_WORKER_STACK_BYTES)
         .enable_all()
         .build()
         .expect("Failed to build tokio runtime");
@@ -112,7 +136,7 @@ fn main() {
             {
                 let maintenance_state = state.clone();
                 tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    tokio::time::sleep(MAINTENANCE_FIRST_DELAY).await;
                     loop {
                         match api::commands::reclaim_memory_storage_silent(maintenance_state.clone()).await {
                             Ok(summary)
@@ -131,7 +155,7 @@ fn main() {
                             Ok(_) => tracing::debug!("Automatic storage reclaim found nothing to trim"),
                             Err(err) => tracing::debug!("Automatic storage reclaim skipped: {}", err),
                         }
-                        tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
+                        tokio::time::sleep(STORAGE_RECLAIM_INTERVAL).await;
                     }
                 });
             }
@@ -149,13 +173,12 @@ fn main() {
                 let decay_store = state.store.clone();
                 let decay_half_life = state.config.read().decay_half_life_days;
                 tauri::async_runtime::spawn(async move {
-                    let mut interval =
-                        tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
+                    let mut interval = tokio::time::interval(DECAY_INTERVAL);
                     interval.tick().await; // skip first immediate tick
                     loop {
                         interval.tick().await;
                         let now_ms = chrono::Utc::now().timestamp_millis();
-                        let cutoff = now_ms - 24 * 3600 * 1000;
+                        let cutoff = now_ms - DECAY_LOOKBACK_MS;
                         let range_result = decay_store
                             .get_memories_in_range(0, cutoff)
                             .await
@@ -167,10 +190,11 @@ fn main() {
                                     .map(|r| {
                                         let days_since =
                                             (now_ms - r.last_accessed_at.max(r.timestamp)) as f64
-                                                / 86_400_000.0;
+                                                / MS_PER_DAY;
                                         let new_decay = (r.decay_score as f64
                                             * 0.5_f64.powf(days_since / decay_half_life as f64))
-                                            .max(0.15) as f32;
+                                            .max(DECAY_FLOOR as f64)
+                                            as f32;
                                         (r.id.clone(), new_decay)
                                     })
                                     .collect();
@@ -272,19 +296,16 @@ fn main() {
                 let notif_state = state.clone();
                 let notif_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    use std::time::Duration;
-
-                    // Wait 60s at startup before checking — let the system settle.
-                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    tokio::time::sleep(PROACTIVE_NOTIFICATION_STARTUP_DELAY).await;
 
                     let mut briefing_sent_today = false;
                     let mut last_stale_check =
-                        std::time::Instant::now() - Duration::from_secs(7200);
+                        std::time::Instant::now() - STALE_TASK_CHECK_INTERVAL;
                     let mut last_context_switch_check = std::time::Instant::now();
                     let mut recent_app_switches: std::collections::VecDeque<String> =
-                        std::collections::VecDeque::with_capacity(20);
+                        std::collections::VecDeque::with_capacity(APP_SWITCH_RECENT_CAPACITY);
 
-                    let mut interval = tokio::time::interval(Duration::from_secs(30));
+                    let mut interval = tokio::time::interval(PROACTIVE_NOTIFICATION_TICK);
                     loop {
                         interval.tick().await;
 
@@ -312,10 +333,10 @@ fn main() {
                                     .await
                                     .unwrap_or_default();
 
-                                if memories.len() >= 3 {
+                                if memories.len() >= BRIEFING_MIN_MEMORIES {
                                     let card_lines: Vec<String> = memories
                                         .iter()
-                                        .take(20)
+                                        .take(BRIEFING_MAX_CARD_LINES)
                                         .map(|m| {
                                             format!(
                                                 "[{}] {} — {}",
@@ -358,12 +379,13 @@ fn main() {
                         }
 
                         // ── Stale task nudge ──────────────────────────────────
-                        // Every 2 hours, check for tasks > 3 days old.
-                        if last_stale_check.elapsed() > Duration::from_secs(7200) {
+                        // Every STALE_TASK_CHECK_INTERVAL, surface tasks older than
+                        // STALE_TASK_THRESHOLD_MS.
+                        if last_stale_check.elapsed() > STALE_TASK_CHECK_INTERVAL {
                             last_stale_check = std::time::Instant::now();
                             if let Ok(tasks) = notif_state.store.list_tasks().await {
                                 let stale_cutoff =
-                                    chrono::Utc::now().timestamp_millis() - 3 * 86_400_000;
+                                    chrono::Utc::now().timestamp_millis() - STALE_TASK_THRESHOLD_MS;
                                 let stale: Vec<_> = tasks
                                     .iter()
                                     .filter(|t| {
@@ -376,7 +398,7 @@ fn main() {
                                 if !stale.is_empty() {
                                     let titles: Vec<_> = stale
                                         .iter()
-                                        .take(3)
+                                        .take(STALE_TASK_TITLES_SHOWN)
                                         .map(|t| t.title.as_str())
                                         .collect();
                                     let body = format!(
@@ -397,25 +419,25 @@ fn main() {
                         }
 
                         // ── Context-switch alert ─────────────────────────────
-                        // Track app switches. If > 8 switches in 5 minutes,
-                        // nudge the user about context switching.
-                        if last_context_switch_check.elapsed() > Duration::from_secs(10) {
+                        // Sample the frontmost app at APP_SWITCH_SAMPLE_INTERVAL and
+                        // surface a nudge when too many distinct apps appear in the
+                        // rolling window.
+                        if last_context_switch_check.elapsed() > APP_SWITCH_SAMPLE_INTERVAL {
                             last_context_switch_check = std::time::Instant::now();
                             let current_app = fndr_lib::capture::macos_frontmost_app_name();
                             if let Some(app) = current_app {
                                 let last = recent_app_switches.back().cloned();
                                 if last.as_deref() != Some(&app) {
                                     recent_app_switches.push_back(app);
-                                    if recent_app_switches.len() > 15 {
+                                    if recent_app_switches.len() > APP_SWITCH_WINDOW {
                                         recent_app_switches.pop_front();
                                     }
                                 }
                             }
-                            // Check if there are > 8 unique apps in the window
-                            if recent_app_switches.len() >= 8 {
+                            if recent_app_switches.len() >= APP_SWITCH_THRESHOLD {
                                 let unique: std::collections::HashSet<_> =
                                     recent_app_switches.iter().collect();
-                                if unique.len() >= 6 {
+                                if unique.len() >= APP_SWITCH_UNIQUE_THRESHOLD {
                                     let _ = notif_handle.emit(
                                         "fndr_notification",
                                         serde_json::json!({

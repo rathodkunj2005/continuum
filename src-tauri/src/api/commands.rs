@@ -15,6 +15,7 @@ use crate::memory_quality::classify_storage_outcome;
 use crate::privacy::Blocklist;
 use crate::store::MemoryRecord;
 
+use crate::http_util::{llm_http_client, local_service_client, post_json_response};
 use crate::mcp::{self, McpServerStatus};
 use crate::meeting::{self, MeetingRecorderStatus, MeetingTranscript};
 
@@ -39,6 +40,29 @@ use tokio::time::{timeout, Duration, Instant};
 use genpdf::elements;
 use genpdf::style;
 use genpdf::Element;
+
+/// Path to the macOS Supplemental font directory where Arial ships.
+const MACOS_SUPPLEMENTAL_FONT_DIR: &str = "/System/Library/Fonts/Supplemental";
+
+/// PDF page margins applied uniformly to FNDR exports (millimetres).
+const PDF_PAGE_MARGIN: u8 = 18;
+
+/// Load the macOS Arial font family used by all FNDR PDF exports. Lives here so
+/// `export_meeting_pdf` and `export_daily_summary_pdf` stay in sync — both ship
+/// the same fonts and previously duplicated ~25 lines of `FontData::load` calls.
+fn load_pdf_font_family() -> Result<genpdf::fonts::FontFamily<genpdf::fonts::FontData>, String> {
+    let font_dir = std::path::Path::new(MACOS_SUPPLEMENTAL_FONT_DIR);
+    let load = |name: &str| {
+        genpdf::fonts::FontData::load(font_dir.join(name), None)
+            .map_err(|err| format!("Failed to load '{name}' from {font_dir:?}: {err}"))
+    };
+    Ok(genpdf::fonts::FontFamily {
+        regular: load("Arial.ttf")?,
+        bold: load("Arial Bold.ttf")?,
+        italic: load("Arial Italic.ttf")?,
+        bold_italic: load("Arial Bold Italic.ttf")?,
+    })
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaptureStatus {
@@ -2206,43 +2230,11 @@ pub async fn export_meeting_pdf(
     let filename = format!("FNDR_Meeting_{}_{}.pdf", safe_title, date_str);
     let target_path = downloads_dir.join(filename);
 
-    // 3. Generate PDF
-    // Use a common macOS font path. Arial is standard in Supplemental.
-    let font_dir = std::path::Path::new("/System/Library/Fonts/Supplemental");
-
-    // Load font variants manually since genpdf's from_files helper expects "Arial-Regular.ttf"
-    // but macOS uses "Arial.ttf", "Arial Bold.ttf", etc.
-    let regular = genpdf::fonts::FontData::load(font_dir.join("Arial.ttf"), None)
-        .map_err(|e| format!("Failed to load 'Arial.ttf' from {:?}: {}", font_dir, e))?;
-    let bold = genpdf::fonts::FontData::load(font_dir.join("Arial Bold.ttf"), None)
-        .map_err(|e| format!("Failed to load 'Arial Bold.ttf' from {:?}: {}", font_dir, e))?;
-    let italic =
-        genpdf::fonts::FontData::load(font_dir.join("Arial Italic.ttf"), None).map_err(|e| {
-            format!(
-                "Failed to load 'Arial Italic.ttf' from {:?}: {}",
-                font_dir, e
-            )
-        })?;
-    let bold_italic = genpdf::fonts::FontData::load(font_dir.join("Arial Bold Italic.ttf"), None)
-        .map_err(|e| {
-        format!(
-            "Failed to load 'Arial Bold Italic.ttf' from {:?}: {}",
-            font_dir, e
-        )
-    })?;
-
-    let font_family = genpdf::fonts::FontFamily {
-        regular,
-        bold,
-        italic,
-        bold_italic,
-    };
-
-    let mut doc = genpdf::Document::new(font_family);
+    let mut doc = genpdf::Document::new(load_pdf_font_family()?);
     doc.set_title(format!("FNDR Meeting: {}", meeting.title));
 
     let mut decorator = genpdf::SimplePageDecorator::new();
-    decorator.set_margins(18);
+    decorator.set_margins(PDF_PAGE_MARGIN);
     doc.set_page_decorator(decorator);
 
     // Title & Header
@@ -2356,41 +2348,11 @@ pub async fn export_daily_summary_pdf(
     let filename = format!("FNDR_Daily_Summary_{}.pdf", safe_date);
     let target_path = downloads_dir.join(filename);
 
-    // 3. Generate PDF
-    // Use a common macOS font path. Arial is standard in Supplemental.
-    let font_dir = std::path::Path::new("/System/Library/Fonts/Supplemental");
-
-    let regular = genpdf::fonts::FontData::load(font_dir.join("Arial.ttf"), None)
-        .map_err(|e| format!("Failed to load 'Arial.ttf' from {:?}: {}", font_dir, e))?;
-    let bold = genpdf::fonts::FontData::load(font_dir.join("Arial Bold.ttf"), None)
-        .map_err(|e| format!("Failed to load 'Arial Bold.ttf' from {:?}: {}", font_dir, e))?;
-    let italic =
-        genpdf::fonts::FontData::load(font_dir.join("Arial Italic.ttf"), None).map_err(|e| {
-            format!(
-                "Failed to load 'Arial Italic.ttf' from {:?}: {}",
-                font_dir, e
-            )
-        })?;
-    let bold_italic = genpdf::fonts::FontData::load(font_dir.join("Arial Bold Italic.ttf"), None)
-        .map_err(|e| {
-        format!(
-            "Failed to load 'Arial Bold Italic.ttf' from {:?}: {}",
-            font_dir, e
-        )
-    })?;
-
-    let font_family = genpdf::fonts::FontFamily {
-        regular,
-        bold,
-        italic,
-        bold_italic,
-    };
-
-    let mut doc = genpdf::Document::new(font_family);
+    let mut doc = genpdf::Document::new(load_pdf_font_family()?);
     doc.set_title(format!("FNDR Daily Summary: {}", date_str));
 
     let mut decorator = genpdf::SimplePageDecorator::new();
-    decorator.set_margins(18);
+    decorator.set_margins(PDF_PAGE_MARGIN);
     doc.set_page_decorator(decorator);
 
     // Title & Header
@@ -5044,9 +5006,15 @@ struct HermesSetupRecord {
 
 static HERMES_GATEWAY_PROCESS: AgentOnceLock<AgentMutex<Option<Child>>> = AgentOnceLock::new();
 static HERMES_GATEWAY_ERROR: AgentOnceLock<AgentMutex<Option<String>>> = AgentOnceLock::new();
+
+// Local service endpoints. Keep host/port/path declarations together so the
+// Hermes gateway and Ollama probe URLs can be updated in one place rather than
+// scattered as literal strings throughout this module.
 const HERMES_API_HOST: &str = "127.0.0.1";
 const HERMES_API_PORT: u16 = 8742;
+const OLLAMA_HOME_URL: &str = "http://127.0.0.1:11434";
 const OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434/v1";
+const OLLAMA_API_TAGS_URL: &str = "http://127.0.0.1:11434/api/tags";
 
 fn hermes_gateway_dir(state: &AppState) -> PathBuf {
     state.app_data_dir.join("hermes-gateway")
@@ -5498,22 +5466,24 @@ async fn detect_ollama_state() -> (bool, bool, Vec<String>) {
     let mut reachable = false;
     let mut models: Vec<String> = Vec::new();
 
-    if let Ok(response) = reqwest::Client::new()
-        .get("http://127.0.0.1:11434/api/tags")
-        .send()
-        .await
-    {
-        if response.status().is_success() {
-            reachable = true;
-            if let Ok(json) = response.json::<serde_json::Value>().await {
-                models = json
-                    .get("models")
-                    .and_then(|value| value.as_array())
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|item| item.get("name").and_then(|value| value.as_str()))
-                    .map(str::to_string)
-                    .collect();
+    if let Ok(client) = local_service_client() {
+        if let Ok(response) = client
+            .get(OLLAMA_API_TAGS_URL)
+            .send()
+            .await
+        {
+            if response.status().is_success() {
+                reachable = true;
+                if let Ok(json) = response.json::<serde_json::Value>().await {
+                    models = json
+                        .get("models")
+                        .and_then(|value| value.as_array())
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|item| item.get("name").and_then(|value| value.as_str()))
+                        .map(str::to_string)
+                        .collect();
+                }
             }
         }
     }
@@ -5736,7 +5706,10 @@ fn update_hermes_gateway_runtime() -> (bool, Option<String>) {
 }
 
 async fn hermes_api_ready() -> bool {
-    match reqwest::Client::new()
+    let Ok(client) = local_service_client() else {
+        return false;
+    };
+    match client
         .get(format!("{}/health", hermes_api_url()))
         .send()
         .await
@@ -6060,10 +6033,9 @@ fn validate_hermes_gateway_prerequisites(status: &HermesBridgeStatus) -> Result<
             );
         }
         if !status.ollama_reachable {
-            return Err(
-                "FNDR could not reach Ollama at http://127.0.0.1:11434. Open Ollama or run `ollama serve`, then try again."
-                    .to_string(),
-            );
+            return Err(format!(
+                "FNDR could not reach Ollama at {OLLAMA_HOME_URL}. Open Ollama or run `ollama serve`, then try again."
+            ));
         }
     }
     if status.provider_kind.as_deref() == Some("codex") && !status.codex_logged_in {
@@ -6314,21 +6286,11 @@ pub async fn send_direct_chat(
         "stream": false,
     });
 
-    let response = reqwest::Client::new()
-        .post(format!(
-            "{}/chat/completions",
-            base_url.trim_end_matches('/')
-        ))
-        .json(&request)
-        .send()
+    let client = llm_http_client().map_err(|e| format!("HTTP client: {e}"))?;
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let (status_code, json) = post_json_response(&client, &url, &request, None)
         .await
         .map_err(|e| format!("Could not reach Ollama at {base_url}: {e}"))?;
-
-    let status_code = response.status();
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Ollama returned an unreadable response: {e}"))?;
 
     if !status_code.is_success() {
         return Err(json
@@ -6376,19 +6338,11 @@ pub async fn send_hermes_message(
         "instructions": instructions
     });
 
-    let response = reqwest::Client::new()
-        .post(format!("{}/v1/responses", status.api_url))
-        .bearer_auth(api_key)
-        .json(&request_body)
-        .send()
+    let client = llm_http_client().map_err(|e| format!("HTTP client: {e}"))?;
+    let url = format!("{}/v1/responses", status.api_url.trim_end_matches('/'));
+    let (status_code, json) = post_json_response(&client, &url, &request_body, Some(api_key.as_str()))
         .await
         .map_err(|e| format!("Failed to reach the Hermes API server: {e}"))?;
-
-    let status_code = response.status();
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Hermes returned an unreadable response: {e}"))?;
 
     if !status_code.is_success() {
         return Err(json

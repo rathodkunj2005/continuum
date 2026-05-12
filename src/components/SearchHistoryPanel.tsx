@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
+import { SEARCH_HISTORY, STORAGE_KEYS } from "../lib/config";
 import "./SearchHistoryPanel.css";
 
-const STORAGE_KEY = "fndr-search-history";
-const MAX_HISTORY = 30;
+const STORAGE_KEY = STORAGE_KEYS.searchHistory;
+const MAX_HISTORY = SEARCH_HISTORY.maxEntries;
 
 export interface SearchHistoryEntry {
     query: string;
     timestamp: number;
 }
 
-export function loadSearchHistory(): SearchHistoryEntry[] {
+function loadSearchHistory(): SearchHistoryEntry[] {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return [];

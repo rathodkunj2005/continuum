@@ -3,9 +3,16 @@ import {
     MemoryCard,
     pauseCapture,
     resumeCapture,
+    searchMemoryCards,
     summarizeSearch,
     transcribeVoiceInput,
 } from "../api/tauri";
+import {
+    MEMORY_MENTIONS,
+    SEARCH_PLACEHOLDER,
+    SEARCH_SUMMARY,
+    VOICE_RECORDING,
+} from "../lib/config";
 import { bubblePurityGate, extractAnchorTerms, scoreAnchorCoverage } from "../lib/search";
 import { PLACEHOLDERS } from "./placeholders";
 import "./SearchBar.css";
@@ -14,7 +21,7 @@ interface SearchBarProps {
     value: string;
     submittedValue: string;
     onChange: (value: string) => void;
-    onSubmit: (value?: string) => void;
+    onSubmit: (value?: string) => void | Promise<void>;
     timeFilter: string | null;
     onTimeFilterChange: (filter: string | null) => void;
     appFilter: string | null;
@@ -28,8 +35,8 @@ interface SearchBarProps {
     disabledHint?: string;
 }
 
-const PLACEHOLDER_DISPLAY_DURATION = 3000;
-const PLACEHOLDER_FADE_DURATION = 400;
+const PLACEHOLDER_DISPLAY_DURATION = SEARCH_PLACEHOLDER.displayDurationMs;
+const PLACEHOLDER_FADE_DURATION = SEARCH_PLACEHOLDER.fadeDurationMs;
 const DEFAULT_PLACEHOLDER = "Recall a specific meeting, note, or idea...";
 
 export function SearchBar({
@@ -72,6 +79,47 @@ export function SearchBar({
     const activePlaceholder =
         PLACEHOLDERS[placeholderIndex % Math.max(PLACEHOLDERS.length, 1)] ?? DEFAULT_PLACEHOLDER;
     const showAnimatedPlaceholder = !hasInput;
+
+    const atMemoryMatch = /@memory\s+(.+)/i.exec(value);
+    const atMemoryQuery = atMemoryMatch?.[1]?.trim() ?? "";
+    const [memoryMentionHits, setMemoryMentionHits] = useState<MemoryCard[]>([]);
+    const [memoryMentionBusy, setMemoryMentionBusy] = useState(false);
+
+    useEffect(() => {
+        if (!atMemoryQuery || atMemoryQuery.length < MEMORY_MENTIONS.minQueryLength) {
+            setMemoryMentionHits([]);
+            return;
+        }
+        let cancelled = false;
+        const timer = window.setTimeout(() => {
+            void (async () => {
+                setMemoryMentionBusy(true);
+                try {
+                    const hits = await searchMemoryCards(
+                        atMemoryQuery,
+                        undefined,
+                        undefined,
+                        MEMORY_MENTIONS.limit
+                    );
+                    if (!cancelled) {
+                        setMemoryMentionHits(hits);
+                    }
+                } catch {
+                    if (!cancelled) {
+                        setMemoryMentionHits([]);
+                    }
+                } finally {
+                    if (!cancelled) {
+                        setMemoryMentionBusy(false);
+                    }
+                }
+            })();
+        }, MEMORY_MENTIONS.debounceMs);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [atMemoryQuery, value]);
 
     useEffect(() => {
         searchResultsRef.current = searchResults;
@@ -140,8 +188,8 @@ export function SearchBar({
                             ?? scoreAnchorCoverage(fallbackText, anchorTerms);
                         return { result, coverage };
                     })
-                    .filter((item) => item.coverage >= 0.3)
-                    .slice(0, 5);
+                    .filter((item) => item.coverage >= SEARCH_SUMMARY.coverageFloor)
+                    .slice(0, SEARCH_SUMMARY.maxCards);
 
                 if (topicalCards.length < 2) {
                     setSummary(null);
@@ -153,7 +201,7 @@ export function SearchBar({
                         const evidence = (result.raw_snippets ?? [])
                             .map((snippet) => snippet.trim())
                             .filter(Boolean)
-                            .slice(0, 2);
+                            .slice(0, SEARCH_SUMMARY.snippetsPerCard);
                         if (evidence.length === 0) {
                             const fallback = (result.display_summary ?? result.summary ?? "").trim();
                             return fallback
@@ -167,7 +215,7 @@ export function SearchBar({
                             snippet,
                         }));
                     })
-                    .slice(0, 10)
+                    .slice(0, SEARCH_SUMMARY.maxSnippets)
                     .map(
                         (item) =>
                             `[id:${item.memoryId}][score:${item.score.toFixed(3)}][app:${item.appName}] ${item.snippet}`
@@ -204,7 +252,7 @@ export function SearchBar({
                     setIsSummarizing(false);
                 }
             }
-        }, 600);
+        }, SEARCH_SUMMARY.delayMs);
 
         return () => {
             cancelled = true;
@@ -325,7 +373,7 @@ export function SearchBar({
         onChange(cleaned);
         onSubmit(cleaned);
         setVoiceStatus(`Searching for: ${cleaned}`);
-        setTimeout(() => setVoiceStatus(null), 2000);
+        setTimeout(() => setVoiceStatus(null), VOICE_RECORDING.statusClearMs);
     }
 
     async function handleVoiceToggle() {
@@ -345,8 +393,8 @@ export function SearchBar({
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true,
-                    channelCount: 1,
-                    sampleRate: 48000,
+                    channelCount: VOICE_RECORDING.channelCount,
+                    sampleRate: VOICE_RECORDING.sampleRate,
                 },
             });
             const options = chooseRecorderOptions();
@@ -372,14 +420,14 @@ export function SearchBar({
                 mediaStreamRef.current = null;
                 mediaRecorderRef.current = null;
                 setIsRecording(false);
-                if (durationMs < 350) {
+                if (durationMs < VOICE_RECORDING.minDurationMs) {
                     setVoiceStatus("Hold the mic a bit longer and try again.");
                     return;
                 }
                 void transcribeRecordedVoice(chunks, mimeTypeRef.current);
             };
 
-            recorder.start(250);
+            recorder.start(VOICE_RECORDING.timesliceMs);
             setIsRecording(true);
             setVoiceStatus("Listening... tap again to stop.");
         } catch (err) {
@@ -493,6 +541,31 @@ export function SearchBar({
                         </button>
                     )}
                 </div>
+                {atMemoryQuery.length >= 2 && (
+                    <div className="memory-mention-popover" role="listbox" aria-label="Memory matches">
+                        {memoryMentionBusy ? (
+                            <div className="memory-mention-loading">Searching memories…</div>
+                        ) : memoryMentionHits.length === 0 ? (
+                            <div className="memory-mention-empty">No hits</div>
+                        ) : (
+                            memoryMentionHits.map((h) => (
+                                <button
+                                    key={h.id}
+                                    type="button"
+                                    className="memory-mention-item"
+                                    onClick={() => {
+                                        const stamp = new Date(h.timestamp).toISOString();
+                                        const block = `[memory ${h.app_name} @ ${stamp}] ${h.summary.slice(0, 200)}`;
+                                        onChange(value.replace(/@memory\s+.*/i, block));
+                                    }}
+                                >
+                                    <span className="memory-mention-title">{h.title}</span>
+                                    <span className="memory-mention-snippet">{h.summary.slice(0, 120)}</span>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                )}
             </div>
 
             {showMetaRow && (
@@ -589,7 +662,7 @@ function chooseRecorderOptions(): MediaRecorderOptions | undefined {
         if (MediaRecorder.isTypeSupported(mimeType)) {
             return {
                 mimeType,
-                audioBitsPerSecond: 128_000,
+                audioBitsPerSecond: VOICE_RECORDING.audioBitsPerSecond,
             };
         }
     }

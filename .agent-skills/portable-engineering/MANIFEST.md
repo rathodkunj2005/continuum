@@ -1,0 +1,19 @@
+# Manifest
+
+- `ALL_SKILLS_COMBINED.md`
+- `README.md`
+- `engineering/anti-bloat-review/SKILL.md`
+- `engineering/diagnose/SKILL.md`
+- `engineering/grill-with-docs/SKILL.md`
+- `engineering/improve-codebase-architecture/SKILL.md`
+- `engineering/prototype/SKILL.md`
+- `engineering/setup-portable-engineering-skills/SKILL.md`
+- `engineering/tdd/SKILL.md`
+- `engineering/to-issues/SKILL.md`
+- `engineering/to-prd/SKILL.md`
+- `engineering/triage/SKILL.md`
+- `engineering/zoom-out/SKILL.md`
+- `productivity/caveman/SKILL.md`
+- `productivity/grill-me/SKILL.md`
+- `productivity/handoff/SKILL.md`
+- `productivity/write-a-skill/SKILL.md`

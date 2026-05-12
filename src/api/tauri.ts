@@ -1082,19 +1082,6 @@ export async function reclaimMemoryStorage(): Promise<StorageReclaimSummary> {
     return invoke<StorageReclaimSummary>("reclaim_memory_storage");
 }
 
-export interface ChatMessage {
-    role: "user" | "assistant";
-    content: string;
-}
-
-
-export async function chatWithGemma(messages: ChatMessage[]): Promise<string> {
-    const last = messages[messages.length - 1];
-    if (!last) return "";
-    const snippets = messages.filter((m) => m.role === "user").map((m) => m.content);
-    return invoke<string>("summarize_search", { query: last.content, resultsSnippets: snippets });
-}
-
 export async function generateDailySummaryForDate(dateStr: string): Promise<string> {
     return invoke<string>("generate_daily_summary_for_date", { dateStr });
 }

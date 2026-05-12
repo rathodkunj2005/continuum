@@ -15,6 +15,7 @@ import "./components/FocusModePanel.css";
 
 import { useSearch } from "./hooks/useSearch";
 import { usePolling } from "./hooks/usePolling";
+import { POLL_INTERVALS, TOAST } from "./lib/config";
 import { createClientId } from "./lib/id";
 import {
     CaptureStatus,
@@ -148,7 +149,7 @@ function App() {
             }
         }
     }, []);
-    usePolling(loadAppNames, 30_000);
+    usePolling(loadAppNames, POLL_INTERVALS.appNamesMs);
 
     const fetchStatus = useCallback(async (isMounted: () => boolean) => {
         try {
@@ -160,7 +161,7 @@ function App() {
             console.error("Failed to get status:", e);
         }
     }, []);
-    usePolling(fetchStatus, 2000);
+    usePolling(fetchStatus, POLL_INTERVALS.captureStatusMs);
 
     useEffect(() => {
         let mounted = true;
@@ -199,7 +200,7 @@ function App() {
     }, []);
 
     const refreshNow = useCallback(() => setNow(new Date()), []);
-    usePolling(refreshNow, 60_000);
+    usePolling(refreshNow, POLL_INTERVALS.clockTickMs);
 
     useEffect(() => {
         const handleProfileUpdated = (event: Event) => {
@@ -219,12 +220,13 @@ function App() {
         setAppFilter(null);
     }, [query]);
 
-    const handleSearchSubmit = (nextValue?: string) => {
+    const handleSearchSubmit = async (nextValue?: string) => {
         const source = nextValue ?? queryDraft;
         const normalized = source
             .replace(/\r?\n/g, " ")
             .replace(/\s+/g, " ")
             .trim();
+
         setQuery(normalized);
         if (normalized) appendToSearchHistory(normalized);
         if (typeof nextValue === "string") {
@@ -270,10 +272,10 @@ function App() {
     }, []);
 
     const enqueueToast = useCallback(
-        (toast: Omit<AppToast, "id">, durationMs = 8_000) => {
+        (toast: Omit<AppToast, "id">, durationMs = TOAST.defaultDurationMs) => {
             const id = nextToastId();
             const nextToast: AppToast = { id, ...toast };
-            setAppToasts((previous) => [nextToast, ...previous].slice(0, 4));
+            setAppToasts((previous) => [nextToast, ...previous].slice(0, TOAST.stackLimit));
             const timer = window.setTimeout(() => {
                 dismissToast(id);
             }, durationMs);
@@ -402,8 +404,6 @@ function App() {
             toastTimersRef.current.clear();
         };
     }, []);
-
-
 
     useEffect(() => {
         if (!visibleResults.length) {
@@ -535,7 +535,7 @@ function App() {
                         value={queryDraft}
                         submittedValue={query}
                         onChange={setQueryDraft}
-                        onSubmit={handleSearchSubmit}
+                        onSubmit={(v) => void handleSearchSubmit(v)}
                         timeFilter={timeFilter}
                         onTimeFilterChange={setTimeFilter}
                         appFilter={appFilter}

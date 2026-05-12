@@ -7,7 +7,7 @@ function shuffle<T>(arr: T[]): T[] {
     return shuffled;
 }
 
-export const RAW_PLACEHOLDERS = [
+const RAW_PLACEHOLDERS = [
     "Find that PDF you downloaded last week...",
     "The Word doc you were editing yesterday...",
     "A spreadsheet with budget numbers...",

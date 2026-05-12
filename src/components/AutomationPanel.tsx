@@ -7,13 +7,18 @@ import {
     listMemoryCards,
     getStats,
 } from "../api/tauri";
+import { POLL_INTERVALS, STORAGE_KEYS } from "../lib/config";
 import "./AutomationPanel.css";
 
-const STORAGE_KEY = "fndr-automations";
+const STORAGE_KEY = STORAGE_KEYS.automations;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type AutomationId = "daily-summary" | "evening-review" | "hourly-context" | "weekly-digest";
+type AutomationId =
+    | "daily-summary"
+    | "evening-review"
+    | "hourly-context"
+    | "weekly-digest";
 type AutomationFrequency = "hourly" | "daily" | "weekly";
 
 interface AutomationConfig {
@@ -172,7 +177,7 @@ export function useAutomationScheduler(): void {
         };
 
         void tick();
-        tickRef.current = window.setInterval(() => void tick(), 60_000);
+        tickRef.current = window.setInterval(() => void tick(), POLL_INTERVALS.automationsMs);
         return () => {
             if (tickRef.current !== null) window.clearInterval(tickRef.current);
         };

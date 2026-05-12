@@ -668,6 +668,7 @@ async fn do_download(
     let client = reqwest::Client::builder()
         .user_agent("FNDR/1.0")
         .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(7200))
         .build()
         .map_err(|e| {
             let msg = format!("HTTP client build failed: {}", e);
