@@ -27,6 +27,16 @@ pub async fn delete_memory(
         return Ok(false);
     }
 
+    if let Err(err) =
+        super::todos::apply_memory_deletion_to_tasks(&state.inner().store, &memory_id).await
+    {
+        tracing::warn!(
+            "Task cleanup after deleting memory {} failed: {}",
+            memory_id,
+            err
+        );
+    }
+
     state.invalidate_memory_derived_caches();
 
     if let Some(record) = existing {

@@ -38,31 +38,6 @@ fn normalize_task_text(value: &str) -> String {
         .join(" ")
 }
 
-fn task_terms(title: &str) -> Vec<String> {
-    normalize_task_text(title)
-        .split_whitespace()
-        .filter(|term| term.len() >= 3)
-        .filter(|term| {
-            !matches!(
-                *term,
-                "the"
-                    | "and"
-                    | "for"
-                    | "with"
-                    | "from"
-                    | "that"
-                    | "this"
-                    | "todo"
-                    | "task"
-                    | "follow"
-                    | "followup"
-                    | "reminder"
-            )
-        })
-        .map(|term| term.to_string())
-        .collect()
-}
-
 fn is_manual_task(task: &Task) -> bool {
     task.source_app.eq_ignore_ascii_case("manual")
 }
@@ -152,62 +127,34 @@ fn task_priority_score(task: &Task, now_ms: i64) -> i64 {
         - title_penalty
 }
 
-fn required_term_matches(terms: &[String]) -> usize {
-    if terms.len() >= 4 {
-        2
-    } else {
-        1
-    }
-}
-
-fn update_task_links_from_memories(tasks: &mut [Task], recent_memories: &[SearchResult]) -> bool {
+/// Drop tasks whose primary memory row no longer exists, and prune dead
+/// `linked_memory_ids`. Does not add new links from unrelated memories.
+fn prune_tasks_with_deleted_memories(
+    tasks: &mut [Task],
+    valid_memory_ids: &HashSet<String>,
+) -> bool {
     let mut changed = false;
-
-    for task in tasks
-        .iter_mut()
-        .filter(|t| !t.is_completed && !t.is_dismissed)
-    {
-        let terms = task_terms(&task.title);
-        if terms.is_empty() {
+    for task in tasks.iter_mut() {
+        if task.is_completed {
             continue;
         }
-
-        let mut known_memory_ids: HashSet<String> =
-            task.linked_memory_ids.iter().cloned().collect();
-        let mut known_urls: HashSet<String> = task.linked_urls.iter().cloned().collect();
-
-        for memory in recent_memories.iter().take(TASK_LINK_SCAN_LIMIT) {
-            let blob = format!(
-                "{} {} {}",
-                memory.snippet, memory.clean_text, memory.window_title
-            );
-            let normalized_blob = normalize_task_text(&blob);
-            let matches = terms
-                .iter()
-                .filter(|term| normalized_blob.contains(term.as_str()))
-                .count();
-            let required = required_term_matches(&terms);
-            if matches < required {
-                continue;
-            }
-
-            if known_memory_ids.insert(memory.id.clone()) {
-                task.linked_memory_ids.push(memory.id.clone());
-                changed = true;
-            }
-
-            if let Some(url) = memory.url.clone() {
-                if known_urls.insert(url.clone()) {
-                    task.linked_urls.push(url);
+        if let Some(ref sid) = task.source_memory_id {
+            if !valid_memory_ids.contains(sid.as_str()) {
+                if !task.is_dismissed {
+                    task.is_dismissed = true;
                     changed = true;
                 }
+                continue;
             }
         }
-
-        task.linked_memory_ids.truncate(18);
-        task.linked_urls.truncate(8);
+        let before = task.linked_memory_ids.len();
+        task
+            .linked_memory_ids
+            .retain(|id| valid_memory_ids.contains(id.as_str()));
+        if task.linked_memory_ids.len() != before {
+            changed = true;
+        }
     }
-
     changed
 }
 
@@ -299,45 +246,6 @@ fn first_sentence(text: &str) -> String {
         .take(18)
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn classify_task_type_from_text(text: &str) -> TaskType {
-    let lower = text.to_lowercase();
-    if [
-        "follow up",
-        "follow-up",
-        "reply to",
-        "reach out",
-        "check in with",
-        "ping ",
-    ]
-    .iter()
-    .any(|cue| lower.contains(cue))
-    {
-        TaskType::Followup
-    } else if [
-        "tomorrow",
-        "today",
-        "tonight",
-        "next week",
-        "next month",
-        "deadline",
-        "due ",
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-        "sunday",
-    ]
-    .iter()
-    .any(|cue| lower.contains(cue))
-    {
-        TaskType::Reminder
-    } else {
-        TaskType::Todo
-    }
 }
 
 fn build_memory_task_candidate(memory: &SearchResult) -> Option<MemoryTaskCandidate> {
@@ -438,7 +346,7 @@ fn build_memory_task_candidate(memory: &SearchResult) -> Option<MemoryTaskCandid
 
     Some(MemoryTaskCandidate {
         title: cleaned,
-        task_type: classify_task_type_from_text(&lower),
+        task_type: crate::tasks::infer_task_type_from_title(&lower),
         score,
         created_at: memory.timestamp,
         source_app: format!("Memory:{}", memory.app_name),
@@ -560,10 +468,51 @@ pub async fn add_todo(
     Ok(task)
 }
 
+/// After a memory row is deleted, dismiss tasks that were grounded in it and
+/// strip it from `linked_memory_ids` on other tasks.
+pub(crate) async fn apply_memory_deletion_to_tasks(
+    store: &crate::store::Store,
+    deleted_memory_id: &str,
+) -> Result<(), String> {
+    let mut tasks = store.list_tasks().await.map_err(|e| e.to_string())?;
+    let mut changed = false;
+    for task in tasks.iter_mut() {
+        if task.is_completed {
+            continue;
+        }
+        if task.source_memory_id.as_deref() == Some(deleted_memory_id) {
+            if !task.is_dismissed {
+                task.is_dismissed = true;
+                changed = true;
+            }
+            continue;
+        }
+        let before = task.linked_memory_ids.len();
+        task
+            .linked_memory_ids
+            .retain(|id| id != deleted_memory_id);
+        if task.linked_memory_ids.len() != before {
+            changed = true;
+        }
+    }
+    if changed {
+        store
+            .upsert_tasks(&tasks)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Get all active todos
 #[tauri::command]
 pub async fn get_todos(state: State<'_, Arc<AppState>>) -> Result<Vec<Task>, String> {
     let mut tasks = state.store.list_tasks().await.map_err(|e| e.to_string())?;
+    let valid_memory_ids = state
+        .store
+        .list_memory_ids()
+        .await
+        .map_err(|e| e.to_string())?;
     let recent_memories = state
         .store
         .list_recent_results(TASK_LINK_SCAN_LIMIT, None)
@@ -575,11 +524,11 @@ pub async fn get_todos(state: State<'_, Arc<AppState>>) -> Result<Vec<Task>, Str
         .await
         .map_err(|e| e.to_string())?;
 
-    let links_changed = update_task_links_from_memories(&mut tasks, &recent_memories);
+    let prune_changed = prune_tasks_with_deleted_memories(&mut tasks, &valid_memory_ids);
     let memory_backfill_changed = backfill_tasks_from_memories(&mut tasks, &recent_memories);
     let meeting_backfill_changed = backfill_tasks_from_meetings(&mut tasks, &meetings);
     let cleanup_changed = dismiss_low_quality_auto_tasks(&mut tasks);
-    if links_changed || memory_backfill_changed || meeting_backfill_changed || cleanup_changed {
+    if prune_changed || memory_backfill_changed || meeting_backfill_changed || cleanup_changed {
         state
             .store
             .upsert_tasks(&tasks)

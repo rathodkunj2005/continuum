@@ -1253,7 +1253,7 @@ impl Store {
         Ok(dedup_search_results(results, limit))
     }
 
-    /// Return comprehensive statistics and usage insights about stored data.
+    /// Returns whether at least one memory row exists.
     pub async fn has_memories(&self) -> Result<bool, Box<dyn std::error::Error>> {
         let batches: Vec<RecordBatch> = self
             .table
@@ -1265,6 +1265,35 @@ impl Store {
             .try_collect()
             .await?;
         Ok(batches.iter().any(|batch| batch.num_rows() > 0))
+    }
+
+    /// All memory row ids currently in the table (for task ↔ memory integrity).
+    pub async fn list_memory_ids(&self) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(Select::columns(&["id"]))
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+
+        let mut ids = HashSet::new();
+        for batch in &batches {
+            let Some(col) = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+            else {
+                continue;
+            };
+            for i in 0..batch.num_rows() {
+                let value = col.value(i);
+                if !value.is_empty() {
+                    ids.insert(value.to_string());
+                }
+            }
+        }
+        Ok(ids)
     }
 
     /// Return comprehensive statistics and usage insights about stored data.

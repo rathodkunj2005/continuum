@@ -34,6 +34,48 @@ fn strip_list_prefix(line: &str) -> &str {
     trimmed
 }
 
+/// Best-effort classification for lines that did not carry an explicit
+/// `TODO:` / `REMINDER:` / `FOLLOWUP:` prefix (for example markdown bullets).
+/// Follow-up cues win over time-based reminder cues when both match.
+pub fn infer_task_type_from_title(title: &str) -> TaskType {
+    let lower = title.to_lowercase();
+    if [
+        "follow up",
+        "follow-up",
+        "reply to",
+        "reach out",
+        "check in with",
+        "ping ",
+    ]
+    .iter()
+    .any(|cue| lower.contains(cue))
+    {
+        TaskType::Followup
+    } else if [
+        "tomorrow",
+        "today",
+        "tonight",
+        "next week",
+        "next month",
+        "deadline",
+        "due ",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]
+    .iter()
+    .any(|cue| lower.contains(cue))
+    {
+        TaskType::Reminder
+    } else {
+        TaskType::Todo
+    }
+}
+
 fn is_actionable_task_title(title: &str) -> bool {
     let normalized = normalize_task_text(title);
     if normalized.len() < 6 {
@@ -78,32 +120,33 @@ pub fn parse_tasks_from_llm_response(response: &str, source_app: &str) -> Vec<Ta
             continue;
         }
 
-        // Parse lines like "TODO: Send email", "REMINDER: ...", "FOLLOW-UP: ..."
+        // Parse lines like "TODO: Send email", "REMINDER: ...", "FOLLOWUP: ..."
         let stripped = strip_list_prefix(line);
-        let (task_type, title) = if let Some((prefix, rest)) = stripped.split_once(':') {
-            let normalized_prefix = prefix
-                .trim()
-                .replace('-', "")
-                .replace('_', "")
-                .to_ascii_uppercase();
-            let parsed_type = match normalized_prefix.as_str() {
-                "TODO" => Some(TaskType::Todo),
-                "REMINDER" => Some(TaskType::Reminder),
-                "FOLLOWUP" => Some(TaskType::Followup),
-                _ => None,
-            };
-            if let Some(parsed_type) = parsed_type {
-                (parsed_type, rest.trim())
+        let (mut task_type, title, type_from_prefix) =
+            if let Some((prefix, rest)) = stripped.split_once(':') {
+                let normalized_prefix = prefix
+                    .trim()
+                    .replace('-', "")
+                    .replace('_', "")
+                    .to_ascii_uppercase();
+                let parsed_type = match normalized_prefix.as_str() {
+                    "TODO" => Some(TaskType::Todo),
+                    "REMINDER" => Some(TaskType::Reminder),
+                    "FOLLOWUP" => Some(TaskType::Followup),
+                    _ => None,
+                };
+                if let Some(parsed_type) = parsed_type {
+                    (parsed_type, rest.trim(), true)
+                } else if line.starts_with("- ") || line.starts_with("* ") {
+                    (TaskType::Todo, stripped, false)
+                } else {
+                    continue;
+                }
             } else if line.starts_with("- ") || line.starts_with("* ") {
-                (TaskType::Todo, stripped)
+                (TaskType::Todo, stripped, false)
             } else {
                 continue;
-            }
-        } else if line.starts_with("- ") || line.starts_with("* ") {
-            (TaskType::Todo, stripped)
-        } else {
-            continue;
-        };
+            };
 
         let cleaned_title = title
             .trim()
@@ -112,6 +155,10 @@ pub fn parse_tasks_from_llm_response(response: &str, source_app: &str) -> Vec<Ta
             .trim();
         if !is_actionable_task_title(cleaned_title) {
             continue;
+        }
+
+        if !type_from_prefix {
+            task_type = infer_task_type_from_title(cleaned_title);
         }
 
         let dedupe_key = (
@@ -145,4 +192,41 @@ pub fn parse_tasks_from_llm_response(response: &str, source_app: &str) -> Vec<Ta
     }
 
     tasks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn infer_followup_from_bullet_title() {
+        let t = infer_task_type_from_title("Reply to Sarah about the contract draft");
+        assert!(matches!(t, TaskType::Followup));
+    }
+
+    #[test]
+    fn infer_reminder_from_time_cue() {
+        let t = infer_task_type_from_title("Submit the form before Friday deadline");
+        assert!(matches!(t, TaskType::Reminder));
+    }
+
+    #[test]
+    fn parse_bullet_applies_infer_when_no_prefix() {
+        let tasks = parse_tasks_from_llm_response(
+            "- Reply to the team about API changes for next week",
+            "TestApp",
+        );
+        assert_eq!(tasks.len(), 1);
+        assert!(matches!(tasks[0].task_type, TaskType::Followup));
+    }
+
+    #[test]
+    fn parse_explicit_prefix_respected() {
+        let tasks = parse_tasks_from_llm_response(
+            "TODO: Reply to the team about API changes for next week",
+            "TestApp",
+        );
+        assert_eq!(tasks.len(), 1);
+        assert!(matches!(tasks[0].task_type, TaskType::Todo));
+    }
 }
