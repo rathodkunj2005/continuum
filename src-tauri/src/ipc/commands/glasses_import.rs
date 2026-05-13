@@ -8,7 +8,7 @@ use crate::config::DEFAULT_IMAGE_EMBEDDING_DIM;
 use crate::embedding::{embed_imported_image, EMBEDDING_DIM};
 use crate::inference::{
     build_import_raw_evidence, compose_import_memory_context, extract_image_semantics,
-    insight_vision_extraction_failed, should_include_import_ocr, ImageImportSource,
+    insight_from_ocr_only, insight_from_structured, should_include_import_ocr, ImageImportSource,
     ImageSemanticInsight, ImportOcrStats,
 };
 use crate::memory_compaction::{
@@ -86,6 +86,14 @@ pub async fn import_meta_glasses_photo(
     let models_dir = models::models_dir(state.app_data_dir.as_path());
     let app_data_dir = state.app_data_dir.clone();
 
+    // Serialize all heavy model work (OCR is light, but CLIP + VLM + BGE
+    // contend on Metal). Holding the global pipeline lock here pauses any
+    // concurrent capture-loop model phase until this import finishes,
+    // mirroring the user-requested "pause then process then restart"
+    // invariant and fixing the `mtmd eval chunks: -3` Metal contention
+    // failure when capture and import collide.
+    let _pipeline_guard = state.model_pipeline_lock.lock().await;
+
     let (ocr_text, ocr_confidence, ocr_blocks, image_embedding) =
         tokio::task::spawn_blocking({
             let file_bytes = file_bytes.clone();
@@ -127,21 +135,59 @@ pub async fn import_meta_glasses_photo(
         Some("noisy_low_signal_text")
     };
 
-    let vision = extract_image_semantics(
-        file_bytes.clone(),
-        filename.as_str(),
-        ImageImportSource::MetaGlasses,
-        app_data_dir.clone(),
-    )
-    .await;
+    // System-pressure throttle: when the host or this process is in a hot
+    // state (low free RAM, runaway CPU, or 6+ GiB footprint), skip the VLM
+    // altogether and use the OCR-grounded fallback. This prevents the
+    // `mtmd eval chunks: -3` failure cascade the user hit when Metal was
+    // already saturated by the capture loop's text pipeline.
+    let (skip_vlm, skip_reason) =
+        crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
+
+    let vision = if skip_vlm {
+        tracing::info!(
+            "glasses_import: skipping VLM under system pressure ({skip_reason}); using OCR-grounded insight"
+        );
+        Err(format!("skipped_under_pressure:{skip_reason}"))
+    } else {
+        extract_image_semantics(
+            file_bytes.clone(),
+            filename.as_str(),
+            ImageImportSource::MetaGlasses,
+            app_data_dir.clone(),
+        )
+        .await
+    };
 
     let mut extraction_issues: Vec<String> = Vec::new();
+    // VLM failure no longer leaks into user-visible fields; the reason is
+    // recorded once in `extraction_failure_reason` (raw_evidence). When
+    // the Llama engine is loaded we use it to author a real narrative
+    // from the OCR; only when that's also unavailable do we drop to the
+    // heuristic OCR-only insight.
+    let mut extraction_failure_reason: Option<String> = None;
     let insight: ImageSemanticInsight = match vision {
         Ok(i) => i,
         Err(e) => {
-            tracing::warn!("import vision extraction failed: {e}");
+            tracing::warn!("import vision extraction failed: {e}; attempting LLM-on-OCR fallback");
             extraction_issues.push("vision_semantic_extraction_failed".to_string());
-            insight_vision_extraction_failed(&filename, &e)
+            extraction_failure_reason = Some(e);
+            let ocr_grounding = if include_ocr { ocr_text.trim() } else { "" };
+
+            let llm_insight: Option<ImageSemanticInsight> = if ocr_grounding.len() >= 20 {
+                if let Some(engine) = state.inference_engine() {
+                    engine
+                        .extract_structured_memory("Meta glasses import", &filename, ocr_grounding)
+                        .await
+                        .map(|s| insight_from_structured(&s))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            llm_insight
+                .unwrap_or_else(|| insight_from_ocr_only(&filename, None, None, ocr_grounding))
         }
     };
 
@@ -193,6 +239,11 @@ pub async fn import_meta_glasses_photo(
     let vectors = embedder
         .embed_batch_with_context(&contexts)
         .map_err(|e| format!("embed: {e}"))?;
+
+    // All heavy model work is done; release the pipeline lock so the
+    // capture loop can resume immediately.
+    drop(_pipeline_guard);
+
     let embedding = vectors
         .first()
         .cloned()
@@ -219,6 +270,7 @@ pub async fn import_meta_glasses_photo(
         include_ocr,
         ocr_rejected_reason,
         ocr_excerpt_owned.as_deref(),
+        extraction_failure_reason.as_deref(),
     );
 
     let internal_context = json!({

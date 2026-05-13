@@ -225,10 +225,19 @@ pub fn compose_import_memory_context(
         }
     }
     let mut memory_context = format!("{header}. {body}");
-    if let Some(ocr) = ocr_text {
-        let excerpt: String = ocr.chars().take(400).collect();
-        memory_context.push_str("\n\nSupporting OCR (low weight):\n");
-        memory_context.push_str(&excerpt);
+    // Only append the raw OCR appendix when the insight came from an actual
+    // vision model. In the OCR-only and LLM-on-OCR fallback paths the OCR
+    // *is* the source of the summary above, so repeating it here would
+    // just pollute the memory card with the same low-signal text we
+    // already summarized.
+    let summary_already_grounded_in_ocr =
+        matches!(insight.model_id.as_str(), "ocr_only" | "llm_ocr_grounded");
+    if !summary_already_grounded_in_ocr {
+        if let Some(ocr) = ocr_text {
+            let excerpt: String = ocr.chars().take(400).collect();
+            memory_context.push_str("\n\nSupporting OCR (low weight):\n");
+            memory_context.push_str(&excerpt);
+        }
     }
 
     let topic = if !insight.topics.is_empty() {
@@ -422,29 +431,392 @@ fn extract_json_object_slice(s: &str) -> Option<&str> {
     }
 }
 
-/// Insight used when MTMD vision fails — never fabricates scene content.
-pub fn insight_vision_extraction_failed(filename: &str, err: &str) -> ImageSemanticInsight {
-    ImageSemanticInsight {
-        summary_short: format!("Imported photo {filename}: visual semantic extraction failed."),
-        summary_detailed: format!(
-            "FNDR could not run local Qwen3-VL multimodal extraction on this image. \
-             Reason: {err}. The memory still has an image embedding for similarity search."
-        ),
-        scene_type: "unknown".to_string(),
-        setting: None,
-        activity_type: Some("import".to_string()),
-        user_intent: Some(
-            "importing a photo without successful on-device vision analysis".to_string(),
-        ),
-        visible_objects: vec![],
-        people_roles: vec![],
-        entities: vec!["photo import".to_string()],
-        actions: vec![],
-        topics: vec!["photo import".to_string()],
-        search_aliases: vec!["photo import".to_string(), "imported image".to_string()],
-        confidence: 0.15,
-        model_id: "none".to_string(),
+/// Convert a [`crate::inference::StructuredMemoryExtraction`] (the LLM JSON
+/// schema we already use elsewhere) into an [`ImageSemanticInsight`] so the
+/// import composer can consume it without caring whether the underlying
+/// content came from a VLM or from an OCR-grounded LLM call.
+///
+/// The output uses `model_id = "llm_ocr_grounded"` so downstream gates
+/// (e.g. the "Supporting OCR" appendix in [`compose_import_memory_context`]
+/// and the storage threshold) can tell apart the three insight origins:
+/// `"qwen3-vl-..."` (VLM success), `"llm_ocr_grounded"` (LLM-on-OCR
+/// fallback), and `"ocr_only"` (heuristic fallback when even Llama is
+/// unavailable).
+pub fn insight_from_structured(
+    structured: &crate::inference::StructuredMemoryExtraction,
+) -> ImageSemanticInsight {
+    let summary_short = if !structured.topic.trim().is_empty() {
+        structured.topic.trim().to_string()
+    } else if !structured.memory_context.trim().is_empty() {
+        structured
+            .memory_context
+            .trim()
+            .chars()
+            .take(180)
+            .collect::<String>()
+    } else {
+        String::new()
+    };
+    let summary_detailed = structured
+        .memory_context
+        .trim()
+        .chars()
+        .take(420)
+        .collect::<String>();
+
+    let topics = if structured.topic.trim().is_empty() {
+        Vec::new()
+    } else {
+        vec![structured.topic.trim().to_string()]
+    };
+
+    let mut search_aliases: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for a in structured
+        .search_aliases
+        .iter()
+        .chain(structured.tags.iter())
+        .chain(structured.entities.iter())
+    {
+        let k = normalize_alias_key(a);
+        if k.is_empty() || k.len() < 3 {
+            continue;
+        }
+        // Apply the same anti-pollution guards as `insight_from_ocr_only`.
+        if a.contains('[') || a.contains(']') || a.contains('|') {
+            continue;
+        }
+        if seen.insert(k) {
+            search_aliases.push(a.trim().to_string());
+        }
+        if search_aliases.len() >= 12 {
+            break;
+        }
     }
+
+    ImageSemanticInsight {
+        summary_short,
+        summary_detailed,
+        scene_type: if structured.activity_type.trim().is_empty() {
+            "screen content".to_string()
+        } else {
+            structured.activity_type.trim().to_string()
+        },
+        setting: None,
+        activity_type: if structured.activity_type.trim().is_empty() {
+            Some("observing".to_string())
+        } else {
+            Some(structured.activity_type.trim().to_string())
+        },
+        user_intent: if structured.user_intent.trim().is_empty() {
+            None
+        } else {
+            Some(structured.user_intent.trim().to_string())
+        },
+        visible_objects: Vec::new(),
+        people_roles: Vec::new(),
+        entities: structured.entities.clone(),
+        actions: Vec::new(),
+        topics,
+        search_aliases,
+        // Below the VLM-success threshold (0.55) so retrieval treats this
+        // as evidence rather than a primary vision insight, but above the
+        // OCR-only path (0.30) so we prefer it when it's available.
+        confidence: structured.confidence.clamp(0.0, 1.0).max(0.40),
+        model_id: "llm_ocr_grounded".to_string(),
+    }
+}
+
+/// Build a semantic insight grounded entirely in the supporting OCR text +
+/// app/window context — no fabricated scene content, no error messages in
+/// user-visible fields. Use this whenever the VLM is unavailable (failure,
+/// memory pressure, model not installed) and no LLM is available either.
+/// The actual error reason belongs in [`build_import_raw_evidence`]'s
+/// `extraction_failure_reason` field, not in `summary_short`/`summary_detailed`.
+///
+/// The output is intentionally honest: it summarizes *what FNDR could read*
+/// without pretending to have analyzed pixels. Confidence is set below the
+/// success threshold so retrieval ranking treats it as supporting evidence,
+/// not as a primary vision insight.
+pub fn insight_from_ocr_only(
+    filename: &str,
+    app_name: Option<&str>,
+    window_title: Option<&str>,
+    clean_text: &str,
+) -> ImageSemanticInsight {
+    let app = app_name.unwrap_or("").trim();
+    let window = window_title.unwrap_or("").trim();
+    // Pre-scrub before everything else so the headline / detail body /
+    // ranking / entity extractor all see the same content without
+    // `[LOW_CONF]` and similar OCR-quality annotations.
+    let scrubbed_text = scrub_ocr_annotations(clean_text);
+    let cleaned = scrubbed_text.trim();
+
+    let salient = rank_salient_spans(cleaned, 6);
+    let entities = lightweight_entities_from_text(cleaned, 6);
+
+    // Build a short headline from the strongest available signals. Prefer
+    // an explicit window title since it's almost always meaningful; fall
+    // back to the first salient span, then the filename.
+    let headline = if !window.is_empty() && window.len() <= 90 {
+        window.to_string()
+    } else if let Some(first) = salient.first() {
+        first.clone()
+    } else if !app.is_empty() {
+        app.to_string()
+    } else {
+        filename.to_string()
+    };
+
+    let summary_short = if app.is_empty() {
+        headline.clone()
+    } else {
+        format!("{app}: {headline}")
+    };
+
+    // Detailed summary: stitch up to three salient spans into one sentence,
+    // capped to MAX_SUMMARY_CHARS so embeddings stay focused.
+    let detail_body = if salient.is_empty() {
+        if cleaned.is_empty() {
+            "No supporting text was visible on screen.".to_string()
+        } else {
+            cleaned.chars().take(180).collect::<String>()
+        }
+    } else {
+        salient
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" · ")
+    };
+    let prefix = if !app.is_empty() && !window.is_empty() {
+        format!("{app} — {window}. ")
+    } else if !app.is_empty() {
+        format!("{app}. ")
+    } else if !window.is_empty() {
+        format!("{window}. ")
+    } else {
+        String::new()
+    };
+    let summary_detailed: String = format!("{prefix}{detail_body}").chars().take(420).collect();
+
+    // Topics: dedupe-merge salient spans + window title fragments.
+    let mut topics: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut candidates: Vec<&str> = Vec::with_capacity(1 + salient.len());
+    candidates.push(headline.as_str());
+    for s in &salient {
+        candidates.push(s.as_str());
+    }
+    for candidate in candidates {
+        let key = normalize_alias_key(candidate);
+        if key.is_empty() || key.len() < 3 {
+            continue;
+        }
+        if seen.insert(key) {
+            topics.push(candidate.trim().to_string());
+        }
+        if topics.len() >= 4 {
+            break;
+        }
+    }
+
+    // Aliases: topics + entities, capped.
+    let mut alias_set: HashSet<String> = HashSet::new();
+    for t in &topics {
+        alias_set.insert(t.clone());
+    }
+    for e in &entities {
+        alias_set.insert(e.clone());
+    }
+    let search_aliases: Vec<String> = alias_set.into_iter().take(12).collect();
+
+    let scene_type = if app.is_empty() {
+        "screen content".to_string()
+    } else {
+        format!("{app} screen")
+    };
+
+    ImageSemanticInsight {
+        summary_short,
+        summary_detailed,
+        scene_type,
+        setting: None,
+        activity_type: Some("observing".to_string()),
+        user_intent: None,
+        visible_objects: Vec::new(),
+        people_roles: Vec::new(),
+        entities,
+        actions: Vec::new(),
+        topics,
+        search_aliases,
+        // Below the typical success threshold (>= 0.55) so downstream
+        // ranking treats this as supporting evidence, not as a primary
+        // vision insight.
+        confidence: 0.30,
+        model_id: "ocr_only".to_string(),
+    }
+}
+
+/// Strip FNDR's own OCR/quality annotations and structural junk before we
+/// hand the text to span ranking or entity extraction. These markers
+/// (`[LOW_CONF]`, `[OCR]`, etc.) are produced by upstream OCR cleanup —
+/// they are metadata about the OCR, not content. Echoing them as topics
+/// or aliases is exactly the failure mode that produced the
+/// `"LOW_CONF] Explore companies..."` topics in the StartupCompass card.
+fn scrub_ocr_annotations(text: &str) -> String {
+    if text.trim().is_empty() {
+        return String::new();
+    }
+    let mut out = String::with_capacity(text.len());
+    for raw_line in text.lines() {
+        let mut line = raw_line.to_string();
+        // Remove `[ANYTHING]` and `]ANYTHING]` style annotations the
+        // upstream OCR pass may inject when confidence is low.
+        for marker in [
+            "[LOW_CONF]",
+            "LOW_CONF]",
+            "[LOW_CONF",
+            "[OCR]",
+            "[NOISE]",
+            "[REDACTED]",
+            "[…]",
+            "[...]",
+        ] {
+            line = line.replace(marker, " ");
+        }
+        // Collapse repeated whitespace introduced by replacement.
+        let collapsed: String = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !collapsed.is_empty() {
+            out.push_str(&collapsed);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Rank short noun-ish spans from OCR/clean_text for use in OCR-only
+/// insights. Heuristic only — never calls a model. Order: longest
+/// alphanumeric-rich runs first, ties broken by earlier occurrence.
+fn rank_salient_spans(text: &str, max_spans: usize) -> Vec<String> {
+    let scrubbed = scrub_ocr_annotations(text);
+    if scrubbed.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut spans: Vec<(usize, usize, String)> = Vec::new();
+    for (idx, raw_line) in scrubbed.lines().enumerate() {
+        for chunk in raw_line
+            .split(|c: char| matches!(c, '|' | '\t' | '·' | '•' | '◦' | '↑' | '↓' | '→' | '←'))
+        {
+            let trimmed = chunk.trim();
+            if trimmed.len() < 6 || trimmed.len() > 90 {
+                continue;
+            }
+            let alnum: usize = trimmed.chars().filter(|c| c.is_alphanumeric()).count();
+            if alnum * 2 < trimmed.chars().count() {
+                continue;
+            }
+            // Reject obvious "all-uppercase noise" or "repeating-char noise".
+            let alpha: usize = trimmed.chars().filter(|c| c.is_alphabetic()).count();
+            if alpha < 3 {
+                continue;
+            }
+            // Penalize trailing punctuation/garbage on both ends.
+            let cleaned = trimmed
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_string();
+            if cleaned.is_empty() || cleaned.len() < 6 {
+                continue;
+            }
+            // Reject residual annotation fragments (e.g. anything that
+            // still starts/ends with brackets after scrubbing).
+            if cleaned.contains('[') || cleaned.contains(']') {
+                continue;
+            }
+            // Require multi-word content. Single-word "topics" are almost
+            // always OCR noise or punctuation-trimmed garbage.
+            let word_count = cleaned.split_whitespace().count();
+            if word_count < 2 {
+                continue;
+            }
+            spans.push((cleaned.len(), idx, cleaned));
+        }
+    }
+    spans.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    for (_len, _idx, span) in spans {
+        let key = span.to_lowercase();
+        if seen.insert(key) {
+            out.push(span);
+            if out.len() >= max_spans {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Pull obvious named entities (URLs, file names, app-ish tokens) out of
+/// raw text without invoking a model. Best-effort; safe to call on empty
+/// input.
+fn lightweight_entities_from_text(text: &str, max_entities: usize) -> Vec<String> {
+    let scrubbed = scrub_ocr_annotations(text);
+    if scrubbed.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for tok in scrubbed.split(|c: char| c.is_whitespace() || c == ',' || c == ';') {
+        let tok =
+            tok.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/' && c != ':');
+        // Tighter floor: 4-char tokens like "matter." pass too easily;
+        // require enough alphabetic characters to look like a real entity.
+        let alpha_count: usize = tok.chars().filter(|c| c.is_alphabetic()).count();
+        if alpha_count < 5 {
+            continue;
+        }
+        // Reject tokens that end on punctuation (e.g. "matter.") — true
+        // entities don't carry trailing periods after the trim above
+        // unless they were sentence-terminated nouns, which we don't
+        // want as entities anyway.
+        if tok.ends_with('.') && tok.matches('.').count() == 1 {
+            continue;
+        }
+        // Reject residual OCR-annotation fragments.
+        if tok.contains('[') || tok.contains(']') {
+            continue;
+        }
+        let looks_url =
+            tok.starts_with("http://") || tok.starts_with("https://") || tok.contains("://");
+        let looks_domain = tok.matches('.').count() >= 1
+            && tok
+                .chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/'))
+            && tok.chars().any(|c| c.is_alphabetic())
+            // Domains have a TLD-shaped tail (>=2 chars after last dot).
+            && tok.rsplit_once('.').map(|(_, t)| t.len() >= 2).unwrap_or(false);
+        // CamelCase / PascalCase product names need at least one internal
+        // uppercase *after* the first char to avoid catching plain words
+        // that happen to be sentence-initial.
+        let mut chars = tok.chars();
+        let first = chars.next();
+        let internal_upper = chars.filter(|c| c.is_uppercase()).count() >= 1
+            && first.map(|c| c.is_uppercase()).unwrap_or(false);
+        let looks_camel = internal_upper && tok.chars().any(|c| c.is_lowercase());
+        if !(looks_url || looks_domain || looks_camel) {
+            continue;
+        }
+        let key = tok.to_lowercase();
+        if seen.insert(key) {
+            out.push(tok.to_string());
+            if out.len() >= max_entities {
+                break;
+            }
+        }
+    }
+    out
 }
 
 // --- Runtime (singleton) ----------------------------------------------------
@@ -677,6 +1049,10 @@ Required JSON schema (all string arrays may be empty):
 }"#;
 
 /// JSON blob stored in `MemoryRecord::raw_evidence` for imports (extended fields).
+///
+/// `extraction_failure_reason` should be populated whenever the VLM failed
+/// (or was skipped) so the user-visible `memory_context` stays semantic but
+/// debugging information remains accessible via the raw evidence pane.
 pub fn build_import_raw_evidence(
     source_type: &str,
     filename: &str,
@@ -684,6 +1060,7 @@ pub fn build_import_raw_evidence(
     ocr_included: bool,
     ocr_rejected_reason: Option<&str>,
     ocr_excerpt: Option<&str>,
+    extraction_failure_reason: Option<&str>,
 ) -> String {
     json!({
         "source_type": source_type,
@@ -705,6 +1082,7 @@ pub fn build_import_raw_evidence(
         "ocr_included": ocr_included,
         "ocr_rejected_reason": ocr_rejected_reason,
         "ocr_excerpt_if_rejected": ocr_excerpt,
+        "extraction_failure_reason": extraction_failure_reason,
     })
     .to_string()
 }
@@ -814,6 +1192,7 @@ mod tests {
             false,
             Some("noisy_low_signal_text"),
             None,
+            None,
         );
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["ocr_included"], false);
@@ -827,5 +1206,230 @@ mod tests {
         let out = parse_vision_json(raw, "test").unwrap();
         assert_eq!(out.summary_short, "x");
         assert_eq!(out.activity_type.as_deref(), Some("presentation"));
+    }
+
+    #[test]
+    fn ocr_only_insight_never_mentions_failure_or_extraction() {
+        let i = insight_from_ocr_only(
+            "ElCamino.jpeg",
+            Some("Camera"),
+            Some("Lunch line"),
+            "Order Food OPEN READY BY Track Order We're ready to serve you 11 min wait",
+        );
+        let blob = format!(
+            "{} {} {} {}",
+            i.summary_short,
+            i.summary_detailed,
+            i.scene_type,
+            i.search_aliases.join(" ")
+        )
+        .to_ascii_lowercase();
+        for forbidden in [
+            "fail",
+            "failed",
+            "eval failed",
+            "error",
+            "could not",
+            "mtmd",
+            "qwen",
+            "multimodal extraction",
+            "extraction failed",
+            "code:",
+        ] {
+            assert!(
+                !blob.contains(forbidden),
+                "OCR-only insight leaked debug language `{forbidden}`: {blob}"
+            );
+        }
+        assert!(i.confidence < 0.55);
+        assert_eq!(i.model_id, "ocr_only");
+        assert!(!i.topics.is_empty(), "expected at least one topic");
+    }
+
+    #[test]
+    fn ocr_only_insight_grounds_in_window_title_when_text_is_empty() {
+        let i = insight_from_ocr_only("Untitled.png", Some("Cursor"), Some("memory.rs"), "");
+        assert!(i.summary_short.contains("Cursor"));
+        assert!(i
+            .summary_detailed
+            .to_ascii_lowercase()
+            .contains("memory.rs"));
+    }
+
+    #[test]
+    fn ocr_only_insight_picks_rich_spans_over_short_garbage() {
+        let i = insight_from_ocr_only(
+            "Notes.png",
+            Some("Notes"),
+            Some("Project plan"),
+            "| | | ok\nQuarterly revenue summary table shows 12% growth in enterprise segment.\n. .",
+        );
+        let joined = i.summary_detailed.to_ascii_lowercase();
+        assert!(joined.contains("quarterly"));
+        assert!(!joined.contains("| |"));
+    }
+
+    #[test]
+    fn ocr_only_strips_low_conf_markers_from_topics_and_aliases() {
+        let polluted = "[LOW_CONF] Explore companies that are actively hiring, growing fast\n\
+             [LOW_CONF] Search startups, investors, sectors, or locations\n\
+             LOW_CONF] A Personalized for Job Seekers Change\n\
+             Startup Compass UTAH . STARTUP STATE Home Map Find Resources Pulse Demo Founder\n\
+             Explore companies that are actively hiring, growing fast";
+        let i = insight_from_ocr_only(
+            "StartupCompass.jpeg",
+            Some("Camera"),
+            Some("Startup Compass"),
+            polluted,
+        );
+        let joined = format!(
+            "{} {} {} {}",
+            i.summary_short,
+            i.summary_detailed,
+            i.topics.join(" "),
+            i.search_aliases.join(" ")
+        );
+        assert!(
+            !joined.contains("[LOW_CONF]")
+                && !joined.contains("LOW_CONF]")
+                && !joined.contains("[LOW_CONF"),
+            "OCR annotations must be stripped: {joined}"
+        );
+        for topic in &i.topics {
+            assert!(
+                topic.split_whitespace().count() >= 2,
+                "topics must be multi-word, got: {topic}"
+            );
+            assert!(
+                !topic.contains('['),
+                "topic must not have brackets: {topic}"
+            );
+            assert!(
+                !topic.contains(']'),
+                "topic must not have brackets: {topic}"
+            );
+        }
+        for entity in &i.entities {
+            assert!(
+                !entity.ends_with('.'),
+                "entities must not end with period: {entity}"
+            );
+            let alpha: usize = entity.chars().filter(|c| c.is_alphabetic()).count();
+            assert!(alpha >= 5, "entities must have >=5 letters: {entity}");
+        }
+    }
+
+    #[test]
+    fn compose_import_memory_context_skips_supporting_ocr_for_ocr_only() {
+        let mut insight = ImageSemanticInsight::default();
+        insight.summary_short = "Cursor — main.rs".to_string();
+        insight.summary_detailed = "Editing main.rs in Cursor.".to_string();
+        insight.model_id = "ocr_only".to_string();
+        let composed = compose_import_memory_context(
+            "frame.png",
+            &insight,
+            Some("noise [LOW_CONF] noisy text that should not be appended"),
+            ImageImportSource::ScreenCapture,
+        );
+        assert!(
+            !composed.memory_context.contains("Supporting OCR"),
+            "ocr_only insight must not get an OCR appendix: {}",
+            composed.memory_context
+        );
+    }
+
+    #[test]
+    fn compose_import_memory_context_skips_supporting_ocr_for_llm_ocr_grounded() {
+        let mut insight = ImageSemanticInsight::default();
+        insight.summary_short = "Reviewing Q4 sales table".to_string();
+        insight.summary_detailed = "User examined a quarterly revenue summary.".to_string();
+        insight.model_id = "llm_ocr_grounded".to_string();
+        let composed = compose_import_memory_context(
+            "frame.png",
+            &insight,
+            Some("raw ocr that the llm already summarized"),
+            ImageImportSource::MetaGlasses,
+        );
+        assert!(
+            !composed.memory_context.contains("Supporting OCR"),
+            "llm_ocr_grounded insight must not duplicate the OCR: {}",
+            composed.memory_context
+        );
+    }
+
+    #[test]
+    fn scrub_ocr_annotations_collapses_markers_and_whitespace() {
+        let raw = "[LOW_CONF] Hello   world\n  LOW_CONF] Foo Bar  \n[OCR] baz";
+        let scrubbed = scrub_ocr_annotations(raw);
+        assert!(!scrubbed.contains("LOW_CONF"));
+        assert!(!scrubbed.contains("[OCR]"));
+        assert!(scrubbed.contains("Hello world"));
+        assert!(scrubbed.contains("Foo Bar"));
+        assert!(scrubbed.contains("baz"));
+    }
+
+    #[test]
+    fn insight_from_structured_maps_topic_and_entities() {
+        let structured = crate::inference::StructuredMemoryExtraction {
+            session_key: String::new(),
+            activity_type: "coding".to_string(),
+            project: String::new(),
+            topic: "refactoring telemetry sampler".to_string(),
+            memory_context: "User refactored the telemetry sampler to fix phys_footprint."
+                .to_string(),
+            workflow: String::new(),
+            user_intent: "stabilize the engine inspector".to_string(),
+            files_touched: vec![],
+            symbols_changed: vec![],
+            git_stats: Default::default(),
+            outcome: String::new(),
+            tags: vec!["telemetry".to_string()],
+            entities: vec!["telemetry".to_string()],
+            decisions: vec![],
+            errors: vec![],
+            next_steps: vec![],
+            commands: vec![],
+            blockers: vec![],
+            todos: vec![],
+            open_questions: vec![],
+            results: vec![],
+            search_aliases: vec!["fix phys_footprint".to_string()],
+            confidence: 0.7,
+            dedup_fingerprint: String::new(),
+        };
+        let i = insight_from_structured(&structured);
+        assert_eq!(i.model_id, "llm_ocr_grounded");
+        assert!(i.confidence >= 0.40 && i.confidence <= 1.0);
+        assert!(i.summary_short.contains("refactoring telemetry sampler"));
+        assert!(i
+            .topics
+            .iter()
+            .any(|t| t == "refactoring telemetry sampler"));
+        // Aliases should include the explicit alias and the entity tag.
+        assert!(i.search_aliases.iter().any(|a| a == "fix phys_footprint"));
+    }
+
+    #[test]
+    fn raw_evidence_carries_extraction_failure_reason() {
+        let insight = ImageSemanticInsight::default();
+        let raw = build_import_raw_evidence(
+            "meta_glasses_import",
+            "ElCamino.jpeg",
+            &insight,
+            false,
+            None,
+            None,
+            Some("mtmd eval chunks: Eval failed with code: -3"),
+        );
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(v["extraction_failure_reason"]
+            .as_str()
+            .map(|s| s.contains("mtmd eval chunks"))
+            .unwrap_or(false));
+        // And the failure reason must not leak into any user-visible insight field.
+        assert!(
+            !insight.summary_detailed.contains("Eval failed"),
+            "user-visible summary must not contain raw extraction errors"
+        );
     }
 }

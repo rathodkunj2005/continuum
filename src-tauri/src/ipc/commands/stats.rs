@@ -19,6 +19,38 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 
+/// Per-reason capture pipeline breakdown surfaced to the UI.
+///
+/// Mirrors [`crate::CapturePipelineStats`] one-for-one so the inspector can
+/// show "stored vs skipped (with reasons)" without parsing the JSONL signals
+/// file on every poll.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapturePipelineBreakdown {
+    pub evaluated: u64,
+    pub stored_ocr_path: u64,
+    pub stored_visual_path: u64,
+    pub stored_url_only: u64,
+    pub stored_total: u64,
+    pub skipped_blocklist: u64,
+    pub skipped_self_app: u64,
+    pub skipped_surface_policy: u64,
+    pub skipped_perceptual_dup: u64,
+    pub skipped_semantic_dup: u64,
+    pub skipped_ocr_failed: u64,
+    pub skipped_low_signal_text: u64,
+    pub skipped_noise: u64,
+    pub skipped_grounding: u64,
+    pub skipped_stacked_extraction: u64,
+    pub skipped_visual_small: u64,
+    pub skipped_visual_novelty: u64,
+    pub skipped_visual_compose_failed: u64,
+    pub skipped_screen_capture_failed: u64,
+    pub skipped_total: u64,
+    pub last_skip_reason: Option<String>,
+    pub last_skip_app: Option<String>,
+    pub last_skip_timestamp_ms: Option<i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaptureStatus {
     pub is_capturing: bool,
@@ -35,6 +67,7 @@ pub struct CaptureStatus {
     pub embedding_detail: String,
     pub embedding_model_name: String,
     pub embedding_dimension: usize,
+    pub pipeline: CapturePipelineBreakdown,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoiceTranscriptionResult {
@@ -59,7 +92,43 @@ pub async fn get_status(state: State<'_, Arc<AppState>>) -> Result<CaptureStatus
         embedding_detail: embed_status.detail,
         embedding_model_name: embed_status.model_name,
         embedding_dimension: embed_status.dimension,
+        pipeline: capture_pipeline_breakdown(state.inner()),
     })
+}
+
+/// Snapshot the per-reason capture counters into a flat IPC payload.
+///
+/// All reads are `Relaxed` atomic loads, so this is cheap and safe to call on
+/// every UI poll. The `last_skip_*` fields are taken under a short read lock
+/// on the stats' `parking_lot::RwLock`.
+pub fn capture_pipeline_breakdown(state: &AppState) -> CapturePipelineBreakdown {
+    let s = &state.capture_stats;
+    let last_skip = s.last_skip.read().clone();
+    CapturePipelineBreakdown {
+        evaluated: s.evaluated.load(Ordering::Relaxed),
+        stored_ocr_path: s.stored_ocr_path.load(Ordering::Relaxed),
+        stored_visual_path: s.stored_visual_path.load(Ordering::Relaxed),
+        stored_url_only: s.stored_url_only.load(Ordering::Relaxed),
+        stored_total: s.total_stored(),
+        skipped_blocklist: s.skipped_blocklist.load(Ordering::Relaxed),
+        skipped_self_app: s.skipped_self_app.load(Ordering::Relaxed),
+        skipped_surface_policy: s.skipped_surface_policy.load(Ordering::Relaxed),
+        skipped_perceptual_dup: s.skipped_perceptual_dup.load(Ordering::Relaxed),
+        skipped_semantic_dup: s.skipped_semantic_dup.load(Ordering::Relaxed),
+        skipped_ocr_failed: s.skipped_ocr_failed.load(Ordering::Relaxed),
+        skipped_low_signal_text: s.skipped_low_signal_text.load(Ordering::Relaxed),
+        skipped_noise: s.skipped_noise.load(Ordering::Relaxed),
+        skipped_grounding: s.skipped_grounding.load(Ordering::Relaxed),
+        skipped_stacked_extraction: s.skipped_stacked_extraction.load(Ordering::Relaxed),
+        skipped_visual_small: s.skipped_visual_small.load(Ordering::Relaxed),
+        skipped_visual_novelty: s.skipped_visual_novelty.load(Ordering::Relaxed),
+        skipped_visual_compose_failed: s.skipped_visual_compose_failed.load(Ordering::Relaxed),
+        skipped_screen_capture_failed: s.skipped_screen_capture_failed.load(Ordering::Relaxed),
+        skipped_total: s.total_skipped(),
+        last_skip_reason: last_skip.as_ref().map(|e| e.reason.clone()),
+        last_skip_app: last_skip.as_ref().map(|e| e.app_name.clone()),
+        last_skip_timestamp_ms: last_skip.as_ref().map(|e| e.timestamp_ms),
+    }
 }
 
 /// Get MCP server status

@@ -192,6 +192,42 @@ export interface RetrievalEvalReport {
     rows: RetrievalEvalRow[];
 }
 
+/**
+ * Per-reason capture-pipeline counters returned alongside {@link CaptureStatus}.
+ *
+ * Mirrors `crate::ipc::commands::stats::CapturePipelineBreakdown` (Rust).
+ * Every terminal branch in the capture loop bumps exactly one counter, so
+ * `stored_total + skipped_total` accounts for every evaluated frame —
+ * unlike the legacy `frames_captured` / `frames_dropped` numbers which
+ * only counted successful stores and dedup drops.
+ */
+export interface CapturePipelineBreakdown {
+    evaluated: number;
+    stored_ocr_path: number;
+    stored_visual_path: number;
+    stored_url_only: number;
+    stored_total: number;
+    skipped_blocklist: number;
+    /** FNDR was frontmost; the app never captures its own window. */
+    skipped_self_app: number;
+    skipped_surface_policy: number;
+    skipped_perceptual_dup: number;
+    skipped_semantic_dup: number;
+    skipped_ocr_failed: number;
+    skipped_low_signal_text: number;
+    skipped_noise: number;
+    skipped_grounding: number;
+    skipped_stacked_extraction: number;
+    skipped_visual_small: number;
+    skipped_visual_novelty: number;
+    skipped_visual_compose_failed: number;
+    skipped_screen_capture_failed: number;
+    skipped_total: number;
+    last_skip_reason: string | null;
+    last_skip_app: string | null;
+    last_skip_timestamp_ms: number | null;
+}
+
 export interface CaptureStatus {
     is_capturing: boolean;
     is_paused: boolean;
@@ -207,6 +243,7 @@ export interface CaptureStatus {
     embedding_detail: string;
     embedding_model_name: string;
     embedding_dimension: number;
+    pipeline: CapturePipelineBreakdown;
 }
 
 export interface McpServerStatus {
@@ -973,6 +1010,61 @@ export interface RuntimeRecentSnapshot {
     meta: string | null;
 }
 
+export interface SystemMetricsSnapshot {
+    generated_at_ms: number;
+    sample_interval_ms: number;
+    process_cpu: {
+        cpu_percent: number;
+        user_time_ms: number;
+        system_time_ms: number;
+        threads: number;
+    };
+    process_memory: {
+        rss_bytes: number;
+        virtual_bytes: number;
+        phys_footprint_bytes: number;
+        lifetime_max_phys_footprint_bytes: number;
+    };
+    process_io: {
+        disk_bytes_read: number;
+        disk_bytes_written: number;
+        disk_read_rate_bps: number;
+        disk_write_rate_bps: number;
+    };
+    process_energy: {
+        idle_wakeups: number;
+        interrupt_wakeups: number;
+        billed_system_time_ns: number;
+        label: string;
+    };
+    host_cpu: {
+        cpu_percent_total: number;
+        cpu_percent_per_core: number[];
+    };
+    host_memory: {
+        page_size_bytes: number;
+        free_bytes: number;
+        active_bytes: number;
+        inactive_bytes: number;
+        wired_bytes: number;
+        compressed_bytes: number;
+        total_bytes: number;
+        pressure_label: string;
+    };
+    gpu: {
+        device_utilization_percent: number | null;
+        renderer_utilization_percent: number | null;
+        in_use_system_memory_bytes: number | null;
+        recovery_count: number | null;
+    };
+    model_memory: Array<{
+        id: string;
+        kind: string;
+        estimated_bytes: number;
+        loaded: boolean;
+    }>;
+}
+
 export interface RuntimeMetricsSnapshot {
     generated_at_ms: number;
     process_rss_bytes: number | null;
@@ -998,6 +1090,7 @@ export interface RuntimeMetricsSnapshot {
     aggregates: Record<string, RuntimeAggregateSnapshot>;
     counters: Record<string, number>;
     recent: RuntimeRecentSnapshot[];
+    system: SystemMetricsSnapshot;
 }
 
 export async function getRuntimeMetrics(): Promise<RuntimeMetricsSnapshot> {

@@ -6,7 +6,7 @@
 
 use chrono::Timelike;
 use fndr_lib::{
-    capture, config::Config, ipc, memory::graph::GraphStore, storage::Store, AppState,
+    capture, config::Config, ipc, memory::graph::GraphStore, models, storage::Store, AppState,
     ProactiveSuggestion,
 };
 use std::sync::Arc;
@@ -120,9 +120,11 @@ fn main() {
                 }
             }
 
-            tracing::info!("AI runtime will load lazily when FNDR first needs it");
-
-            // Create app state
+            // Create app state with no engines yet — we kick off the eager
+            // load below as a background task so the Tauri setup callback
+            // is not blocked on Metal initialization. The capture loop
+            // also has its own lazy fallback via `ensure_inference_engine`,
+            // so even if this restore fails the user is never stuck.
             let state = Arc::new(AppState::new(
                 data_dir.clone(),
                 config,
@@ -133,6 +135,45 @@ fn main() {
                 None,
             ));
             state.set_app_handle(app.handle().clone());
+
+            // Restore last-session model: if onboarding is complete and the
+            // preferred GGUF is on disk, load it eagerly. This means the
+            // first capture frame after relaunch already has an LLM ready
+            // for structured-memory extraction — without it the user pays
+            // first-touch latency and the grounding gate quietly drops
+            // every frame between launch and the first lazy load.
+            {
+                let restore_state = state.clone();
+                let restore_data_dir = data_dir.clone();
+                tauri::async_runtime::spawn(async move {
+                    let config = restore_state.config.read().clone();
+                    let onboarding_complete = restore_state.preferred_model_id().is_some();
+                    let preferred =
+                        models::inference_preferred_model_id(restore_data_dir.as_path(), &config);
+                    let resolved =
+                        models::resolve_model(preferred.as_deref(), Some(restore_data_dir.as_path()));
+                    if !onboarding_complete {
+                        tracing::info!(
+                            "Skipping AI eager restore: no preferred model recorded in onboarding"
+                        );
+                        return;
+                    }
+                    let Some(_) = resolved else {
+                        tracing::info!(
+                            "Skipping AI eager restore: preferred model {:?} is not on disk yet",
+                            preferred
+                        );
+                        return;
+                    };
+                    tracing::info!(
+                        "Restoring last-session AI engine ({:?}) eagerly so capture starts hot",
+                        preferred
+                    );
+                    let loaded =
+                        fndr_lib::load_ai_engines(restore_data_dir.as_path(), &config).await;
+                    restore_state.replace_ai_engines(loaded.inference, loaded.vlm);
+                });
+            }
 
             // Start capture pipeline
             let capture_state = state.clone();
@@ -191,6 +232,16 @@ fn main() {
             }
 
             let runtime_state = state.clone();
+
+            // Background: 1 Hz Activity-Monitor-grade system metrics sampler.
+            // Surfaces CPU%, RAM, threads, energy, disk I/O, GPU%, and the
+            // per-model RAM breakdown to the Engine Inspector.
+            {
+                let metrics_state = state.clone();
+                fndr_lib::telemetry::system_metrics::spawn_sampler(move || {
+                    fndr_lib::telemetry::system_metrics::model_memory_entries(&metrics_state)
+                });
+            }
 
             // Background task: Track downloads folder
             let uploads_state = state.clone();
@@ -618,6 +669,7 @@ fn main() {
             ipc::onboarding::refresh_ai_models,
             ipc::onboarding::check_model_exists,
             ipc::onboarding::delete_ai_model,
+            ipc::onboarding::set_preferred_inference_model,
             ipc::commands::import_meta_glasses_photo,
         ])
         .run(tauri::generate_context!())

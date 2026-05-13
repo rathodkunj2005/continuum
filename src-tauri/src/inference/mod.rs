@@ -58,7 +58,7 @@ pub fn get_or_init_backend() -> Result<Arc<LlamaBackend>, Box<dyn std::error::Er
 }
 pub use image_semantics::{
     build_import_raw_evidence, compose_import_memory_context, extract_image_semantics,
-    insight_vision_extraction_failed, should_include_import_ocr, ImageImportSource,
+    insight_from_ocr_only, insight_from_structured, should_include_import_ocr, ImageImportSource,
     ImageSemanticInsight, ImportMemoryText, ImportOcrStats,
 };
 pub use vlm::VlmEngine;
@@ -317,6 +317,93 @@ fn validate_memory_card_draft(mut draft: MemoryCardDraft) -> Option<MemoryCardDr
 /// Brace-balanced scan for the first complete top-level JSON object.
 /// Handles strings with escaped quotes and prefixed/suffixed commentary
 /// (e.g. markdown code fences) that the naive first-`{`/last-`}` approach mishandled.
+/// Walk the LLM's JSON object and coerce known-string-array fields into actual
+/// arrays of strings. The 1B Llama variant routinely emits
+/// `"entities": [{"name": "FNDR"}]` or `"tags": [{"label": "memory"}]`
+/// instead of `"entities": ["FNDR"]`, which makes `serde_json::from_str`
+/// fail with `invalid type: map, expected a string` and kills the frame at
+/// the grounding gate. We tolerate this by post-processing the JSON before
+/// it ever touches serde — strings stay strings, objects collapse to the
+/// first reasonable string field (`name`, `value`, `label`, `text`), and
+/// anything else becomes its `to_string()`.
+///
+/// Fields handled mirror `StructuredMemoryExtraction`'s `Vec<String>` slots.
+/// If the input is not even valid JSON we return it unchanged so the
+/// downstream serde error keeps the original diagnostic.
+pub fn normalize_structured_memory_json(raw: &str) -> String {
+    const ARRAY_FIELDS: &[&str] = &[
+        "files_touched",
+        "symbols_changed",
+        "tags",
+        "entities",
+        "decisions",
+        "errors",
+        "next_steps",
+        "commands",
+        "blockers",
+        "todos",
+        "open_questions",
+        "results",
+        "search_aliases",
+    ];
+    const COLLAPSE_KEYS: &[&str] = &["name", "value", "label", "text", "title", "id"];
+
+    let mut value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(_) => return raw.to_string(),
+    };
+    if let Some(obj) = value.as_object_mut() {
+        for field in ARRAY_FIELDS {
+            let Some(field_val) = obj.get_mut(*field) else {
+                continue;
+            };
+            let Some(arr) = field_val.as_array_mut() else {
+                // Some models emit a single string for a list field;
+                // wrap it so the schema's `Vec<String>` accepts it.
+                if let Some(s) = field_val.as_str() {
+                    let owned = s.to_string();
+                    *field_val = serde_json::Value::Array(vec![serde_json::Value::String(owned)]);
+                }
+                continue;
+            };
+            for item in arr.iter_mut() {
+                if item.is_string() {
+                    continue;
+                }
+                let replacement = match &*item {
+                    serde_json::Value::Object(map) => {
+                        let mut picked: Option<String> = None;
+                        for key in COLLAPSE_KEYS {
+                            if let Some(v) = map.get(*key) {
+                                if let Some(s) = v.as_str() {
+                                    if !s.trim().is_empty() {
+                                        picked = Some(s.to_string());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        picked.unwrap_or_else(|| {
+                            // Fall back to a compact rendering so we never
+                            // silently drop information the model bothered
+                            // to extract.
+                            serde_json::to_string(map).unwrap_or_default()
+                        })
+                    }
+                    serde_json::Value::Number(n) => n.to_string(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    serde_json::Value::Null => String::new(),
+                    other => serde_json::to_string(other).unwrap_or_default(),
+                };
+                *item = serde_json::Value::String(replacement);
+            }
+            // Drop entries that ended up empty after coercion.
+            arr.retain(|v| v.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false));
+        }
+    }
+    serde_json::to_string(&value).unwrap_or_else(|_| raw.to_string())
+}
+
 fn extract_json_object(raw: &str) -> Option<String> {
     let bytes = raw.as_bytes();
     let mut i = 0;
@@ -820,6 +907,8 @@ Rules:\n\
             - Build one rich memory_context narrative for AI-agent continuation.\n\
             - memory_context must be specific, evidence-aware, and useful later.\n\
             - If uncertain, lower confidence instead of inventing details.\n\
+            - Every entry in entities, tags, files_touched, symbols_changed, decisions, errors, next_steps, commands, blockers, todos, open_questions, results, and search_aliases MUST be a single STRING — never an object, never nested, never null.\n\
+            - If you would emit `{{\"name\":\"...\"}}` for an entity, emit just `\"...\"` instead.\n\
             \n\
             SCHEMA:\n\
             {{\n\
@@ -861,19 +950,22 @@ Rules:\n\
         let raw = self.complete(&prompt, 400).await;
 
         let candidate = extract_json_object(&raw)?;
-        match serde_json::from_str::<StructuredMemoryExtraction>(&candidate) {
+        let normalized = normalize_structured_memory_json(&candidate);
+        match serde_json::from_str::<StructuredMemoryExtraction>(&normalized) {
             Ok(draft) => Some(draft),
             Err(e) => {
                 tracing::warn!("Failed to parse structured memory JSON: {}", e);
                 // Try repair once
                 let repair_msg = format!(
-                    "Fix this invalid JSON to match the strict schema. Output ONLY JSON.\nINVALID JSON:\n{}", 
+                    "Fix this invalid JSON to match the strict schema. Output ONLY JSON. Arrays must contain only strings, never objects.\nINVALID JSON:\n{}", 
                     candidate
                 );
                 if let Ok(repair_prompt) = self.build_prompt(&system_msg, &repair_msg) {
                     let repaired_raw = self.complete(&repair_prompt, 400).await;
                     if let Some(repaired_candidate) = extract_json_object(&repaired_raw) {
-                        serde_json::from_str::<StructuredMemoryExtraction>(&repaired_candidate).ok()
+                        let normalized_repair =
+                            normalize_structured_memory_json(&repaired_candidate);
+                        serde_json::from_str::<StructuredMemoryExtraction>(&normalized_repair).ok()
                     } else {
                         None
                     }
@@ -1358,5 +1450,92 @@ mod tests {
     #[test]
     fn extract_json_returns_none_on_unbalanced() {
         assert!(extract_json_object("just { text with no close").is_none());
+    }
+
+    #[test]
+    fn normalize_collapses_entity_objects_to_strings() {
+        let raw = r#"{
+            "entities": [
+                {"name": "FNDR"},
+                {"label": "Capture Pipeline"},
+                "Cursor",
+                {"foo": "bar"}
+            ],
+            "tags": "single-tag",
+            "files_touched": [],
+            "decisions": [{"text": "Use OCR fallback"}]
+        }"#;
+        let out = normalize_structured_memory_json(raw);
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid json");
+
+        let entities = parsed["entities"].as_array().expect("entities array");
+        let entity_strs: Vec<&str> = entities.iter().filter_map(|v| v.as_str()).collect();
+        assert!(entity_strs.contains(&"FNDR"));
+        assert!(entity_strs.contains(&"Capture Pipeline"));
+        assert!(entity_strs.contains(&"Cursor"));
+        // The `{"foo": "bar"}` entity has no recognized text key, so it
+        // gets serialized rather than dropped — we never silently lose
+        // information the model bothered to emit.
+        assert_eq!(entity_strs.len(), 4);
+
+        // Single-string-for-array field must be wrapped, not rejected.
+        assert_eq!(
+            parsed["tags"].as_array().expect("tags array").len(),
+            1,
+            "single string should be wrapped"
+        );
+        assert_eq!(parsed["tags"][0].as_str(), Some("single-tag"));
+
+        assert_eq!(
+            parsed["decisions"][0].as_str(),
+            Some("Use OCR fallback"),
+            "object with `text` key should collapse"
+        );
+    }
+
+    #[test]
+    fn normalize_preserves_already_valid_json() {
+        let raw = r#"{"entities":["A","B"],"tags":["x"]}"#;
+        let out = normalize_structured_memory_json(raw);
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid json");
+        assert_eq!(parsed["entities"][0].as_str(), Some("A"));
+        assert_eq!(parsed["entities"][1].as_str(), Some("B"));
+        assert_eq!(parsed["tags"][0].as_str(), Some("x"));
+    }
+
+    #[test]
+    fn normalize_lets_serde_succeed_on_misshapen_input() {
+        // Real-world failure mode the user hit in logs:
+        //   "Failed to parse structured memory JSON: invalid type: map, expected a string"
+        let raw = r#"{
+            "memory_context": "Reviewing capture loop",
+            "entities": [{"name": "Cursor"}, {"name": "FNDR"}],
+            "tags": [{"label": "engineering"}],
+            "confidence": 0.7
+        }"#;
+        let normalized = normalize_structured_memory_json(raw);
+        let parsed: StructuredMemoryExtraction =
+            serde_json::from_str(&normalized).expect("strict serde must accept normalized JSON");
+        assert_eq!(
+            parsed.entities,
+            vec!["Cursor".to_string(), "FNDR".to_string()]
+        );
+        assert_eq!(parsed.tags, vec!["engineering".to_string()]);
+        assert!((parsed.confidence - 0.7).abs() < 1e-6);
+        assert_eq!(parsed.memory_context, "Reviewing capture loop");
+    }
+
+    #[test]
+    fn normalize_drops_empty_entries_after_coercion() {
+        let raw = r#"{"entities": [null, "", "  "]}"#;
+        let out = normalize_structured_memory_json(raw);
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid json");
+        assert_eq!(parsed["entities"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn normalize_returns_input_unchanged_for_invalid_json() {
+        let raw = "not json at all";
+        assert_eq!(normalize_structured_memory_json(raw), raw);
     }
 }

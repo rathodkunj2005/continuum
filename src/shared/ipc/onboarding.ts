@@ -150,3 +150,16 @@ export async function refreshAiModels(): Promise<AiRuntimeStatus> {
 export async function deleteAiModel(filename: string): Promise<void> {
     return invoke("delete_ai_model", { filename });
 }
+
+/**
+ * Persist the user's preferred local LLM model and (if the GGUF is on disk)
+ * swap the live engine immediately. Returns `true` when the engine was
+ * reloaded, `false` when the choice was saved but the file is not on disk
+ * yet (the next download or app restart will pick it up).
+ *
+ * The VLM tier (`vlm_model_size` in config.toml) continues to gate Qwen3-VL
+ * 1B vs 4B independently of this choice.
+ */
+export async function setPreferredInferenceModel(modelId: string): Promise<boolean> {
+    return invoke<boolean>("set_preferred_inference_model", { modelId });
+}

@@ -62,6 +62,11 @@ impl Blocklist {
     }
 
     /// Check if the frontmost app belongs to FNDR itself and should never be captured.
+    ///
+    /// This is **not** the user blocklist — it is a hard privacy rule so the
+    /// app does not OCR/embed its own UI. Pipeline stats use
+    /// [`crate::SkipReason::SelfApp`] (not `Blocklist`) so the Capture Status
+    /// UI does not read this as "Finder" or a mistaken privacy block.
     pub fn is_internal_app(app_name: &str, bundle_id: Option<&str>) -> bool {
         let normalized_name = app_name.trim().to_lowercase();
         if normalized_name.starts_with("fndr") && !normalized_name.contains("meeting") {

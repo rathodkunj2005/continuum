@@ -254,16 +254,75 @@ async fn compose_visual_capture_record(
         now.timestamp_millis()
     );
 
-    // Run the same VLM path Meta-glasses imports use. Visual narrative is
-    // its sole signal; OCR is skipped (the gate fired *because* OCR was
-    // thin), so we don't pass an OCR appendix.
-    let insight = extract_image_semantics(
-        image_data,
-        &synthetic_filename,
-        ImageImportSource::ScreenCapture,
-        state.app_data_dir.clone(),
-    )
-    .await?;
+    // System-pressure throttle: under high memory or CPU pressure, skip
+    // the VLM and fall back to the OCR-grounded insight built from the
+    // app/window context the capture loop already has. This is how we
+    // stay "light and even" — when Metal is hot we don't pile on.
+    let (skip_vlm, skip_reason) =
+        crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
+
+    // Helper: try the LLM-on-OCR fallback when Llama is loaded. Returns
+    // None if no engine is available or the structured extraction returns
+    // nothing useful. Stays inside the existing async context (already
+    // serialized by the model pipeline lock the caller holds).
+    let llm_engine = state.inference_engine();
+    let llm_fallback_context = format!(
+        "App: {app_name}\nWindow: {window_title}\n(visual-only frame; OCR was below the storage gate)"
+    );
+    let try_llm_fallback = || async {
+        let engine = llm_engine.clone()?;
+        engine
+            .extract_structured_memory(app_name, window_title, &llm_fallback_context)
+            .await
+            .map(|s| crate::inference::insight_from_structured(&s))
+    };
+
+    let insight = if skip_vlm {
+        tracing::info!(
+            app = %app_name,
+            "compose_visual_capture_record: skipping VLM under system pressure ({skip_reason}); trying LLM-on-OCR fallback"
+        );
+        if let Some(i) = try_llm_fallback().await {
+            i
+        } else {
+            crate::inference::insight_from_ocr_only(
+                &synthetic_filename,
+                Some(app_name),
+                Some(window_title),
+                "",
+            )
+        }
+    } else {
+        // Run the same VLM path Meta-glasses imports use. Visual narrative
+        // is its sole signal; OCR is skipped (the gate fired *because* OCR
+        // was thin), so we don't pass an OCR appendix.
+        match extract_image_semantics(
+            image_data,
+            &synthetic_filename,
+            ImageImportSource::ScreenCapture,
+            state.app_data_dir.clone(),
+        )
+        .await
+        {
+            Ok(i) => i,
+            Err(e) => {
+                tracing::warn!(
+                    app = %app_name,
+                    "compose_visual_capture_record: VLM failed ({e}); trying LLM-on-OCR fallback"
+                );
+                if let Some(i) = try_llm_fallback().await {
+                    i
+                } else {
+                    crate::inference::insight_from_ocr_only(
+                        &synthetic_filename,
+                        Some(app_name),
+                        Some(window_title),
+                        "",
+                    )
+                }
+            }
+        }
+    };
 
     let composed = compose_import_memory_context(
         &synthetic_filename,
@@ -428,6 +487,25 @@ fn sanitize_visual_filename_token(value: &str) -> String {
     }
 }
 
+pub(crate) fn capture_context_skip_reason(
+    app_name: &str,
+    bundle_id: Option<&str>,
+    window_title: &str,
+    url: Option<&str>,
+    blocklist: &[String],
+) -> Option<crate::SkipReason> {
+    if Blocklist::is_internal_app(app_name, bundle_id) {
+        return Some(crate::SkipReason::SelfApp);
+    }
+    if Blocklist::is_blocked(app_name, blocklist) {
+        return Some(crate::SkipReason::Blocklist);
+    }
+    if Blocklist::is_context_blocked(url, Some(window_title), blocklist) {
+        return Some(crate::SkipReason::Blocklist);
+    }
+    None
+}
+
 pub(crate) fn should_skip_capture_context(
     app_name: &str,
     bundle_id: Option<&str>,
@@ -435,9 +513,7 @@ pub(crate) fn should_skip_capture_context(
     url: Option<&str>,
     blocklist: &[String],
 ) -> bool {
-    Blocklist::is_internal_app(app_name, bundle_id)
-        || Blocklist::is_blocked(app_name, blocklist)
-        || Blocklist::is_context_blocked(url, Some(window_title), blocklist)
+    capture_context_skip_reason(app_name, bundle_id, window_title, url, blocklist).is_some()
 }
 
 fn extract_ocr_text(app_name: &str, ocr_result: &RecognizedText) -> text_cleanup::HighSignalText {
@@ -1375,6 +1451,10 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         }
         let sleep_duration = Duration::from_secs_f64(1.0 / fps);
 
+        // We're past the "paused" / "deep idle" gates and intend to look at a
+        // frame this tick — count it for the storage-rate denominator.
+        state.capture_stats.record_evaluated();
+
         // Get active application info
         let app_context = macos::get_frontmost_app_info();
         let app_name = app_context.app_name.clone();
@@ -1387,7 +1467,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             tracing::info!("Frontmost browser URL: {}", u);
         }
 
-        if should_skip_capture_context(
+        if let Some(reason) = capture_context_skip_reason(
             &app_name,
             app_context.bundle_id.as_deref(),
             &window_title,
@@ -1395,11 +1475,13 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             &config.blocklist,
         ) {
             tracing::debug!(
-                "Skipping capture for blocklisted context: app='{}' title='{}' url={:?}",
+                "Skipping capture: reason={:?} app='{}' title='{}' url={:?}",
+                reason,
                 app_name,
                 window_title,
                 url
             );
+            state.capture_stats.record_skip(reason, &app_name);
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -1419,6 +1501,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     "stored_or_skipped": "skipped_surface_policy",
                 }),
             );
+            state
+                .capture_stats
+                .record_skip(crate::SkipReason::SurfacePolicy, &app_name);
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -1435,6 +1520,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 config.capture_pipeline.semantic_dedup_window_ms,
             ) && !force_capture
             {
+                state
+                    .capture_stats
+                    .record_skip(crate::SkipReason::SemanticDup, &app_name);
                 tokio::time::sleep(sleep_duration).await;
                 continue;
             }
@@ -1526,6 +1614,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             );
             state.frames_captured.fetch_add(1, Ordering::Relaxed);
             state
+                .capture_stats
+                .record_store(crate::StoreOutcome::UrlOnly);
+            state
                 .last_capture_time
                 .store(now.timestamp_millis() as u64, Ordering::Relaxed);
             tokio::time::sleep(sleep_duration).await;
@@ -1538,6 +1629,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             Ok(data) => data,
             Err(e) => {
                 tracing::warn!("Screen capture failed: {}", e);
+                state
+                    .capture_stats
+                    .record_skip(crate::SkipReason::ScreenCaptureFailed, &app_name);
                 tokio::time::sleep(sleep_duration).await;
                 continue;
             }
@@ -1548,6 +1642,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
 
         if is_duplicate && !force_capture {
             state.frames_dropped.fetch_add(1, Ordering::Relaxed);
+            state
+                .capture_stats
+                .record_skip(crate::SkipReason::PerceptualDup, &app_name);
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -1580,6 +1677,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         "low_signal": true
                     }),
                 );
+                state
+                    .capture_stats
+                    .record_skip(crate::SkipReason::SurfacePolicy, &app_name);
                 tokio::time::sleep(sleep_duration).await;
                 continue;
             }
@@ -1617,6 +1717,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     Ok(result) => result,
                     Err(e) => {
                         tracing::warn!("OCR failed: {}", e);
+                        state
+                            .capture_stats
+                            .record_skip(crate::SkipReason::OcrFailed, &app_name);
                         tokio::time::sleep(sleep_duration).await;
                         continue;
                     }
@@ -1660,6 +1763,10 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             .await;
             match outcome {
                 VisualAdmissionOutcome::Admitted { image_vec, novelty } => {
+                    // Hold the global model pipeline lock for the whole
+                    // visual-narrative path: VLM + BGE batch + (lookups).
+                    // Same invariant as the OCR pipeline above.
+                    let _visual_guard = state.model_pipeline_lock.lock().await;
                     match compose_visual_capture_record(
                         state.as_ref(),
                         text_embedder.as_ref(),
@@ -1683,6 +1790,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                             );
                             batch.push(record);
                             state.frames_captured.fetch_add(1, Ordering::Relaxed);
+                            state
+                                .capture_stats
+                                .record_store(crate::StoreOutcome::VisualPath);
                             state.last_capture_time.store(
                                 chrono::Utc::now().timestamp_millis() as u64,
                                 Ordering::Relaxed,
@@ -1727,6 +1837,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                                     "reason": err,
                                 }),
                             );
+                            state
+                                .capture_stats
+                                .record_skip(crate::SkipReason::VisualComposeFailed, &app_name);
                         }
                     }
                 }
@@ -1743,6 +1856,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                             "height": height,
                         }),
                     );
+                    state
+                        .capture_stats
+                        .record_skip(crate::SkipReason::VisualSmall, &app_name);
                 }
                 VisualAdmissionOutcome::SkippedNovelty { novelty, threshold } => {
                     emit_capture_quality_signal(
@@ -1757,6 +1873,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                             "visual_admission_threshold": threshold,
                         }),
                     );
+                    state
+                        .capture_stats
+                        .record_skip(crate::SkipReason::VisualNovelty, &app_name);
                 }
                 VisualAdmissionOutcome::Failed(err) => {
                     tracing::debug!("visual-admission: gate failed for {}: {}", app_name, err);
@@ -1771,6 +1890,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                             "reason": err,
                         }),
                     );
+                    state
+                        .capture_stats
+                        .record_skip(crate::SkipReason::VisualComposeFailed, &app_name);
                 }
             }
             tokio::time::sleep(sleep_duration).await;
@@ -1804,6 +1926,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     }
                 }),
             );
+            state
+                .capture_stats
+                .record_skip(crate::SkipReason::LowSignalText, &app_name);
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -1828,6 +1953,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     }
                 }),
             );
+            state
+                .capture_stats
+                .record_skip(crate::SkipReason::Noise, &app_name);
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -1852,6 +1980,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             {
                 tracing::debug!("Semantic dedup: identical content, skipping pipeline");
                 state.frames_dropped.fetch_add(1, Ordering::Relaxed);
+                state
+                    .capture_stats
+                    .record_skip(crate::SkipReason::SemanticDup, &app_name);
                 tokio::time::sleep(sleep_duration).await;
                 continue;
             }
@@ -1876,6 +2007,16 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         let browser_structured_seed = semantic_page.as_ref().and_then(|page| {
             build_structured_from_browser_semantics(&app_name, &window_title, url.as_deref(), page)
         });
+
+        // ── Pause capture, run all heavy model work serialized ────────────────
+        // Acquire the global model pipeline lock for the duration of LLM +
+        // text-embedding + CLIP. This guarantees the Metal/CoreML backend
+        // sees one tenant at a time — the capture loop, glasses_import IPC,
+        // and any other model consumer take turns, which keeps RSS even
+        // and prevents the `mtmd eval chunks: -3` failure mode the user
+        // reported when multiple model engines hit Metal concurrently.
+        let _pipeline_guard = state.model_pipeline_lock.lock().await;
+
         let mut structured_memory = if let Some(engine) = engine.as_ref() {
             engine
                 .extract_structured_memory(&app_name, &window_title, &qwen_cleaned_text)
@@ -1983,7 +2124,23 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         }
         let drop_due_to_stacked_issues =
             stacked_critical_extraction_issues >= 2 && extraction_grounding_confidence < 0.50;
-        if extraction_grounding_confidence <= 0.10 || drop_due_to_stacked_issues {
+        // Degraded-but-store: if structured extraction failed (parse error,
+        // 1B model misshape, missing engine) but the OCR itself is strong
+        // — long, decent confidence, and not noisy — we'd rather emit a
+        // text-grounded memory tagged as `extraction_parse_failed` than
+        // drop it entirely. Without this, every "JSON wasn't a valid
+        // StructuredMemoryExtraction" log silently kills an otherwise good
+        // frame at the grounding gate. The strict gate still applies to
+        // weak OCR so we don't pollute the vault with empty rows.
+        let ocr_grounded_enough = structured_memory.is_none()
+            && text.len() >= 220
+            && observed_confidence >= 0.45
+            && noise_score <= config.capture_pipeline.noise_skip_threshold
+            && capture_quality.avg_line_score >= 0.30
+            && !drop_due_to_stacked_issues;
+        if extraction_grounding_confidence <= 0.10 && !ocr_grounded_enough
+            || drop_due_to_stacked_issues
+        {
             emit_capture_quality_signal(
                 state.as_ref(),
                 json!({
@@ -2016,9 +2173,23 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     }
                 }),
             );
+            state.capture_stats.record_skip(
+                if drop_due_to_stacked_issues {
+                    crate::SkipReason::StackedExtraction
+                } else {
+                    crate::SkipReason::Grounding
+                },
+                &app_name,
+            );
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
+        // Reaching here with `ocr_grounded_enough` means we're using the
+        // OCR text + window/app context as the durable signal instead of
+        // a structured LLM extraction. Downstream code branches on
+        // `structured_memory.is_none()` and already has fallbacks for
+        // snippet/internal_context, so we just tag the path for telemetry.
+        let extraction_parse_failed_degraded = structured_memory.is_none() && ocr_grounded_enough;
 
         // OCR-narrative branch: structured extraction is the durable
         // signal. The visual-narrative branch (low-OCR frames) ran
@@ -2046,13 +2217,21 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             )
         } else {
             let fallback = text_cleanup::concise_fallback_snippet(&app_name, &window_title, &text);
+            // Tag degraded-path stores so retrieval / debug surfaces can
+            // tell apart "no LLM available, OCR-only summary" from a
+            // generic fallback (no engine, no OCR worth using).
+            let source_label = if extraction_parse_failed_degraded {
+                "extraction_parse_failed"
+            } else {
+                "fallback"
+            };
             if fallback.is_empty() {
                 (
                     text.chars().take(140).collect::<String>(),
-                    "fallback".to_string(),
+                    source_label.to_string(),
                 )
             } else {
-                (fallback, "fallback".to_string())
+                (fallback, source_label.to_string())
             }
         };
 
@@ -2262,6 +2441,11 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 }
             }
         };
+
+        // Release the model pipeline lock now that LLM + text-embed + CLIP
+        // have all completed for this frame. Downstream Focus Mode / storage
+        // / graph work doesn't touch the heavy model surfaces.
+        drop(_pipeline_guard);
 
         // ── Focus Mode drift detection ────────────────────────────────────────
         // Mirrors CC's context-similarity approach: embed the focus task once,
@@ -2645,6 +2829,15 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         );
 
         state.frames_captured.fetch_add(1, Ordering::Relaxed);
+        state
+            .capture_stats
+            .record_store(crate::StoreOutcome::OcrPath);
+        if extraction_parse_failed_degraded {
+            tracing::debug!(
+                app = %app_name,
+                "stored OCR-grounded memory via degraded path (LLM structured extraction unavailable)"
+            );
+        }
         state
             .last_capture_time
             .store(now.timestamp_millis() as u64, Ordering::Relaxed);
@@ -4265,6 +4458,31 @@ mod tests {
             Some("https://docs.example.com/fndr"),
             &blocklist,
         ));
+    }
+
+    #[test]
+    fn self_app_skip_is_distinct_from_user_blocklist() {
+        let blocklist: Vec<String> = Vec::new();
+        assert_eq!(
+            capture_context_skip_reason(
+                "FNDR",
+                Some("com.fndr.desktop"),
+                "Settings",
+                None,
+                &blocklist,
+            ),
+            Some(crate::SkipReason::SelfApp)
+        );
+        assert_eq!(
+            capture_context_skip_reason(
+                "Finder",
+                Some("com.apple.finder"),
+                "Desktop",
+                None,
+                &blocklist,
+            ),
+            None
+        );
     }
 
     #[test]

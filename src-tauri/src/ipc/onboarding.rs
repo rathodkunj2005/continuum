@@ -153,6 +153,69 @@ pub async fn save_onboarding_state(app: AppHandle, state: OnboardingState) -> Re
     std::fs::write(&path, json).map_err(|e| e.to_string())
 }
 
+/// Persist the user's preferred local LLM/VLM choice and (when the model
+/// is on disk) load it eagerly so the very next capture frame already has
+/// structured-memory extraction available.
+///
+/// Persistence target: `onboarding.json#model_id`. We deliberately reuse
+/// the existing field instead of introducing a second source of truth in
+/// `config.toml` — `models::inference_preferred_model_id` already reads
+/// from onboarding and maps tier rules (`config.vlm_model_size`) over it.
+///
+/// `vlm_model_size` continues to gate VLM tier (1B vs 4B). LLM GGUF
+/// selection uses this persisted id directly.
+#[tauri::command]
+pub async fn set_preferred_inference_model(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    model_id: String,
+) -> Result<bool, String> {
+    let trimmed = model_id.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("model_id must not be empty".to_string());
+    }
+    if models::model_by_id(&trimmed).is_none() {
+        return Err(format!("Unknown model id: {trimmed}"));
+    }
+
+    let path = onboarding_path(&app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut current = if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<OnboardingState>(&raw).ok())
+            .unwrap_or_default()
+    } else {
+        OnboardingState::default()
+    };
+    current.model_id = Some(trimmed.clone());
+    let normalized = normalize_onboarding_state(current);
+    let json = serde_json::to_string_pretty(&normalized).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+
+    // If the GGUF is on disk, swap the live engine so capture sees the
+    // new model immediately. Otherwise just persist the choice — the
+    // next download or restart will pick it up via
+    // `models::inference_preferred_model_id`.
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let config = state.inner().config.read().clone();
+    if models::resolve_model(Some(trimmed.as_str()), Some(app_data_dir.as_path())).is_some() {
+        let loaded = load_ai_engines(app_data_dir.as_path(), &config).await;
+        state
+            .inner()
+            .replace_ai_engines(loaded.inference, loaded.vlm);
+        Ok(true)
+    } else {
+        tracing::info!(
+            "Preferred model {} saved but file not on disk yet — engine not reloaded",
+            trimmed
+        );
+        Ok(false)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Biometrics (Touch ID via local-authentication-rs / osascript fallback)
 // ---------------------------------------------------------------------------

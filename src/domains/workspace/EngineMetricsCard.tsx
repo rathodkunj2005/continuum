@@ -1,7 +1,30 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { getRuntimeMetrics, type RuntimeMetricsSnapshot } from "@/shared/ipc/tauri";
 import { usePolling } from "@/shared/hooks/usePolling";
 import "./PipelineInspectorPanel.css";
+
+const BYTES_PER_MIB = 1024 * 1024;
+const BYTES_PER_GIB = 1024 * 1024 * 1024;
+
+function formatBytes(bytes: number | null | undefined): string {
+    if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "—";
+    if (bytes >= BYTES_PER_GIB) return `${(bytes / BYTES_PER_GIB).toFixed(2)} GiB`;
+    if (bytes >= BYTES_PER_MIB) return `${(bytes / BYTES_PER_MIB).toFixed(0)} MiB`;
+    return `${(bytes / 1024).toFixed(0)} KiB`;
+}
+
+function formatRate(bps: number): string {
+    if (bps <= 0) return "0 B/s";
+    if (bps >= BYTES_PER_MIB) return `${(bps / BYTES_PER_MIB).toFixed(2)} MiB/s`;
+    if (bps >= 1024) return `${(bps / 1024).toFixed(1)} KiB/s`;
+    return `${bps.toFixed(0)} B/s`;
+}
+
+function pressureClass(label: string): string {
+    if (label === "high") return "pipeline-pressure-high";
+    if (label === "moderate") return "pipeline-pressure-moderate";
+    return "pipeline-pressure-low";
+}
 
 interface EngineMetricsCardProps {
     /** When false, polling is disabled. */
@@ -33,12 +56,18 @@ export function EngineMetricsCard({ enabled, title }: EngineMetricsCardProps) {
 
     usePolling(loadRuntimeMetrics, 3000, enabled);
 
+    const system = runtimeMetrics?.system;
+    const modelMemory = useMemo(() => {
+        return (system?.model_memory ?? []).slice().sort((a, b) => b.estimated_bytes - a.estimated_bytes);
+    }, [system?.model_memory]);
+
     return (
         <section className="pipeline-panel-card pipeline-engine-metrics">
             {title ? <h3>{title}</h3> : <h3>Engine metrics</h3>}
             <p className="pipeline-muted">
-                Latency (EWMA), hybrid search branches, capture flush, ONNX, CLIP, LLM/VLM, graph commits.
-                No query text stored. RSS is this FNDR process only (macOS).
+                Activity-Monitor-grade: process + host CPU/RAM/threads, GPU, disk I/O, energy, and the
+                per-model RAM breakdown. Latency aggregates capture flush, ONNX, CLIP, LLM/VLM,
+                hybrid search, and graph commits. No query text stored.
             </p>
             {runtimeMetricsError && <div className="pipeline-error">{runtimeMetricsError}</div>}
             {runtimeMetrics && (
@@ -67,6 +96,117 @@ export function EngineMetricsCard({ enabled, title }: EngineMetricsCardProps) {
                                 : "not loaded"}
                         </strong>
                     </div>
+
+                    {system && (
+                        <>
+                            <h4>FNDR process</h4>
+                            <div className="pipeline-engine-kv pipeline-engine-kv--metrics">
+                                <span>CPU</span>
+                                <strong>
+                                    {system.process_cpu.cpu_percent.toFixed(1)}% ·{" "}
+                                    {system.process_cpu.threads} threads
+                                </strong>
+                                <span>Memory (resident)</span>
+                                <strong>{formatBytes(system.process_memory.rss_bytes)}</strong>
+                                <span>Phys. footprint</span>
+                                <strong>
+                                    {formatBytes(system.process_memory.phys_footprint_bytes)} · peak{" "}
+                                    {formatBytes(system.process_memory.lifetime_max_phys_footprint_bytes)}
+                                </strong>
+                                <span>Disk I/O (rate)</span>
+                                <strong>
+                                    ↓ {formatRate(system.process_io.disk_read_rate_bps)} · ↑{" "}
+                                    {formatRate(system.process_io.disk_write_rate_bps)}
+                                </strong>
+                                <span>Energy</span>
+                                <strong className={pressureClass(system.process_energy.label)}>
+                                    {system.process_energy.label} · {system.process_energy.idle_wakeups} idle
+                                    wakeups
+                                </strong>
+                            </div>
+
+                            <h4>Host system</h4>
+                            <div className="pipeline-engine-kv pipeline-engine-kv--metrics">
+                                <span>CPU (all cores)</span>
+                                <strong>{system.host_cpu.cpu_percent_total.toFixed(1)}%</strong>
+                                <span>Memory pressure</span>
+                                <strong className={pressureClass(system.host_memory.pressure_label)}>
+                                    {system.host_memory.pressure_label} · {formatBytes(system.host_memory.free_bytes)}{" "}
+                                    free
+                                </strong>
+                                <span>Memory breakdown</span>
+                                <strong className="pipeline-memory-breakdown">
+                                    wired {formatBytes(system.host_memory.wired_bytes)} · active{" "}
+                                    {formatBytes(system.host_memory.active_bytes)} · inactive{" "}
+                                    {formatBytes(system.host_memory.inactive_bytes)} · compressed{" "}
+                                    {formatBytes(system.host_memory.compressed_bytes)}
+                                </strong>
+                            </div>
+
+                            {system.host_cpu.cpu_percent_per_core.length > 0 && (
+                                <div className="pipeline-cpu-cores" aria-label="Per-core CPU usage">
+                                    {system.host_cpu.cpu_percent_per_core.map((pct, idx) => {
+                                        const clamped = Math.max(0, Math.min(100, pct));
+                                        return (
+                                            <div
+                                                className="pipeline-cpu-core"
+                                                key={`core-${idx}`}
+                                                title={`Core ${idx}: ${pct.toFixed(1)}%`}
+                                            >
+                                                <div className="pipeline-cpu-core-bar">
+                                                    <div
+                                                        className="pipeline-cpu-core-fill"
+                                                        style={{ height: `${clamped}%` }}
+                                                    />
+                                                </div>
+                                                <div className="pipeline-cpu-core-label">{idx}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            <h4>GPU</h4>
+                            <div className="pipeline-engine-kv pipeline-engine-kv--metrics">
+                                <span>Device utilization</span>
+                                <strong>
+                                    {system.gpu.device_utilization_percent != null
+                                        ? `${system.gpu.device_utilization_percent.toFixed(0)}%`
+                                        : "—"}
+                                </strong>
+                                <span>Renderer</span>
+                                <strong>
+                                    {system.gpu.renderer_utilization_percent != null
+                                        ? `${system.gpu.renderer_utilization_percent.toFixed(0)}%`
+                                        : "—"}
+                                </strong>
+                                <span>In-use system mem</span>
+                                <strong>{formatBytes(system.gpu.in_use_system_memory_bytes)}</strong>
+                                <span>Recoveries</span>
+                                <strong>{system.gpu.recovery_count ?? "—"}</strong>
+                            </div>
+
+                            <h4>Loaded models</h4>
+                            <ul className="pipeline-model-list">
+                                {modelMemory.length === 0 ? (
+                                    <li className="pipeline-muted">No models tracked.</li>
+                                ) : (
+                                    modelMemory.map((m) => (
+                                        <li key={`${m.kind}-${m.id}`}>
+                                            <span className={`pipeline-model-dot pipeline-model-dot--${m.kind}`} />
+                                            <code>{m.id}</code>
+                                            <span className="pipeline-model-kind">{m.kind}</span>
+                                            <span className="pipeline-model-state">
+                                                {m.loaded ? "loaded" : "idle"}
+                                            </span>
+                                            <strong>{m.loaded ? formatBytes(m.estimated_bytes) : "—"}</strong>
+                                        </li>
+                                    ))
+                                )}
+                            </ul>
+                        </>
+                    )}
+
                     <h4>Latency aggregates</h4>
                     <p className="pipeline-muted" style={{ marginTop: "-6px" }}>
                         Run a few searches and wait for captures to flush to see non-zero rows.

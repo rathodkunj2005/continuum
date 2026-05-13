@@ -265,6 +265,9 @@ pub struct RuntimeMetricsSnapshot {
     pub aggregates: BTreeMap<String, AggregateSnapshot>,
     pub counters: BTreeMap<String, u64>,
     pub recent: Vec<RecentSnapshot>,
+    /// Activity-Monitor-grade system metrics (process + host + GPU + model RAM).
+    /// Sampled at 1 Hz by `telemetry::system_metrics::spawn_sampler`.
+    pub system: crate::telemetry::system_metrics::SystemMetricsSnapshot,
 }
 
 pub fn build_snapshot(
@@ -286,6 +289,7 @@ pub fn build_snapshot(
         aggregates,
         counters,
         recent,
+        system: crate::telemetry::system_metrics::latest_snapshot(),
     }
 }
 
