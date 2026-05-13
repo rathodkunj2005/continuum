@@ -11,7 +11,8 @@ pub fn louvain_partition(sub: &GraphSubgraph) -> HashMap<uuid::Uuid, usize> {
     if nodes.is_empty() {
         return HashMap::new();
     }
-    let mut comm: HashMap<uuid::Uuid, usize> = nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
+    let mut comm: HashMap<uuid::Uuid, usize> =
+        nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
     let _m_total: f32 = sub
         .edges
         .iter()
@@ -74,7 +75,10 @@ pub fn louvain_partition(sub: &GraphSubgraph) -> HashMap<uuid::Uuid, usize> {
 }
 
 /// Human-readable name for community id 0 (anchor cluster).
-pub fn cluster_0_display_name(sub: &GraphSubgraph, partition: &HashMap<uuid::Uuid, usize>) -> String {
+pub fn cluster_0_display_name(
+    sub: &GraphSubgraph,
+    partition: &HashMap<uuid::Uuid, usize>,
+) -> String {
     let hub = partition
         .iter()
         .filter(|(_, c)| **c == 0)

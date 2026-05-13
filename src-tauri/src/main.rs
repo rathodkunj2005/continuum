@@ -6,7 +6,8 @@
 
 use chrono::Timelike;
 use fndr_lib::{
-    capture, config::Config, ipc, memory::graph::GraphStore, storage::Store, AppState, ProactiveSuggestion,
+    capture, config::Config, ipc, memory::graph::GraphStore, storage::Store, AppState,
+    ProactiveSuggestion,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -515,6 +516,7 @@ fn main() {
             ipc::commands::search::search_memory_cards,
             ipc::commands::search::list_memory_cards,
             ipc::commands::search::summarize_search,
+            ipc::commands::search::find_visually_similar_memories,
             ipc::commands::get_fun_greeting,
             ipc::commands::get_status,
             // MCP

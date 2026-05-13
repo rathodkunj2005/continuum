@@ -702,7 +702,11 @@ pub fn rank_salient_spans(cleaned: &str, app_name: &str) -> Vec<SalientSpan> {
             break;
         }
     }
-    spans.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    spans.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     spans
 }
 
@@ -867,16 +871,14 @@ mod tests {
         assert!(!spans.is_empty(), "spans must not be empty");
         let top = &spans[0];
         assert!(
-            top.text
-                .to_lowercase()
-                .contains("durable context")
+            top.text.to_lowercase().contains("durable context")
                 || top.text.to_lowercase().contains("refactoring"),
             "top span should be the meaty sentence, got {:?}",
             top.text
         );
-        let nav_top = spans
-            .iter()
-            .position(|s| s.text.eq_ignore_ascii_case("home") || s.text.eq_ignore_ascii_case("discover"));
+        let nav_top = spans.iter().position(|s| {
+            s.text.eq_ignore_ascii_case("home") || s.text.eq_ignore_ascii_case("discover")
+        });
         if let Some(idx) = nav_top {
             assert!(idx > 0, "nav-style spans must rank below content spans");
         }

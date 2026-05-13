@@ -6,6 +6,8 @@ mod query_processor;
 mod reranker;
 
 pub use hybrid::HybridSearcher;
-pub use memory_cards::{parse_continuation_of, parse_reopen_target, MemoryCard, MemoryCardSynthesizer};
+pub use memory_cards::{
+    parse_continuation_of, parse_reopen_target, MemoryCard, MemoryCardSynthesizer,
+};
 pub use query_processor::{QueryContext, QueryExpansionDebug};
 pub use reranker::{anchor_coverage_score, rerank_results, RerankStats};

@@ -148,8 +148,7 @@ fn prune_tasks_with_deleted_memories(
             }
         }
         let before = task.linked_memory_ids.len();
-        task
-            .linked_memory_ids
+        task.linked_memory_ids
             .retain(|id| valid_memory_ids.contains(id.as_str()));
         if task.linked_memory_ids.len() != before {
             changed = true;
@@ -488,9 +487,7 @@ pub(crate) async fn apply_memory_deletion_to_tasks(
             continue;
         }
         let before = task.linked_memory_ids.len();
-        task
-            .linked_memory_ids
-            .retain(|id| id != deleted_memory_id);
+        task.linked_memory_ids.retain(|id| id != deleted_memory_id);
         if task.linked_memory_ids.len() != before {
             changed = true;
         }

@@ -12,7 +12,8 @@ use crate::inference::{
     ImageSemanticInsight, ImportOcrStats,
 };
 use crate::memory_compaction::{
-    build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings, support_embedding_texts,
+    build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
+    support_embedding_texts,
 };
 use crate::models;
 use crate::ocr::OcrEngine;
@@ -150,11 +151,21 @@ pub async fn import_meta_glasses_photo(
         None
     };
 
-    let composed = compose_import_memory_context(&filename, &insight, ocr_append);
+    let composed = compose_import_memory_context(
+        &filename,
+        &insight,
+        ocr_append,
+        ImageImportSource::MetaGlasses,
+    );
 
     let clean_text = composed.memory_context.clone();
     let snippet = if !insight.summary_short.trim().is_empty() {
-        insight.summary_short.trim().chars().take(200).collect::<String>()
+        insight
+            .summary_short
+            .trim()
+            .chars()
+            .take(200)
+            .collect::<String>()
     } else {
         format!("Imported photo: {filename}")
     };
@@ -166,11 +177,7 @@ pub async fn import_meta_glasses_photo(
 
     let embedder = shared_embedder()?;
     let mut contexts = vec![
-        (
-            APP_LABEL.to_string(),
-            filename.clone(),
-            clean_text.clone(),
-        ),
+        (APP_LABEL.to_string(), filename.clone(), clean_text.clone()),
         (
             APP_LABEL.to_string(),
             filename.clone(),
@@ -248,7 +255,11 @@ pub async fn import_meta_glasses_photo(
         } else {
             "vision_fallback".to_string()
         },
-        noise_score: if include_ocr { 0.0 } else { ocr_confidence * 0.25 },
+        noise_score: if include_ocr {
+            0.0
+        } else {
+            ocr_confidence * 0.25
+        },
         session_key: "import:meta_glasses".to_string(),
         lexical_shadow,
         embedding,

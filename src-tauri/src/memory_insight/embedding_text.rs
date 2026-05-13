@@ -29,10 +29,18 @@ pub fn compose_insight_embedding_text(record: &MemoryRecord) -> String {
     push_segment(&mut segments, &record.memory_context, "context");
 
     // Insight layers (when populated) anchor semantics for cards + retrieval.
-    push_segment(&mut segments, &record.insight_what_happened, "what_happened");
+    push_segment(
+        &mut segments,
+        &record.insight_what_happened,
+        "what_happened",
+    );
     push_segment(&mut segments, &record.insight_why_mattered, "why_mattered");
     push_segment(&mut segments, &record.insight_what_changed, "what_changed");
-    push_segment(&mut segments, &record.insight_context_thread, "context_thread");
+    push_segment(
+        &mut segments,
+        &record.insight_context_thread,
+        "context_thread",
+    );
 
     let entity_blob = record.entities.join(", ");
     push_segment(&mut segments, &entity_blob, "entities");

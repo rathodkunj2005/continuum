@@ -481,10 +481,7 @@ mod tests {
 
         assert!(compacted.text.is_empty());
         // LLM/VLM summaries prefer the normalized snippet as durable clean text.
-        assert_eq!(
-            compacted.clean_text,
-            normalize_memory_text(&source.snippet)
-        );
+        assert_eq!(compacted.clean_text, normalize_memory_text(&source.snippet));
         assert!(compacted.screenshot_path.is_none());
     }
 

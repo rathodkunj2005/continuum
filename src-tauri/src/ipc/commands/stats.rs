@@ -1,8 +1,6 @@
 //! Capture status, MCP/context, voice/capture toggles, stats, daily summary, time/focus.
 
-use super::common::{
-    shared_embedder, strip_internal_fndr_results, truncate_chars,
-};
+use super::common::{shared_embedder, strip_internal_fndr_results, truncate_chars};
 use super::search::{
     cache_is_fresh, card_domain, card_summary, is_low_signal_summary, is_low_signal_title,
     title_from_summary,

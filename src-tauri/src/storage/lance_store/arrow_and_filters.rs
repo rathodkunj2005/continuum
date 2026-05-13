@@ -14,16 +14,17 @@ use lancedb::query::ExecutableQuery;
 use lancedb::Table;
 
 use crate::storage::schema::{
-    ActivityEvent, ContextDelta, ContextPack, DecisionLedgerEntry, EntityAliasRecord, GraphEdge,
-    GraphNode, KnowledgePage, KnowledgePageType, KnowledgeStability, MeetingSegment,
+    ActivityEvent, ContextDelta, ContextPack, DecisionLedgerEntry, EdgeType, EntityAliasRecord,
+    GraphEdge, GraphNode, KnowledgePage, KnowledgePageType, KnowledgeStability, MeetingSegment,
     MeetingSession, MemoryRecord, NodeType, PrivacyClass, ProjectContext, SearchResult, Task,
-    TaskType, EdgeType,
+    TaskType,
 };
 
 use super::schemas::{
     activity_event_schema, context_delta_schema, context_pack_schema, decision_ledger_schema,
     edge_schema, edge_type_literal, entity_alias_schema, escape_sql_literal, knowledge_page_schema,
-    memory_schema, meeting_schema, node_schema, project_context_schema, segment_schema, task_schema,
+    meeting_schema, memory_schema, node_schema, project_context_schema, segment_schema,
+    task_schema,
 };
 use super::{
     IMAGE_EMBED_DIM, KEYWORD_QUERY_MULTIPLIER, MAX_KEYWORD_SCAN, SEARCH_RESULT_COLUMNS,
@@ -34,7 +35,11 @@ use sha2::{Digest, Sha256};
 
 use super::text_kw::{canonicalize_index_url, normalize_keyword_text};
 
-pub(super) fn compute_content_hash(url: Option<&str>, page_title: &str, timestamp_ms: i64) -> String {
+pub(super) fn compute_content_hash(
+    url: Option<&str>,
+    page_title: &str,
+    timestamp_ms: i64,
+) -> String {
     let canonical_url = url.map(canonicalize_index_url).unwrap_or_default();
     let normalized_title = normalize_keyword_text(page_title);
     let five_min_bucket = timestamp_ms.div_euclid(300_000);
@@ -266,10 +271,7 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
         .iter()
         .map(|r| r.insight_spans_json.as_str())
         .collect();
-    let insight_conf: Vec<f32> = records
-        .iter()
-        .map(|r| r.insight_card_confidence)
-        .collect();
+    let insight_conf: Vec<f32> = records.iter().map(|r| r.insight_card_confidence).collect();
 
     RecordBatch::try_new(
         schema,
@@ -1062,7 +1064,9 @@ pub(super) fn task_to_batch(tasks: &[Task]) -> Result<RecordBatch, ArrowError> {
     )
 }
 
-pub(super) fn nodes_to_batch(nodes: &[GraphNode]) -> Result<RecordBatch, Box<dyn std::error::Error>> {
+pub(super) fn nodes_to_batch(
+    nodes: &[GraphNode],
+) -> Result<RecordBatch, Box<dyn std::error::Error>> {
     let mut ids = StringBuilder::new();
     let mut types = StringBuilder::new();
     let mut labels = StringBuilder::new();
@@ -1106,7 +1110,9 @@ pub(super) fn nodes_to_batch(nodes: &[GraphNode]) -> Result<RecordBatch, Box<dyn
     .map_err(|e| e.into())
 }
 
-pub(super) fn edges_to_batch(edges: &[GraphEdge]) -> Result<RecordBatch, Box<dyn std::error::Error>> {
+pub(super) fn edges_to_batch(
+    edges: &[GraphEdge],
+) -> Result<RecordBatch, Box<dyn std::error::Error>> {
     let mut ids = StringBuilder::new();
     let mut sources = StringBuilder::new();
     let mut targets = StringBuilder::new();
@@ -1215,7 +1221,9 @@ pub(super) fn batch_to_edges(batch: &RecordBatch) -> Vec<GraphEdge> {
     edges
 }
 
-pub(super) fn activity_events_to_batch(events: &[ActivityEvent]) -> Result<RecordBatch, ArrowError> {
+pub(super) fn activity_events_to_batch(
+    events: &[ActivityEvent],
+) -> Result<RecordBatch, ArrowError> {
     let schema = Arc::new(activity_event_schema());
     let ids: Vec<&str> = events.iter().map(|event| event.id.as_str()).collect();
     let memory_ids: Vec<&str> = events
@@ -1273,7 +1281,9 @@ pub(super) fn batch_to_activity_events(batch: &RecordBatch) -> Vec<ActivityEvent
     events
 }
 
-pub(super) fn project_contexts_to_batch(contexts: &[ProjectContext]) -> Result<RecordBatch, ArrowError> {
+pub(super) fn project_contexts_to_batch(
+    contexts: &[ProjectContext],
+) -> Result<RecordBatch, ArrowError> {
     let schema = Arc::new(project_context_schema());
     let ids: Vec<&str> = contexts.iter().map(|context| context.id.as_str()).collect();
     let projects: Vec<&str> = contexts
@@ -1320,7 +1330,9 @@ pub(super) fn batch_to_project_contexts(batch: &RecordBatch) -> Vec<ProjectConte
     contexts
 }
 
-pub(super) fn decision_ledger_to_batch(entries: &[DecisionLedgerEntry]) -> Result<RecordBatch, ArrowError> {
+pub(super) fn decision_ledger_to_batch(
+    entries: &[DecisionLedgerEntry],
+) -> Result<RecordBatch, ArrowError> {
     let schema = Arc::new(decision_ledger_schema());
     let ids: Vec<&str> = entries.iter().map(|entry| entry.id.as_str()).collect();
     let projects: Vec<Option<&str>> = entries
@@ -1454,7 +1466,9 @@ pub(super) fn batch_to_context_deltas(batch: &RecordBatch) -> Vec<ContextDelta> 
     deltas
 }
 
-pub(super) fn entity_aliases_to_batch(aliases: &[EntityAliasRecord]) -> Result<RecordBatch, ArrowError> {
+pub(super) fn entity_aliases_to_batch(
+    aliases: &[EntityAliasRecord],
+) -> Result<RecordBatch, ArrowError> {
     let schema = Arc::new(entity_alias_schema());
     let alias_keys: Vec<&str> = aliases
         .iter()
@@ -1511,7 +1525,9 @@ pub(super) fn batch_to_entity_aliases(batch: &RecordBatch) -> Vec<EntityAliasRec
     aliases
 }
 
-pub(super) fn knowledge_page_type_literal(value: &crate::storage::schema::KnowledgePageType) -> &'static str {
+pub(super) fn knowledge_page_type_literal(
+    value: &crate::storage::schema::KnowledgePageType,
+) -> &'static str {
     match value {
         crate::storage::schema::KnowledgePageType::ProjectPage => "project_page",
         crate::storage::schema::KnowledgePageType::TopicPage => "topic_page",
@@ -1524,7 +1540,9 @@ pub(super) fn knowledge_page_type_literal(value: &crate::storage::schema::Knowle
     }
 }
 
-pub(super) fn knowledge_stability_literal(value: &crate::storage::schema::KnowledgeStability) -> &'static str {
+pub(super) fn knowledge_stability_literal(
+    value: &crate::storage::schema::KnowledgeStability,
+) -> &'static str {
     match value {
         crate::storage::schema::KnowledgeStability::Emerging => "emerging",
         crate::storage::schema::KnowledgeStability::Stable => "stable",

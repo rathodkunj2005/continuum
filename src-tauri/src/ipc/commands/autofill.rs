@@ -3,10 +3,10 @@
 use super::common::{
     normalize_autofill_phrase, push_unique_case_insensitive, shared_embedder, truncate_chars,
 };
+use super::search::run_search_query;
 use crate::config::AutofillConfig;
 use crate::embedding::{Embedder, EmbeddingBackend};
 use crate::storage::SearchResult;
-use super::search::run_search_query;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -259,14 +259,12 @@ pub(crate) struct AutofillCandidateDraft {
     pub(crate) context_alignment: f32,
 }
 
-
 fn normalized_tokens(input: &str) -> Vec<String> {
     normalize_autofill_phrase(input)
         .split_whitespace()
         .map(ToString::to_string)
         .collect()
 }
-
 
 pub(crate) fn field_aliases(query: &str) -> Vec<String> {
     const GROUPS: &[&[&str]] = &[
@@ -930,7 +928,10 @@ fn rank_autofill_candidates(
     candidates
 }
 
-pub(crate) fn needs_autofill_confirmation(candidates: &[AutofillCandidate], auto_threshold: f32) -> bool {
+pub(crate) fn needs_autofill_confirmation(
+    candidates: &[AutofillCandidate],
+    auto_threshold: f32,
+) -> bool {
     let Some(top) = candidates.first() else {
         return false;
     };

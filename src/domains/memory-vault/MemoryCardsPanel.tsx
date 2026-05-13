@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
     MemoryCard,
     MemoryDebugInspector,
+    SearchResult,
     deleteMemory,
+    findVisuallySimilarMemories,
     getContextRuntimeStatus,
     getMemoryDebugInspector,
     listMemoryCards,
@@ -308,6 +310,11 @@ export function MemoryCardsPanel({ isVisible, onClose, appNames, onMemoryDeleted
     const [openDebugIds, setOpenDebugIds] = useState<Set<string>>(new Set());
     const [debugById, setDebugById] = useState<Record<string, MemoryDebugInspector>>({});
     const [debugLoadingId, setDebugLoadingId] = useState<string | null>(null);
+    // Image-to-image (CLIP) similar-screens state, keyed by seed card id.
+    const [openSimilarIds, setOpenSimilarIds] = useState<Set<string>>(new Set());
+    const [similarById, setSimilarById] = useState<Record<string, SearchResult[]>>({});
+    const [similarLoadingId, setSimilarLoadingId] = useState<string | null>(null);
+    const [similarErrorById, setSimilarErrorById] = useState<Record<string, string>>({});
     const [expandedBodyIds, setExpandedBodyIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
@@ -564,6 +571,51 @@ export function MemoryCardsPanel({ isVisible, onClose, appNames, onMemoryDeleted
             }
         }
         setOpenDebugIds((previous) => {
+            const next = new Set(previous);
+            next.add(memoryId);
+            return next;
+        });
+    };
+
+    const handleToggleVisuallySimilar = async (memoryId: string) => {
+        const isOpen = openSimilarIds.has(memoryId);
+        if (isOpen) {
+            setOpenSimilarIds((previous) => {
+                const next = new Set(previous);
+                next.delete(memoryId);
+                return next;
+            });
+            return;
+        }
+        if (similarById[memoryId] === undefined) {
+            setSimilarLoadingId(memoryId);
+            try {
+                const hits = await findVisuallySimilarMemories({
+                    seedMemoryId: memoryId,
+                    limit: 6,
+                });
+                setSimilarById((previous) => ({
+                    ...previous,
+                    [memoryId]: hits,
+                }));
+                setSimilarErrorById((previous) => {
+                    const next = { ...previous };
+                    delete next[memoryId];
+                    return next;
+                });
+            } catch (err) {
+                setSimilarErrorById((previous) => ({
+                    ...previous,
+                    [memoryId]:
+                        err instanceof Error
+                            ? err.message
+                            : "Unable to load visually similar memories.",
+                }));
+            } finally {
+                setSimilarLoadingId(null);
+            }
+        }
+        setOpenSimilarIds((previous) => {
             const next = new Set(previous);
             next.add(memoryId);
             return next;
@@ -961,6 +1013,19 @@ export function MemoryCardsPanel({ isVisible, onClose, appNames, onMemoryDeleted
                                             </button>
                                             <button
                                                 className="ui-action-btn memory-delete-btn"
+                                                onClick={(e) => { e.stopPropagation(); void handleToggleVisuallySimilar(card.id); }}
+                                                disabled={similarLoadingId === card.id}
+                                                aria-label="Find visually similar screens"
+                                                title="Find visually similar screens (CLIP image embedding)"
+                                            >
+                                                {similarLoadingId === card.id
+                                                    ? "Loading..."
+                                                    : openSimilarIds.has(card.id)
+                                                        ? "Hide similar"
+                                                        : "Find similar"}
+                                            </button>
+                                            <button
+                                                className="ui-action-btn memory-delete-btn"
                                                 onClick={(e) => { e.stopPropagation(); void handleDeleteCard(card.id); }}
                                                 disabled={deletingId === card.id}
                                                 aria-label="Delete memory card"
@@ -1021,6 +1086,55 @@ export function MemoryCardsPanel({ isVisible, onClose, appNames, onMemoryDeleted
                                                 <pre>
 {JSON.stringify(debugById[card.id] ?? { memory_id: card.id, status: "loading" }, null, 2)}
                                                 </pre>
+                                            </div>
+                                        )}
+                                        {openSimilarIds.has(card.id) && (
+                                            <div className="memory-similar-drawer">
+                                                <div className="memory-similar-heading">
+                                                    Visually similar screens
+                                                </div>
+                                                {similarErrorById[card.id] && (
+                                                    <p
+                                                        className="memory-similar-empty"
+                                                        role="alert"
+                                                    >
+                                                        {similarErrorById[card.id]}
+                                                    </p>
+                                                )}
+                                                {!similarErrorById[card.id]
+                                                    && (similarById[card.id]?.length ?? 0) === 0 && (
+                                                        <p className="memory-similar-empty">
+                                                            No visually similar screens yet. Older
+                                                            captures may pre-date the CLIP image
+                                                            embedding wiring.
+                                                        </p>
+                                                    )}
+                                                {!similarErrorById[card.id]
+                                                    && (similarById[card.id]?.length ?? 0) > 0 && (
+                                                        <ul className="memory-similar-list">
+                                                            {similarById[card.id]!.map((hit) => (
+                                                                <li
+                                                                    key={hit.id}
+                                                                    className="memory-similar-item"
+                                                                >
+                                                                    <div className="memory-similar-meta">
+                                                                        <span className="memory-similar-app">
+                                                                            {hit.app_name}
+                                                                        </span>
+                                                                        <span className="memory-similar-time">
+                                                                            {new Date(hit.timestamp).toLocaleString()}
+                                                                        </span>
+                                                                        <span className="memory-similar-score">
+                                                                            {(hit.score * 100).toFixed(0)}%
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="memory-similar-title">
+                                                                        {hit.window_title || hit.snippet || hit.text.slice(0, 120)}
+                                                                    </div>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
                                             </div>
                                         )}
                                     </div>

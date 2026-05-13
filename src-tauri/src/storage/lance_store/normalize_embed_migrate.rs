@@ -23,8 +23,8 @@ use crate::memory_quality::{
     is_supported_dedup_fingerprint, quality_gate_reason as shared_quality_gate_reason,
 };
 use crate::storage::schema::{
-    ExtractedEntity, GraphEdge, GraphNode, IntentAnalysis, IntentCandidate, MemoryActionItem,
-    MemoryRecord, MeetingSegment, MeetingSession, SearchResult, Task,
+    ExtractedEntity, GraphEdge, GraphNode, IntentAnalysis, IntentCandidate, MeetingSegment,
+    MeetingSession, MemoryActionItem, MemoryRecord, SearchResult, Task,
 };
 
 use super::arrow_and_filters::{
@@ -38,9 +38,9 @@ use super::text_kw::{
 };
 use super::{
     ACTIVITY_EVENTS_TABLE, CONTEXT_DELTAS_TABLE, CONTEXT_PACKS_TABLE, DECISION_LEDGER_TABLE,
-    EDGES_TABLE, ENTITY_ALIASES_TABLE, GRAPH_EDGES_TABLE, GRAPH_NODES_TABLE, INDEX_NOISE_HOSTS,
-    KNOWLEDGE_PAGES_TABLE, MEETINGS_TABLE, MEMORIES_TABLE, NODES_TABLE, PROJECT_CONTEXTS_TABLE,
-    SEARCH_RESULT_COLUMNS, SEGMENTS_TABLE, TASKS_TABLE, IMAGE_EMBED_DIM, TEXT_EMBED_DIM,
+    EDGES_TABLE, ENTITY_ALIASES_TABLE, GRAPH_EDGES_TABLE, GRAPH_NODES_TABLE, IMAGE_EMBED_DIM,
+    INDEX_NOISE_HOSTS, KNOWLEDGE_PAGES_TABLE, MEETINGS_TABLE, MEMORIES_TABLE, NODES_TABLE,
+    PROJECT_CONTEXTS_TABLE, SEARCH_RESULT_COLUMNS, SEGMENTS_TABLE, TASKS_TABLE, TEXT_EMBED_DIM,
 };
 
 pub(super) fn lexical_keyword_score(terms: &[String], result: &SearchResult) -> f32 {
@@ -680,7 +680,12 @@ pub(super) fn acronym_for_phrase(value: &str) -> Option<String> {
         .collect();
     let capital_tokens = tokens
         .iter()
-        .filter(|tok| tok.chars().next().map(|c| c.is_uppercase()).unwrap_or(false))
+        .filter(|tok| {
+            tok.chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+        })
         .count();
     // Only emit acronyms for proper-noun compounds (≥2 capitalized tokens).
     if capital_tokens < 2 || tokens.len() < 2 {
@@ -728,6 +733,13 @@ pub(super) fn generate_search_aliases(record: &MemoryRecord) -> Vec<String> {
 
     // Phrase-based sources keep aliases anchored to noun-phrases.
     for phrase in alias_noun_phrase_sources(record) {
+        // `|` only appears when a structured field leaked an entire enum
+        // vocabulary into a label (e.g. "coding|debugging|..."). Acronymizing
+        // those produces opaque garbage like "tsapoeacdraorpws", so drop the
+        // phrase outright. Structural rule — no allow/deny lists.
+        if phrase.contains('|') {
+            continue;
+        }
         push_alias(&mut aliases, phrase.clone());
         let underscored = phrase.replace('_', " ");
         if underscored != phrase {
@@ -762,7 +774,7 @@ pub(super) fn generate_search_aliases(record: &MemoryRecord) -> Vec<String> {
         .chain(record.related_tools.iter())
     {
         let base = value.trim();
-        if base.is_empty() {
+        if base.is_empty() || base.contains('|') {
             continue;
         }
         push_alias(&mut aliases, base.to_string());
@@ -797,7 +809,9 @@ pub(super) fn build_raw_evidence_payload(record: &MemoryRecord) -> String {
     .to_string()
 }
 
-pub(super) fn derive_structured_entities(record: &MemoryRecord) -> Vec<crate::storage::ExtractedEntity> {
+pub(super) fn derive_structured_entities(
+    record: &MemoryRecord,
+) -> Vec<crate::storage::ExtractedEntity> {
     let mut entities = Vec::new();
     let now = chrono::Utc::now().timestamp_millis();
     let base_evidence = vec![format!("memory_id={}", record.id), format!("ts={}", now)];
@@ -1084,7 +1098,12 @@ pub(super) fn is_indexable_memory_record(record: &MemoryRecord) -> bool {
     true
 }
 
-pub(super) fn normalize_vector_dim(id: &str, field: &str, vector: &[f32], expected_dim: usize) -> Vec<f32> {
+pub(super) fn normalize_vector_dim(
+    id: &str,
+    field: &str,
+    vector: &[f32],
+    expected_dim: usize,
+) -> Vec<f32> {
     if vector.len() == expected_dim {
         return vector.to_vec();
     }
@@ -1272,7 +1291,10 @@ pub(super) fn dedup_records_for_insert(records: &[MemoryRecord]) -> Vec<MemoryRe
     by_key.into_values().collect()
 }
 
-pub(super) fn dedup_search_results(mut results: Vec<SearchResult>, limit: usize) -> Vec<SearchResult> {
+pub(super) fn dedup_search_results(
+    mut results: Vec<SearchResult>,
+    limit: usize,
+) -> Vec<SearchResult> {
     if results.is_empty() {
         return results;
     }
@@ -1938,7 +1960,11 @@ pub(super) async fn migrate_segments_from_json(table: &Table, json_path: &Path) 
     }
 }
 
-pub(super) async fn migrate_graph_from_json(nodes_table: &Table, edges_table: &Table, json_path: &Path) {
+pub(super) async fn migrate_graph_from_json(
+    nodes_table: &Table,
+    edges_table: &Table,
+    json_path: &Path,
+) {
     #[derive(serde::Deserialize)]
     struct LegacyGraph {
         nodes: Vec<GraphNode>,

@@ -1,7 +1,7 @@
 //! Storage module
 
-mod lance_store;
 pub mod graph_store;
+mod lance_store;
 pub mod schema;
 mod state_store;
 

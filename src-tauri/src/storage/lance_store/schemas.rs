@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use arrow_schema::{DataType, Field, Schema};
 use crate::storage::schema::{EdgeType, GraphEdge};
+use arrow_schema::{DataType, Field, Schema};
 
 use super::{IMAGE_EMBED_DIM, TEXT_EMBED_DIM};
 

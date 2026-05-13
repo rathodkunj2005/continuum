@@ -175,6 +175,31 @@ fn generate_search_aliases_noun_phrases_compact_and_acronym() {
 }
 
 #[test]
+fn generate_search_aliases_skips_pipe_bearing_phrases() {
+    let mut r = record(
+        Some("https://example.com/doc"),
+        "Notes",
+        "Supporting snippet for alias coverage.",
+    );
+    // Mimic a model that echoed the whole activity enum into the topic; the
+    // alias generator must never derive acronyms or compact forms from it.
+    r.topic = "coding|debugging|reviewing_agent_output|researching|planning|writing".to_string();
+    r.workflow = "unknown".to_string();
+    r.project = "unknown".to_string();
+    let aliases = generate_search_aliases_public(&r);
+    assert!(
+        !aliases.iter().any(|a| a.contains('|')),
+        "no alias may contain '|': {aliases:?}"
+    );
+    // The acronym derived from the polluted phrase (tsapoeacdraorpws / cdrarpw)
+    // must never appear.
+    assert!(
+        !aliases.iter().any(|a| a.len() >= 8 && !a.contains(' ')),
+        "long opaque acronyms must not be generated: {aliases:?}"
+    );
+}
+
+#[test]
 fn generate_search_aliases_entity_underscore_variant_without_acronym_noise() {
     let mut r = record(
         Some("https://example.com/x"),
@@ -187,7 +212,104 @@ fn generate_search_aliases_entity_underscore_variant_without_acronym_noise() {
     assert!(aliases.contains(&"fndr_search_pipeline".to_string()));
     assert!(aliases.contains(&"fndr search pipeline".to_string()));
     assert!(
-        !aliases.iter().any(|a| a.len() == 2 && a.chars().all(|c| c.is_ascii_lowercase())),
+        !aliases
+            .iter()
+            .any(|a| a.len() == 2 && a.chars().all(|c| c.is_ascii_lowercase())),
         "single-token entities must not produce two-letter acronym noise: {aliases:?}"
     );
+}
+
+// Helpers for the image-to-image similarity tests below. Synthetic vectors are
+// inserted directly so the test does not require the CLIP ONNX file on disk.
+fn record_with_image_embedding(id: &str, title: &str, image_vec: Vec<f32>) -> MemoryRecord {
+    let mut r = record(Some("https://example.com/x"), title, "Body");
+    r.id = id.to_string();
+    r.image_embedding = image_vec;
+    r
+}
+
+fn unit_vec_with_one_at(index: usize) -> Vec<f32> {
+    let mut v = vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM];
+    v[index] = 1.0;
+    v
+}
+
+#[tokio::test]
+async fn similar_by_image_embedding_returns_neighbors_excluding_seed() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    // Seed (basis vector 0) plus a near neighbor (mostly 0, tiny 1) and a far
+    // neighbor (basis vector 1, orthogonal).
+    let seed_vec = unit_vec_with_one_at(0);
+    let mut near_vec = vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM];
+    near_vec[0] = 0.9;
+    near_vec[2] = 0.435_889_894; // chosen so the vector is unit-norm
+    let far_vec = unit_vec_with_one_at(1);
+
+    let records = vec![
+        record_with_image_embedding("seed", "seed window", seed_vec.clone()),
+        record_with_image_embedding("near", "near window", near_vec),
+        record_with_image_embedding("far", "far window", far_vec),
+    ];
+    store.add_batch(&records).await.expect("add records");
+
+    let hits = store
+        .similar_by_image_embedding("seed", 5, None, None)
+        .await
+        .expect("similar");
+
+    assert!(
+        !hits.iter().any(|h| h.id == "seed"),
+        "seed must be excluded"
+    );
+    let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
+    assert!(ids.contains(&"near"), "expected near neighbor in {ids:?}");
+    assert!(ids.contains(&"far"), "expected far neighbor in {ids:?}");
+}
+
+#[tokio::test]
+async fn similar_by_image_embedding_returns_empty_for_zero_vector_seed() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let records = vec![
+        record_with_image_embedding(
+            "legacy",
+            "legacy window",
+            vec![0.0; DEFAULT_IMAGE_EMBEDDING_DIM],
+        ),
+        record_with_image_embedding("other", "other window", unit_vec_with_one_at(0)),
+    ];
+    store.add_batch(&records).await.expect("add records");
+
+    let hits = store
+        .similar_by_image_embedding("legacy", 5, None, None)
+        .await
+        .expect("similar");
+    assert!(
+        hits.is_empty(),
+        "legacy zero-vector seed must yield no neighbors, got {hits:?}"
+    );
+}
+
+#[tokio::test]
+async fn similar_by_image_embedding_returns_empty_for_missing_seed() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let hits = store
+        .similar_by_image_embedding("does-not-exist", 5, None, None)
+        .await
+        .expect("similar");
+    assert!(hits.is_empty(), "missing seed must yield no neighbors");
 }

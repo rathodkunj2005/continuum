@@ -104,7 +104,6 @@ pub struct HermesChatReply {
     pub content: String,
 }
 
-
 static AGENT_PROCESS: AgentOnceLock<AgentMutex<Option<Child>>> = AgentOnceLock::new();
 static AGENT_STATUS: AgentOnceLock<AgentMutex<AgentStatus>> = AgentOnceLock::new();
 
@@ -600,11 +599,7 @@ async fn detect_ollama_state() -> (bool, bool, Vec<String>) {
     let mut models: Vec<String> = Vec::new();
 
     if let Ok(client) = local_service_client() {
-        if let Ok(response) = client
-            .get(OLLAMA_API_TAGS_URL)
-            .send()
-            .await
-        {
+        if let Ok(response) = client.get(OLLAMA_API_TAGS_URL).send().await {
             if response.status().is_success() {
                 reachable = true;
                 if let Ok(json) = response.json::<serde_json::Value>().await {
@@ -1473,9 +1468,10 @@ pub async fn send_hermes_message(
 
     let client = llm_http_client().map_err(|e| format!("HTTP client: {e}"))?;
     let url = format!("{}/v1/responses", status.api_url.trim_end_matches('/'));
-    let (status_code, json) = post_json_response(&client, &url, &request_body, Some(api_key.as_str()))
-        .await
-        .map_err(|e| format!("Failed to reach the Hermes API server: {e}"))?;
+    let (status_code, json) =
+        post_json_response(&client, &url, &request_body, Some(api_key.as_str()))
+            .await
+            .map_err(|e| format!("Failed to reach the Hermes API server: {e}"))?;
 
     if !status_code.is_success() {
         return Err(json
@@ -1821,4 +1817,3 @@ pub async fn quick_setup_ollama(
     *get_hermes_gateway_error_store().lock() = None;
     sync_hermes_bridge_files(state.inner()).await
 }
-

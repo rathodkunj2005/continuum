@@ -195,7 +195,7 @@ Separate ONNX assets (not in the GGUF catalog):
 | File | Purpose |
 | --- | --- |
 | `bge-large-en-v1.5-quantized.onnx` + `tokenizer.json` | 1024-d text embeddings (hybrid search) |
-| `clip-vit-base-patch32-vision_q4.onnx` | 512-d CLIP vision embeddings for imported photos (similarity; complements Qwen vision text) |
+| `clip-vit-base-patch32-vision_q4.onnx` | 512-d CLIP vision embeddings for imported photos and screen captures (image-to-image similarity over the `image_embedding` column) |
 
 Install BGE + CLIP with `./scripts/download_model.sh` (or run `scripts/bootstrap/download-embedding-model.sh` and `scripts/bootstrap/download-clip-vision-onnx.sh` separately). Override CLIP path with `FNDR_CLIP_VISION_ONNX` if needed.
 
@@ -249,7 +249,7 @@ The controls below are implemented in source and exposed through Tauri commands 
 
 ## Known Limitations
 
-- Visual semantic search is planned but not part of the current stable pipeline.
+- Image-to-image visual similarity is live for screen captures and imported photos (CLIP `image_embedding` column). Cross-modal text->image retrieval is not yet supported and is gated on an explicit privacy design (see ADR-004).
 - Meeting diarization is experimental.
 - Search quality depends on OCR and embedding quality.
 - Old LanceDB schemas may need migration after embedding dimension changes.

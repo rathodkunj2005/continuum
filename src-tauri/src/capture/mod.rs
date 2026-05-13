@@ -5,9 +5,9 @@
 //! LanceDB.
 
 mod admission;
-pub mod entity_extractor;
 pub mod clipboard;
 mod dedupe;
+pub mod entity_extractor;
 pub(crate) mod macos;
 pub mod permissions;
 mod sampling;
@@ -28,15 +28,21 @@ pub fn macos_frontmost_app_name() -> Option<String> {
     }
 }
 
-use crate::config::{DEFAULT_CAPTURE_EMBEDDING_CACHE_SIZE, DEFAULT_IMAGE_EMBEDDING_DIM};
+use crate::config::{
+    CapturePipelineConfig, DEFAULT_CAPTURE_EMBEDDING_CACHE_SIZE, DEFAULT_IMAGE_EMBEDDING_DIM,
+};
 use crate::context_runtime;
-use crate::embedding::{Embedder, EmbeddingBackend, EMBEDDING_DIM};
-use crate::inference::StructuredMemoryExtraction;
+use crate::embedding::{embed_imported_image, Embedder, EmbeddingBackend, EMBEDDING_DIM};
+use crate::inference::{
+    compose_import_memory_context, extract_image_semantics, ImageImportSource,
+    StructuredMemoryExtraction,
+};
 use crate::memory_compaction::{
     build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
     support_embedding_texts,
 };
 use crate::memory_quality::{deterministic_dedup_fingerprint, is_supported_dedup_fingerprint};
+use crate::models;
 use crate::ocr::{OcrEngine, RecognizedText};
 use crate::privacy::Blocklist;
 use crate::storage::{MemoryRecord, SearchResult, Task, TaskType};
@@ -108,6 +114,317 @@ impl EmbeddingMemo {
         }
         self.order.push_back(key.clone());
         self.values.insert(key, value);
+    }
+}
+
+/// Per-session adaptive admission for the visual-narrative path.
+///
+/// Tracks recent CLIP image vectors and the count of visual-only admits in
+/// the current session. A candidate frame is admitted iff
+/// `novelty(candidate) >= base + alpha * admitted` (capped at `ceiling`),
+/// so the gate self-throttles as more frames from the same scene/session
+/// land. Resets whenever the session key changes (typically when the
+/// frontmost app, window title, or URL changes).
+#[derive(Default)]
+struct VisualNoveltyTracker {
+    session_key: String,
+    recent: VecDeque<Vec<f32>>,
+    admitted: u32,
+}
+
+impl VisualNoveltyTracker {
+    fn reset_for(&mut self, session_key: &str) {
+        if self.session_key != session_key {
+            self.session_key.clear();
+            self.session_key.push_str(session_key);
+            self.recent.clear();
+            self.admitted = 0;
+        }
+    }
+
+    /// `1.0 - max(cosine_similarity)` against the ring; `1.0` when the
+    /// ring is empty so the first frame is always considered fully novel.
+    fn novelty(&self, vec: &[f32]) -> f32 {
+        if self.recent.is_empty() {
+            return 1.0;
+        }
+        let mut max_sim = -1.0_f32;
+        for r in &self.recent {
+            let s = cosine_similarity(vec, r);
+            if s > max_sim {
+                max_sim = s;
+            }
+        }
+        (1.0 - max_sim).clamp(0.0, 1.0)
+    }
+
+    fn adaptive_threshold(&self, base: f32, alpha: f32, ceiling: f32) -> f32 {
+        (base + alpha * self.admitted as f32).clamp(base, ceiling)
+    }
+
+    fn admit(&mut self, vec: Vec<f32>, capacity: usize) {
+        let cap = capacity.max(1);
+        while self.recent.len() >= cap {
+            self.recent.pop_front();
+        }
+        self.recent.push_back(vec);
+        self.admitted = self.admitted.saturating_add(1);
+    }
+}
+
+/// Outcome of the visual-admission gate. `Admitted` carries the freshly
+/// computed CLIP vector so the downstream composer reuses it on the
+/// `MemoryRecord` instead of running CLIP twice.
+#[derive(Debug)]
+enum VisualAdmissionOutcome {
+    Admitted { image_vec: Vec<f32>, novelty: f32 },
+    SkippedSmall { width: u32, height: u32 },
+    SkippedNovelty { novelty: f32, threshold: f32 },
+    Failed(String),
+}
+
+/// First half of the visual-narrative path: decode the screen PNG once,
+/// reject undersized frames, compute the CLIP embedding, and ask the
+/// tracker whether this frame is novel enough to admit. CLIP is run in
+/// `spawn_blocking` so the async loop stays responsive.
+async fn try_admit_visual_capture(
+    image_data: &[u8],
+    tracker: &VisualNoveltyTracker,
+    cfg: &CapturePipelineConfig,
+    models_dir: &PathBuf,
+) -> VisualAdmissionOutcome {
+    let bytes = image_data.to_vec();
+    let models_dir = models_dir.clone();
+    let min_dim = cfg.visual_admission_min_image_dim;
+    let decode_and_embed =
+        tokio::task::spawn_blocking(move || -> Result<(Vec<f32>, u32, u32), String> {
+            use image::GenericImageView;
+            let dynamic =
+                image::load_from_memory(&bytes).map_err(|e| format!("decode capture png: {e}"))?;
+            let (w, h) = dynamic.dimensions();
+            if w < min_dim || h < min_dim {
+                return Ok((Vec::new(), w, h));
+            }
+            let vec = embed_imported_image(&dynamic, &models_dir)?;
+            Ok((vec, w, h))
+        })
+        .await;
+
+    let (image_vec, width, height) = match decode_and_embed {
+        Ok(Ok(tuple)) => tuple,
+        Ok(Err(err)) => return VisualAdmissionOutcome::Failed(err),
+        Err(err) => return VisualAdmissionOutcome::Failed(format!("clip join: {err}")),
+    };
+    if image_vec.is_empty() {
+        return VisualAdmissionOutcome::SkippedSmall { width, height };
+    }
+
+    let novelty = tracker.novelty(&image_vec);
+    let threshold = tracker.adaptive_threshold(
+        cfg.visual_novelty_base,
+        cfg.visual_novelty_alpha,
+        cfg.visual_novelty_ceiling,
+    );
+    if novelty >= threshold {
+        VisualAdmissionOutcome::Admitted { image_vec, novelty }
+    } else {
+        VisualAdmissionOutcome::SkippedNovelty { novelty, threshold }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn compose_visual_capture_record(
+    state: &AppState,
+    text_embedder: Option<&Embedder>,
+    embedding_memo: &mut EmbeddingMemo,
+    image_data: Vec<u8>,
+    image_vec: Vec<f32>,
+    app_name: &str,
+    bundle_id: Option<&str>,
+    window_title: &str,
+    url: Option<&str>,
+    observed_confidence: f32,
+    observed_block_count: usize,
+    novelty: f32,
+) -> Result<MemoryRecord, String> {
+    let now = Local::now();
+    let synthetic_filename = format!(
+        "{}_{}.png",
+        sanitize_visual_filename_token(app_name),
+        now.timestamp_millis()
+    );
+
+    // Run the same VLM path Meta-glasses imports use. Visual narrative is
+    // its sole signal; OCR is skipped (the gate fired *because* OCR was
+    // thin), so we don't pass an OCR appendix.
+    let insight = extract_image_semantics(
+        image_data,
+        &synthetic_filename,
+        ImageImportSource::ScreenCapture,
+        state.app_data_dir.clone(),
+    )
+    .await?;
+
+    let composed = compose_import_memory_context(
+        &synthetic_filename,
+        &insight,
+        None,
+        ImageImportSource::ScreenCapture,
+    );
+
+    let session_key = build_session_key(app_name, window_title, url);
+    let session_id = build_session_id(&now, app_name, bundle_id, &session_key);
+    let display_summary = if !insight.summary_short.trim().is_empty() {
+        insight
+            .summary_short
+            .trim()
+            .chars()
+            .take(200)
+            .collect::<String>()
+    } else {
+        composed
+            .memory_context
+            .chars()
+            .take(160)
+            .collect::<String>()
+    };
+
+    let lexical_shadow =
+        build_lexical_shadow(app_name, &display_summary, &composed.memory_context, url);
+    let compact_summary = compact_summary_embedding_text(
+        "visual_capture",
+        &display_summary,
+        &composed.memory_context,
+        &lexical_shadow,
+    );
+    let support_texts = support_embedding_texts(
+        app_name,
+        window_title,
+        &composed.memory_context,
+        &lexical_shadow,
+    );
+
+    let mut embedding_inputs = vec![composed.embedding_text.clone(), compact_summary.clone()];
+    embedding_inputs.extend(support_texts.iter().cloned());
+    let vectors = embed_text_inputs_with_memo(
+        text_embedder,
+        embedding_memo,
+        app_name,
+        window_title,
+        &embedding_inputs,
+    );
+    let primary = vectors
+        .first()
+        .cloned()
+        .unwrap_or_else(|| vec![0.0; EMBEDDING_DIM]);
+    let snippet_embedding = vectors
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| vec![0.0; EMBEDDING_DIM]);
+    let support_embedding = if vectors.len() > 2 {
+        mean_pool_embeddings(&vectors[2..])
+    } else {
+        vec![0.0; EMBEDDING_DIM]
+    };
+    let text_embedding =
+        weighted_primary_embedding(&primary, &snippet_embedding, &support_embedding);
+
+    let raw_evidence = json!({
+        "source_kind": "visual_capture",
+        "vision_model_id": insight.model_id,
+        "semantic_confidence": insight.confidence,
+        "visual_admission_novelty": novelty,
+        "app_name": app_name,
+        "window_title": window_title,
+        "url": url,
+        "synthetic_filename": synthetic_filename,
+        "timestamp_ms": now.timestamp_millis(),
+    })
+    .to_string();
+
+    let topic = if !composed.topic.trim().is_empty() {
+        composed.topic.clone()
+    } else {
+        "unknown".to_string()
+    };
+    let user_intent = if !composed.user_intent.trim().is_empty() {
+        composed.user_intent.clone()
+    } else {
+        composed.activity_type.clone()
+    };
+
+    let mut record = MemoryRecord {
+        id: uuid::Uuid::new_v4().to_string(),
+        timestamp: now.timestamp_millis(),
+        day_bucket: now.format("%Y-%m-%d").to_string(),
+        app_name: app_name.to_string(),
+        bundle_id: bundle_id.map(str::to_string),
+        window_title: window_title.to_string(),
+        session_id,
+        text: String::new(),
+        clean_text: composed.memory_context.clone(),
+        ocr_confidence: observed_confidence,
+        ocr_block_count: observed_block_count.min(u32::MAX as usize) as u32,
+        snippet: display_summary.clone(),
+        display_summary: display_summary.clone(),
+        internal_context: composed.memory_context.clone(),
+        summary_source: "visual_capture".to_string(),
+        noise_score: 0.0,
+        session_key,
+        lexical_shadow,
+        embedding: text_embedding,
+        image_embedding: image_vec.clone(),
+        screenshot_path: None,
+        url: url.map(str::to_string),
+        snippet_embedding,
+        support_embedding,
+        decay_score: 1.0,
+        last_accessed_at: 0,
+        timestamp_start: now.timestamp_millis(),
+        timestamp_end: now.timestamp_millis(),
+        source_type: if url.is_some() {
+            "browser_visual".to_string()
+        } else {
+            "screen_visual".to_string()
+        },
+        topic,
+        workflow: "unknown".to_string(),
+        user_intent,
+        memory_context: composed.memory_context.clone(),
+        raw_evidence,
+        search_aliases: composed.search_aliases.clone(),
+        activity_type: composed.activity_type.clone(),
+        entities: insight.entities.clone(),
+        tags: insight.topics.clone(),
+        embedding_text: composed.embedding_text.clone(),
+        embedding_model: "bge-large-en-v1.5".to_string(),
+        embedding_dim: EMBEDDING_DIM as u32,
+        evidence_confidence: insight.confidence,
+        extraction_confidence: insight.confidence,
+        insight_what_happened: composed.insight_what_happened.clone(),
+        insight_why_mattered: composed.insight_why_mattered.clone(),
+        insight_card_confidence: insight.confidence,
+        schema_version: 2,
+        ..Default::default()
+    };
+    record.dedup_fingerprint =
+        deterministic_dedup_fingerprint(&record, Some(&record.memory_context));
+    Ok(record)
+}
+
+/// Make the synthetic VLM-input filename stable but human-readable. The
+/// filename is only used for analytics/telemetry; the VLM itself does not
+/// read pixels from disk, just from memory.
+fn sanitize_visual_filename_token(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    let trimmed = cleaned.trim_matches('_');
+    if trimmed.is_empty() {
+        "screen".to_string()
+    } else {
+        trimmed.chars().take(48).collect()
     }
 }
 
@@ -299,6 +616,18 @@ fn strip_unsupported_values(
     *values = kept;
 }
 
+/// Reset a structured-extraction field when the model echoed an entire
+/// enum vocabulary instead of choosing one value (e.g.
+/// `coding|debugging|reviewing_agent_output|...`). `|` never belongs in a
+/// single-label human-readable field, so we drop it and flag the issue.
+/// Structural rule — independent of model name or vocabulary.
+fn clear_if_multi_option(value: &mut String, issues: &mut Vec<String>, field: &str) {
+    if value.contains('|') {
+        issues.push(format!("{field}_multi_option_dump"));
+        value.clear();
+    }
+}
+
 fn validate_structured_memory_extraction(
     extraction: &mut StructuredMemoryExtraction,
     app_name: &str,
@@ -309,6 +638,11 @@ fn validate_structured_memory_extraction(
     let mut issues = Vec::new();
     let mut supported = 0usize;
     let mut total = 0usize;
+
+    clear_if_multi_option(&mut extraction.activity_type, &mut issues, "activity_type");
+    clear_if_multi_option(&mut extraction.topic, &mut issues, "topic");
+    clear_if_multi_option(&mut extraction.workflow, &mut issues, "workflow");
+    clear_if_multi_option(&mut extraction.user_intent, &mut issues, "user_intent");
 
     let mut maybe_scrub = |value: &mut String, label: &str| {
         if value.trim().is_empty() {
@@ -381,6 +715,35 @@ fn validate_structured_memory_extraction(
 
     extraction.confidence = extraction.confidence.clamp(0.0, 1.0);
     (grounding_confidence, issues)
+}
+
+/// True when the LLM narrative already mentions the bulk of the topic's
+/// content tokens, so re-emitting a "Topic:" preamble would be redundant
+/// noise. Token overlap on lowercased ascii-alnum words, ≥60% threshold.
+/// Stopwords + tokens shorter than 3 chars are ignored so single-letter
+/// or articles don't dominate the ratio.
+fn narrative_mentions(narrative: Option<&str>, topic: &str) -> bool {
+    let Some(narrative) = narrative else {
+        return false;
+    };
+    let topic_tokens: Vec<String> = topic
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .filter(|t| t.len() >= 3)
+        .map(|t| t.to_string())
+        .collect();
+    if topic_tokens.is_empty() {
+        return false;
+    }
+    let narrative_lower = narrative.to_ascii_lowercase();
+    let hits = topic_tokens
+        .iter()
+        .filter(|tok| narrative_lower.contains(tok.as_str()))
+        .count();
+    (hits as f32 / topic_tokens.len() as f32) >= 0.6
 }
 
 /// Pick a deterministic semantic anchor for the durable memory context.
@@ -584,21 +947,37 @@ pub(crate) fn build_durable_memory_context(
 ) -> String {
     let center = pick_semantic_center(extraction, app_name, window_title, clean_text);
 
+    // Narrative-first: the LLM's free-form `memory_context` is the most
+    // human-readable description we have and is what humans/agents want to
+    // see in retrieval surfaces (iOS handoff, OpenClaw, etc.). We lead with
+    // it and only fall back to structured "Topic:/You were/Activity:" lines
+    // when no narrative is present. Topic: is appended only if it adds
+    // tokens the narrative does not already cover.
+    let narrative: Option<String> = extraction.and_then(|m| {
+        let trimmed = m.memory_context.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     let mut what_lines: Vec<String> = Vec::new();
-    if !center.is_empty() {
+    if let Some(ref n) = narrative {
+        what_lines.push(n.clone());
+    }
+    if !center.is_empty() && !narrative_mentions(narrative.as_deref(), &center) {
         what_lines.push(format!("Topic: {}", center));
     }
-    if let Some(mem) = extraction {
-        let intent = mem.user_intent.trim();
-        if !intent.is_empty() {
-            what_lines.push(format!("You were {}.", intent));
-        } else if !mem.activity_type.trim().is_empty()
-            && mem.activity_type.trim().to_ascii_lowercase() != "unknown"
-        {
-            what_lines.push(format!("Activity: {}.", mem.activity_type.trim()));
-        }
-        if !mem.memory_context.trim().is_empty() {
-            what_lines.push(mem.memory_context.trim().to_string());
+    if narrative.is_none() {
+        if let Some(mem) = extraction {
+            let intent = mem.user_intent.trim();
+            if !intent.is_empty() {
+                what_lines.push(format!("You were {}.", intent));
+            } else if !mem.activity_type.trim().is_empty()
+                && mem.activity_type.trim().to_ascii_lowercase() != "unknown"
+            {
+                what_lines.push(format!("Activity: {}.", mem.activity_type.trim()));
+            }
         }
     }
     if what_lines.is_empty() && !display_summary.trim().is_empty() {
@@ -899,6 +1278,10 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
     let mut hasher = PerceptualHasher::new();
     let sampler = AdaptiveSampler::new();
     let ocr = OcrEngine::new()?;
+    // CLIP image embedding model lives next to the BGE assets; resolved once per
+    // process. The first stored frame absorbs the ~80-200 ms session load; every
+    // subsequent embed is ~30-80 ms on Apple Silicon CPU.
+    let models_dir = models::models_dir(state.app_data_dir.as_path());
     let text_embedder = match Embedder::new() {
         Ok(embedder) => Some(embedder),
         Err(err) => {
@@ -923,6 +1306,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             .embedding_cache_size
             .max(DEFAULT_CAPTURE_EMBEDDING_CACHE_SIZE),
     );
+    // Adaptive admission state for the visual-narrative path (frames with
+    // thin OCR but informative pixels). Resets per session key.
+    let mut visual_tracker = VisualNoveltyTracker::default();
 
     tracing::info!("Capture loop started");
 
@@ -1255,50 +1641,138 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             observed_block_count
         );
 
-        // Skip if source output is too weak/noisy to improve recall.
-        if source_low_signal {
-            emit_capture_quality_signal(
-                state.as_ref(),
-                json!({
-                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
-                    "app_name": app_name,
-                    "bundle_id": app_context.bundle_id.clone(),
-                    "ocr_confidence": observed_confidence,
-                    "ocr_block_count": observed_block_count,
-                    "clean_text_len": text.len(),
-                    "noise_score": 1.0,
-                    "low_signal": true,
-                    "stored_or_skipped": "skipped_low_signal",
-                    "source_kind": source_kind,
-                }),
-            );
-            tokio::time::sleep(sleep_duration).await;
-            continue;
-        }
-        if text.len() < config.min_text_length {
-            emit_capture_quality_signal(
-                state.as_ref(),
-                json!({
-                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
-                    "app_name": app_name,
-                    "bundle_id": app_context.bundle_id.clone(),
-                    "ocr_confidence": observed_confidence,
-                    "ocr_block_count": observed_block_count,
-                    "clean_text_len": text.len(),
-                    "noise_score": 1.0,
-                    "low_signal": true,
-                    "stored_or_skipped": "skipped_low_signal",
-                    "source_kind": source_kind,
-                    "quality_stats": {
-                        "total_lines": capture_quality.total_lines,
-                        "kept_lines": capture_quality.kept_lines,
-                        "low_conf_lines": capture_quality.low_conf_lines,
-                        "dropped_noise_lines": capture_quality.dropped_noise_lines,
-                        "dropped_low_signal_lines": capture_quality.dropped_low_signal_lines,
-                        "avg_line_score": capture_quality.avg_line_score
+        // Skip if the text source is too weak/noisy to drive the OCR-narrative
+        // pipeline. Before continuing, attempt the visual-narrative path: a
+        // frame with thin OCR can still be visually informative (video,
+        // image-heavy pages, design tools). The visual-admission gate is
+        // adaptive — its threshold rises with each prior visual-only admit
+        // in the current session — so the vault never gets flooded with
+        // near-duplicate frames from the same scene.
+        if source_low_signal || text.len() < config.min_text_length {
+            let session_key_visual = build_session_key(&app_name, &window_title, url.as_deref());
+            visual_tracker.reset_for(&session_key_visual);
+            let outcome = try_admit_visual_capture(
+                &image_data,
+                &visual_tracker,
+                &config.capture_pipeline,
+                &models_dir,
+            )
+            .await;
+            match outcome {
+                VisualAdmissionOutcome::Admitted { image_vec, novelty } => {
+                    match compose_visual_capture_record(
+                        state.as_ref(),
+                        text_embedder.as_ref(),
+                        &mut embedding_memo,
+                        image_data.clone(),
+                        image_vec.clone(),
+                        &app_name,
+                        app_context.bundle_id.as_deref(),
+                        &window_title,
+                        url.as_deref(),
+                        observed_confidence,
+                        observed_block_count,
+                        novelty,
+                    )
+                    .await
+                    {
+                        Ok(record) => {
+                            visual_tracker.admit(
+                                image_vec,
+                                config.capture_pipeline.visual_novelty_ring_capacity,
+                            );
+                            batch.push(record);
+                            state.frames_captured.fetch_add(1, Ordering::Relaxed);
+                            state.last_capture_time.store(
+                                chrono::Utc::now().timestamp_millis() as u64,
+                                Ordering::Relaxed,
+                            );
+                            emit_capture_quality_signal(
+                                state.as_ref(),
+                                json!({
+                                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                                    "app_name": app_name,
+                                    "bundle_id": app_context.bundle_id.clone(),
+                                    "ocr_confidence": observed_confidence,
+                                    "ocr_block_count": observed_block_count,
+                                    "clean_text_len": text.len(),
+                                    "noise_score": 0.0,
+                                    "low_signal": false,
+                                    "stored_or_skipped": "stored_visual_capture",
+                                    "source_kind": "visual_capture",
+                                    "visual_admission_novelty": novelty,
+                                    "visual_admission_threshold": visual_tracker
+                                        .adaptive_threshold(
+                                            config.capture_pipeline.visual_novelty_base,
+                                            config.capture_pipeline.visual_novelty_alpha,
+                                            config.capture_pipeline.visual_novelty_ceiling,
+                                        ),
+                                }),
+                            );
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                "visual-admission: VLM composition failed for {}: {}",
+                                app_name,
+                                err
+                            );
+                            emit_capture_quality_signal(
+                                state.as_ref(),
+                                json!({
+                                    "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                                    "app_name": app_name,
+                                    "bundle_id": app_context.bundle_id.clone(),
+                                    "stored_or_skipped": "skipped_visual_vlm_failed",
+                                    "source_kind": "visual_capture",
+                                    "reason": err,
+                                }),
+                            );
+                        }
                     }
-                }),
-            );
+                }
+                VisualAdmissionOutcome::SkippedSmall { width, height } => {
+                    emit_capture_quality_signal(
+                        state.as_ref(),
+                        json!({
+                            "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                            "app_name": app_name,
+                            "bundle_id": app_context.bundle_id.clone(),
+                            "stored_or_skipped": "skipped_visual_small_dim",
+                            "source_kind": source_kind,
+                            "width": width,
+                            "height": height,
+                        }),
+                    );
+                }
+                VisualAdmissionOutcome::SkippedNovelty { novelty, threshold } => {
+                    emit_capture_quality_signal(
+                        state.as_ref(),
+                        json!({
+                            "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                            "app_name": app_name,
+                            "bundle_id": app_context.bundle_id.clone(),
+                            "stored_or_skipped": "skipped_visual_low_novelty",
+                            "source_kind": source_kind,
+                            "visual_admission_novelty": novelty,
+                            "visual_admission_threshold": threshold,
+                        }),
+                    );
+                }
+                VisualAdmissionOutcome::Failed(err) => {
+                    tracing::debug!("visual-admission: gate failed for {}: {}", app_name, err);
+                    emit_capture_quality_signal(
+                        state.as_ref(),
+                        json!({
+                            "timestamp_ms": chrono::Utc::now().timestamp_millis(),
+                            "app_name": app_name,
+                            "bundle_id": app_context.bundle_id.clone(),
+                            "stored_or_skipped": "skipped_visual_failed",
+                            "source_kind": source_kind,
+                            "reason": err,
+                        }),
+                    );
+                }
+            }
             tokio::time::sleep(sleep_duration).await;
             continue;
         }
@@ -1441,6 +1915,22 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             } else {
                 (0.0, vec!["structured_extraction_unavailable".to_string()])
             };
+        // Count "this memory's structured fields are likely hallucinated"
+        // signals. Two or more of these stacked with grounding < 0.5 means
+        // the row would land as a Willow/Shottr-style polluted card —
+        // skip storage outright so neither retrieval nor the iOS/OpenClaw
+        // surfaces see it.
+        let stacked_critical_extraction_issues = extraction_issues
+            .iter()
+            .filter(|issue| {
+                matches!(
+                    issue.as_str(),
+                    "structured_fields_weakly_grounded"
+                        | "unsupported_outcome"
+                        | "possible_ungrounded_extraction"
+                )
+            })
+            .count();
         if !extraction_issues.is_empty() {
             emit_extraction_quality_anomaly(
                 state.as_ref(),
@@ -1486,12 +1976,14 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         .as_ref()
                         .map(|m| m.memory_context.trim().is_empty() && !m.topic.trim().is_empty())
                         .unwrap_or(false),
-                    "anomaly_labels": extraction_issues,
+                    "anomaly_labels": extraction_issues.clone(),
                     "app_name": app_name
                 }),
             );
         }
-        if extraction_grounding_confidence <= 0.10 {
+        let drop_due_to_stacked_issues =
+            stacked_critical_extraction_issues >= 2 && extraction_grounding_confidence < 0.50;
+        if extraction_grounding_confidence <= 0.10 || drop_due_to_stacked_issues {
             emit_capture_quality_signal(
                 state.as_ref(),
                 json!({
@@ -1506,8 +1998,14 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     "low_signal": false,
                     "surface_policy": "normal",
                     "source_kind": source_kind,
-                    "stored_or_skipped": "skipped_grounding_gate",
+                    "stored_or_skipped": if drop_due_to_stacked_issues {
+                        "skipped_stacked_extraction_issues"
+                    } else {
+                        "skipped_grounding_gate"
+                    },
                     "grounding_confidence": extraction_grounding_confidence,
+                    "stacked_critical_extraction_issues": stacked_critical_extraction_issues,
+                    "extraction_issues": extraction_issues,
                     "quality_stats": {
                         "total_lines": capture_quality.total_lines,
                         "kept_lines": capture_quality.kept_lines,
@@ -1522,8 +2020,11 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             continue;
         }
 
-        let vlm_analysis: Option<String> = None;
-
+        // OCR-narrative branch: structured extraction is the durable
+        // signal. The visual-narrative branch (low-OCR frames) ran
+        // earlier with its own VLM and never reaches this point, so the
+        // historical `vlm_analysis: Option<String> = None` stub used to
+        // be dead code and has been removed.
         let (final_snippet, summary_source) = if let Some(ref mem) = structured_memory {
             let candidate = if !mem.memory_context.trim().is_empty() {
                 mem.memory_context
@@ -1543,8 +2044,6 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     "llm".to_string()
                 },
             )
-        } else if let Some(ref vlm_text) = vlm_analysis {
-            (vlm_text.clone(), "vlm".to_string())
         } else {
             let fallback = text_cleanup::concise_fallback_snippet(&app_name, &window_title, &text);
             if fallback.is_empty() {
@@ -1656,12 +2155,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
 
         let session_key = build_session_key(&app_name, &window_title, url.as_deref());
 
-        // Enrich clean_text with VLM metadata when available.
-        let enriched_clean_text = if let Some(ref vlm_text) = vlm_analysis {
-            merge_story_text(&text, vlm_text, 7000)
-        } else {
-            text.clone()
-        };
+        let enriched_clean_text = text.clone();
         let lexical_shadow = build_lexical_shadow(
             &window_title,
             &display_summary,
@@ -1730,6 +2224,44 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             semantic_embeddings_available,
             "capture_pipeline:distilled_frame"
         );
+
+        // ── CLIP image embedding ──────────────────────────────────────────────
+        // Compute a 512-d L2-normalized image vector from the same screen pixels
+        // OCR consumed. Stored alongside text embeddings so future image-to-image
+        // retrieval can find visually similar screens. The text pipeline above is
+        // the source of truth; on any CLIP failure we fall back to a zero vector
+        // so retrieval/storage stay healthy.
+        let image_embedding = {
+            let bytes = image_data.clone();
+            let models_dir = models_dir.clone();
+            let clip_start = Instant::now();
+            let join = tokio::task::spawn_blocking(move || -> Result<Vec<f32>, String> {
+                let dynamic = image::load_from_memory(&bytes)
+                    .map_err(|e| format!("decode capture png: {e}"))?;
+                embed_imported_image(&dynamic, &models_dir)
+            })
+            .await;
+            match join {
+                Ok(Ok(vec)) => {
+                    tracing::debug!(
+                        app = %app_name,
+                        clip_ms = clip_start.elapsed().as_millis(),
+                        "capture_pipeline:image_embedding_ok"
+                    );
+                    vec
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(
+                        "CLIP image embedding skipped for capture: {e}; storing zero vector"
+                    );
+                    vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM]
+                }
+                Err(e) => {
+                    tracing::warn!("CLIP image embedding join failed: {e}; storing zero vector");
+                    vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM]
+                }
+            }
+        };
 
         // ── Focus Mode drift detection ────────────────────────────────────────
         // Mirrors CC's context-similarity approach: embed the focus task once,
@@ -1860,7 +2392,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             session_key,
             lexical_shadow,
             embedding: text_embedding,
-            image_embedding: vec![0.0; DEFAULT_IMAGE_EMBEDDING_DIM],
+            image_embedding,
             screenshot_path: None,
             url: url.clone(),
             snippet_embedding,
@@ -2773,7 +3305,8 @@ pub(crate) async fn merge_memory_records_with_policy(
         &incoming.insight_context_thread,
         &existing.insight_context_thread,
     );
-    let insight_spans_json = prefer_non_empty(&incoming.insight_spans_json, &existing.insight_spans_json);
+    let insight_spans_json =
+        prefer_non_empty(&incoming.insight_spans_json, &existing.insight_spans_json);
     let insight_card_confidence = existing
         .insight_card_confidence
         .max(incoming.insight_card_confidence);
@@ -4138,5 +4671,244 @@ mod tests {
             &cfg,
         );
         assert!(context.chars().count() <= cfg.memory_context_max_chars as usize);
+    }
+
+    // ── Narrative-first composer ──────────────────────────────────────────
+
+    #[test]
+    fn durable_memory_context_leads_with_narrative_and_drops_topic_when_covered() {
+        let extraction = StructuredMemoryExtraction {
+            user_intent: "researching".to_string(),
+            topic: "memory synthesis".to_string(),
+            activity_type: "researching".to_string(),
+            memory_context:
+                "Continued the memory synthesis investigation, comparing two ranking strategies."
+                    .to_string(),
+            ..Default::default()
+        };
+        let cfg = durable_context_config(80, 1800);
+        let context = build_durable_memory_context(
+            Some(&extraction),
+            "GenericEditor",
+            "research-doc.md",
+            "evidence body",
+            "Reviewed design doc.",
+            None,
+            None,
+            &[],
+            &cfg,
+        );
+        let head_line = context.lines().next().unwrap_or("");
+        assert!(
+            head_line.starts_with("Continued the memory synthesis"),
+            "narrative should lead, got: {head_line:?}"
+        );
+        // Topic tokens ("memory", "synthesis") already appear in the narrative,
+        // so the explicit Topic: line must be suppressed.
+        assert!(
+            !context.contains("Topic: memory synthesis"),
+            "Topic: line must be dropped when narrative covers it; got: {context}"
+        );
+        // And the robotic "You were ..."/"Activity: ..." preamble must not fire
+        // when a narrative is present.
+        assert!(!context.contains("You were "));
+        assert!(!context.contains("Activity: "));
+    }
+
+    #[test]
+    fn durable_memory_context_appends_topic_when_narrative_lacks_it() {
+        let extraction = StructuredMemoryExtraction {
+            topic: "ranking quality".to_string(),
+            memory_context: "Focused on chart styling improvements for the dashboard.".to_string(),
+            ..Default::default()
+        };
+        let cfg = durable_context_config(80, 1800);
+        let context = build_durable_memory_context(
+            Some(&extraction),
+            "GenericEditor",
+            "doc",
+            "evidence body",
+            "Reviewed design doc.",
+            None,
+            None,
+            &[],
+            &cfg,
+        );
+        assert!(
+            context.contains("Topic: ranking quality"),
+            "Topic should be appended when narrative omits the topic tokens; got: {context}"
+        );
+    }
+
+    #[test]
+    fn validate_structured_memory_extraction_clears_pipe_delimited_activity_type() {
+        let mut extraction = StructuredMemoryExtraction {
+            confidence: 0.42,
+            activity_type: "coding|debugging|reviewing_agent_output|researching|planning|writing"
+                .to_string(),
+            topic: "valid topic".to_string(),
+            ..Default::default()
+        };
+        let (_grounding, issues) = validate_structured_memory_extraction(
+            &mut extraction,
+            "Chrome",
+            "title",
+            "valid topic appeared in evidence",
+        );
+        assert!(extraction.activity_type.is_empty());
+        assert!(
+            issues
+                .iter()
+                .any(|i| i == "activity_type_multi_option_dump"),
+            "expected activity_type_multi_option_dump in issues: {issues:?}"
+        );
+    }
+
+    #[test]
+    fn validate_structured_memory_extraction_clears_pipe_delimited_topic_and_workflow() {
+        let mut extraction = StructuredMemoryExtraction {
+            confidence: 0.5,
+            topic: "topic|alternative".to_string(),
+            workflow: "wf_a|wf_b".to_string(),
+            user_intent: "intent|other".to_string(),
+            ..Default::default()
+        };
+        let (_, issues) =
+            validate_structured_memory_extraction(&mut extraction, "App", "Title", "Evidence body");
+        assert!(extraction.topic.is_empty());
+        assert!(extraction.workflow.is_empty());
+        assert!(extraction.user_intent.is_empty());
+        assert!(issues.iter().any(|i| i == "topic_multi_option_dump"));
+        assert!(issues.iter().any(|i| i == "workflow_multi_option_dump"));
+        assert!(issues.iter().any(|i| i == "user_intent_multi_option_dump"));
+    }
+
+    #[test]
+    fn narrative_mentions_detects_majority_overlap() {
+        assert!(narrative_mentions(
+            Some("The memory synthesis pipeline keeps cards short."),
+            "memory synthesis pipeline",
+        ));
+        assert!(!narrative_mentions(
+            Some("Browsed unrelated news articles."),
+            "memory synthesis pipeline",
+        ));
+        assert!(!narrative_mentions(None, "any topic"));
+    }
+
+    // ── VisualNoveltyTracker ──────────────────────────────────────────────
+
+    fn synth_vec(seed: usize, dim: usize) -> Vec<f32> {
+        // Deterministic, non-zero, mostly-orthogonal-ish across seeds. Not
+        // normalized — `cosine_similarity` already handles arbitrary norms.
+        (0..dim)
+            .map(|i| (((seed * 31 + i * 7) % 17) as f32 - 8.0) / 8.0)
+            .collect()
+    }
+
+    #[test]
+    fn visual_novelty_tracker_admits_first_frame_when_ring_is_empty() {
+        let tracker = VisualNoveltyTracker::default();
+        let v = synth_vec(1, 32);
+        assert!((tracker.novelty(&v) - 1.0).abs() < 1e-6);
+        let t0 = tracker.adaptive_threshold(0.30, 0.05, 0.85);
+        assert!((t0 - 0.30).abs() < 1e-6, "first threshold = base");
+    }
+
+    #[test]
+    fn visual_novelty_tracker_rejects_near_duplicate_after_admit() {
+        let mut tracker = VisualNoveltyTracker::default();
+        tracker.reset_for("session-a");
+        let v = synth_vec(7, 32);
+        tracker.admit(v.clone(), 16);
+        // Same vector → cosine ~1.0 → novelty ~0.0, well below 0.30 base.
+        let novelty = tracker.novelty(&v);
+        assert!(
+            novelty < 0.05,
+            "near-duplicate should produce ~0 novelty, got {novelty}"
+        );
+    }
+
+    #[test]
+    fn visual_novelty_tracker_adaptive_threshold_rises_with_admits() {
+        let mut tracker = VisualNoveltyTracker::default();
+        tracker.reset_for("session-x");
+        for i in 0..5 {
+            tracker.admit(synth_vec(100 + i, 32), 16);
+        }
+        let t5 = tracker.adaptive_threshold(0.30, 0.05, 0.85);
+        assert!((t5 - 0.55).abs() < 1e-6, "0.30 + 5*0.05 = 0.55, got {t5}");
+        // Ceiling caps the threshold.
+        for i in 0..20 {
+            tracker.admit(synth_vec(500 + i, 32), 16);
+        }
+        let t_capped = tracker.adaptive_threshold(0.30, 0.05, 0.85);
+        assert!(t_capped <= 0.85 + 1e-6);
+    }
+
+    #[test]
+    fn visual_novelty_tracker_resets_on_session_change() {
+        let mut tracker = VisualNoveltyTracker::default();
+        tracker.reset_for("session-a");
+        tracker.admit(synth_vec(1, 32), 16);
+        tracker.admit(synth_vec(2, 32), 16);
+        assert_eq!(tracker.admitted, 2);
+        tracker.reset_for("session-b");
+        assert_eq!(tracker.admitted, 0);
+        assert!(tracker.recent.is_empty());
+    }
+
+    #[test]
+    fn visual_novelty_tracker_respects_ring_capacity() {
+        let mut tracker = VisualNoveltyTracker::default();
+        tracker.reset_for("ring-test");
+        for i in 0..10 {
+            tracker.admit(synth_vec(i, 32), 4);
+        }
+        assert_eq!(tracker.recent.len(), 4, "ring should be capped at 4");
+        assert_eq!(tracker.admitted, 10);
+    }
+
+    #[test]
+    fn image_import_source_screen_capture_has_distinct_labels() {
+        use crate::inference::ImageImportSource;
+        assert_eq!(
+            ImageImportSource::ScreenCapture.api_label(),
+            "screen_capture_visual"
+        );
+        assert_eq!(
+            ImageImportSource::ScreenCapture.header_label(),
+            "Screen capture (visual)"
+        );
+    }
+
+    #[test]
+    fn compose_visual_capture_screen_capture_leads_with_screen_capture_header() {
+        use crate::inference::{
+            compose_import_memory_context, ImageImportSource, ImageSemanticInsight,
+        };
+        let insight = ImageSemanticInsight {
+            summary_short: "User watching a cricket match overlay.".to_string(),
+            summary_detailed:
+                "Browser window playing a livestream with scoreboard and play-by-play.".to_string(),
+            scene_type: "livestream".to_string(),
+            topics: vec!["cricket livestream".to_string()],
+            ..Default::default()
+        };
+        let composed = compose_import_memory_context(
+            "GoogleChrome_1.png",
+            &insight,
+            None,
+            ImageImportSource::ScreenCapture,
+        );
+        assert!(
+            composed
+                .memory_context
+                .starts_with("Screen capture (visual):"),
+            "expected screen-capture header, got: {}",
+            composed.memory_context
+        );
+        // Narrative content from the VLM must appear right after the header.
+        assert!(composed.memory_context.contains("livestream"));
     }
 }

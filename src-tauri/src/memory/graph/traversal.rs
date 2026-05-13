@@ -238,7 +238,10 @@ mod tests {
     fn bfs_respects_depth() {
         let sub = GraphSubgraph {
             nodes: vec![n(1, "a"), n(2, "b"), n(3, "c")],
-            edges: vec![e(1, 2, GraphEdgeType::SimilarTo, 0.9), e(2, 3, GraphEdgeType::SimilarTo, 0.9)],
+            edges: vec![
+                e(1, 2, GraphEdgeType::SimilarTo, 0.9),
+                e(2, 3, GraphEdgeType::SimilarTo, 0.9),
+            ],
             ..Default::default()
         };
         let nb = bfs_neighborhood(&sub, uuid::Uuid::from_u128(1), 1);
@@ -255,11 +258,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let p = find_path(
-            &sub,
-            uuid::Uuid::from_u128(1),
-            uuid::Uuid::from_u128(3),
-        );
+        let p = find_path(&sub, uuid::Uuid::from_u128(1), uuid::Uuid::from_u128(3));
         assert!(p.is_some());
     }
 

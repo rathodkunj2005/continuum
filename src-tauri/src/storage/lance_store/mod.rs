@@ -35,7 +35,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-
 pub const MEMORIES_TABLE: &str = "memories";
 pub const TASKS_TABLE: &str = "tasks";
 pub const MEETINGS_TABLE: &str = "meetings";
@@ -124,17 +123,15 @@ pub struct Store {
     pub(crate) graph_edges_table: Table,
 }
 
-
-
-mod text_kw;
-mod schemas;
 mod arrow_and_filters;
 mod normalize_embed_migrate;
+mod schemas;
+mod text_kw;
 
-use text_kw::*;
-use schemas::*;
 use arrow_and_filters::*;
 use normalize_embed_migrate::*;
+use schemas::*;
+use text_kw::*;
 
 pub use normalize_embed_migrate::{
     compose_embedding_text, generate_search_aliases_public, normalize_record_for_index,
@@ -407,10 +404,7 @@ impl Store {
         Ok(None)
     }
 
-    pub async fn upsert_knowledge_pages(
-        &self,
-        pages: &[KnowledgePage],
-    ) -> Result<(), String> {
+    pub async fn upsert_knowledge_pages(&self, pages: &[KnowledgePage]) -> Result<(), String> {
         if pages.is_empty() {
             return Ok(());
         }
@@ -1089,6 +1083,77 @@ impl Store {
             results.extend(batch_to_search_results(batch));
         }
         Ok(dedup_search_results(results, limit))
+    }
+
+    /// ANN search over the `image_embedding` column (CLIP 512-d vision tower).
+    ///
+    /// Used by the image-to-image retrieval surface; cross-modal text->image
+    /// queries are intentionally out of scope here (would need a CLIP text
+    /// tower and a separate privacy review per ADR-004).
+    pub async fn image_vector_search(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+        time_filter: Option<&str>,
+        app_filter: Option<&str>,
+    ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+        let filter = build_filter(time_filter, app_filter);
+        let query_vec: Vec<f32> = query_embedding.to_vec();
+        let base_limit = limit.max(1);
+        let retrieval_limit = if base_limit >= 300 {
+            base_limit
+        } else {
+            base_limit.saturating_mul(VECTOR_QUERY_MULTIPLIER).min(300)
+        };
+
+        let mut vq = self
+            .table
+            .vector_search(query_vec)?
+            .column("image_embedding")
+            .limit(retrieval_limit);
+
+        if let Some(f) = filter {
+            vq = vq.only_if(f);
+        }
+
+        let batches: Vec<RecordBatch> = vq.execute().await?.try_collect().await?;
+        let mut results = Vec::new();
+        for batch in &batches {
+            results.extend(batch_to_search_results(batch));
+        }
+        Ok(dedup_search_results(results, limit))
+    }
+
+    /// Image-to-image similarity from a seed memory id.
+    ///
+    /// Returns an empty Vec when the seed is missing or carries the legacy
+    /// zero image vector (older captures that predated CLIP wiring, or rows
+    /// where CLIP failed at capture time). The seed itself is filtered out
+    /// of the result list so callers always get neighbors only.
+    pub async fn similar_by_image_embedding(
+        &self,
+        seed_memory_id: &str,
+        limit: usize,
+        time_filter: Option<&str>,
+        app_filter: Option<&str>,
+    ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+        let Some(seed) = self.get_memory_by_id(seed_memory_id).await? else {
+            return Ok(Vec::new());
+        };
+        if seed.image_embedding.iter().all(|v| *v == 0.0) {
+            return Ok(Vec::new());
+        }
+        let mut hits = self
+            .image_vector_search(
+                &seed.image_embedding,
+                limit.saturating_add(1),
+                time_filter,
+                app_filter,
+            )
+            .await?;
+        hits.retain(|r| r.id != seed_memory_id);
+        hits.truncate(limit);
+        Ok(hits)
     }
 
     async fn insert_memory_batch(

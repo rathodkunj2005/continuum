@@ -453,10 +453,7 @@ impl HybridSearcher {
             elapsed_ms = started.elapsed().as_millis(),
             "hybrid_search:branches_complete"
         );
-        runtime_metrics::record_ms(
-            "hybrid.semantic_ms",
-            semantic_elapsed.as_millis() as u64,
-        );
+        runtime_metrics::record_ms("hybrid.semantic_ms", semantic_elapsed.as_millis() as u64);
         runtime_metrics::record_ms("hybrid.snippet_ms", snippet_elapsed.as_millis() as u64);
         runtime_metrics::record_ms("hybrid.keyword_ms", keyword_elapsed.as_millis() as u64);
         if semantic_timed_out {
@@ -482,10 +479,7 @@ impl HybridSearcher {
             elapsed_ms = started.elapsed().as_millis(),
             "hybrid_search:complete"
         );
-        runtime_metrics::record_ms(
-            "hybrid.total_ms",
-            started.elapsed().as_millis() as u64,
-        );
+        runtime_metrics::record_ms("hybrid.total_ms", started.elapsed().as_millis() as u64);
 
         Ok(reranked)
     }

@@ -2744,8 +2744,11 @@ async fn run_memory_warm_start(
     let claim_pages = filter_pages_by_type(&pages, crate::storage::KnowledgePageType::ClaimPage, 8);
     let decision_pages =
         filter_pages_by_type(&pages, crate::storage::KnowledgePageType::DecisionPage, 8);
-    let breakthrough_pages =
-        filter_pages_by_type(&pages, crate::storage::KnowledgePageType::BreakthroughPage, 8);
+    let breakthrough_pages = filter_pages_by_type(
+        &pages,
+        crate::storage::KnowledgePageType::BreakthroughPage,
+        8,
+    );
 
     let pack = context_runtime::build_context_pack(
         app_state.as_ref(),
@@ -2817,8 +2820,11 @@ async fn run_memory_agent_onboarding(
         filter_pages_by_type(&pages, crate::storage::KnowledgePageType::ProjectPage, 8);
     let decision_pages =
         filter_pages_by_type(&pages, crate::storage::KnowledgePageType::DecisionPage, 8);
-    let breakthrough_pages =
-        filter_pages_by_type(&pages, crate::storage::KnowledgePageType::BreakthroughPage, 8);
+    let breakthrough_pages = filter_pages_by_type(
+        &pages,
+        crate::storage::KnowledgePageType::BreakthroughPage,
+        8,
+    );
     let contradiction_pages = filter_pages_by_type(
         &pages,
         crate::storage::KnowledgePageType::ContradictionPage,
@@ -3727,7 +3733,9 @@ async fn fetch_results_in_range(
     Ok(rows)
 }
 
-fn dedupe_results_by_id(rows: Vec<crate::storage::SearchResult>) -> Vec<crate::storage::SearchResult> {
+fn dedupe_results_by_id(
+    rows: Vec<crate::storage::SearchResult>,
+) -> Vec<crate::storage::SearchResult> {
     let mut seen = HashSet::new();
     let mut deduped = Vec::new();
     for row in rows {
@@ -4429,7 +4437,10 @@ mod tests {
             ..Default::default()
         };
         let v = super::knowledge_page_to_json(&page);
-        assert_eq!(v.get("payload_schema_version").and_then(|x| x.as_u64()), Some(1));
+        assert_eq!(
+            v.get("payload_schema_version").and_then(|x| x.as_u64()),
+            Some(1)
+        );
         assert!(v.get("page_id").is_some());
         assert!(v.get("stability").is_some());
     }

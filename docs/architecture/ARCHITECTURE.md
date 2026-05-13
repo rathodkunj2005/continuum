@@ -56,4 +56,4 @@ Pipeline knobs live in `src-tauri/src/config.rs` rather than scattered literals:
 
 ## Stable vs Experimental
 
-The stable search path is OCR text plus local text embeddings. Visual semantic search, meeting diarization, external graph services, and autonomous agent surfaces are treated as adjacent or experimental features unless wired through the core path above.
+The stable search path is OCR text plus local text embeddings. Screen captures and imported photos additionally write a 512-d CLIP `image_embedding`, exposed through `find_visually_similar_memories` for image-to-image retrieval over the same LanceDB column. Cross-modal text->image retrieval, meeting diarization, external graph services, and autonomous agent surfaces remain adjacent or experimental features unless wired through the core path above.

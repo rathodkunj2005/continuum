@@ -507,6 +507,35 @@ pub async fn search_raw_results(
     search(state, query, time_filter, app_filter, limit).await
 }
 
+/// Image-to-image retrieval: given a seed memory id, return the most visually
+/// similar stored memories by cosine over the CLIP `image_embedding` column.
+///
+/// Returns an empty list when the seed is unknown or carries the legacy
+/// zero image vector (older captures from before CLIP was wired into the
+/// screen-capture loop, or rows where CLIP failed at capture time). Cross-modal
+/// text->image retrieval is intentionally not exposed here pending an explicit
+/// privacy review (see ADR-004 / ADR-005).
+#[tauri::command]
+pub async fn find_visually_similar_memories(
+    state: State<'_, Arc<AppState>>,
+    seed_memory_id: String,
+    limit: Option<usize>,
+    time_filter: Option<String>,
+    app_filter: Option<String>,
+) -> Result<Vec<SearchResult>, String> {
+    let clamped = limit.unwrap_or(8).clamp(1, 50);
+    state
+        .store
+        .similar_by_image_embedding(
+            &seed_memory_id,
+            clamped,
+            time_filter.as_deref(),
+            app_filter.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Summarize search results using AI
 #[tauri::command]
 pub async fn summarize_search(

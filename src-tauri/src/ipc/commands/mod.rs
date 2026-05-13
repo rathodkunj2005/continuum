@@ -49,7 +49,8 @@ mod daily_summary_tests {
     use crate::storage::{MemoryRecord, SearchResult};
 
     use super::autofill::{
-        extract_candidates_from_result, field_aliases, needs_autofill_confirmation, AutofillCandidate,
+        extract_candidates_from_result, field_aliases, needs_autofill_confirmation,
+        AutofillCandidate,
     };
     use super::quality::classify_storage_outcome_with_config;
     use super::search::memory_card_from_result;

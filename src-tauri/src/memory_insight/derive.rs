@@ -38,7 +38,12 @@ pub fn derive_insight_for_record(record: &mut MemoryRecord) {
         what = format!("Activity related to {}.", record.topic);
     }
     if what.len() > 280 {
-        what = what.chars().take(280).collect::<String>().trim().to_string();
+        what = what
+            .chars()
+            .take(280)
+            .collect::<String>()
+            .trim()
+            .to_string();
     }
     record.insight_what_happened = what;
 
@@ -68,8 +73,20 @@ pub fn derive_insight_for_record(record: &mut MemoryRecord) {
 
     // --- what_changed ---
     let mut changed: Vec<String> = Vec::new();
-    changed.extend(record.next_steps.iter().cloned().filter(|s| !s.trim().is_empty()));
-    changed.extend(record.files_touched.iter().cloned().filter(|s| !s.trim().is_empty()));
+    changed.extend(
+        record
+            .next_steps
+            .iter()
+            .cloned()
+            .filter(|s| !s.trim().is_empty()),
+    );
+    changed.extend(
+        record
+            .files_touched
+            .iter()
+            .cloned()
+            .filter(|s| !s.trim().is_empty()),
+    );
     let joined = changed.join("; ");
     record.insight_what_changed = if joined.is_empty() {
         String::new()
@@ -79,23 +96,21 @@ pub fn derive_insight_for_record(record: &mut MemoryRecord) {
 
     // --- context_thread (only when we have real links; avoid fabrication) ---
     if !record.related_memory_ids.is_empty() {
-        record.insight_context_thread = format!(
-            "{} linked memories",
-            record.related_memory_ids.len()
-        );
+        record.insight_context_thread =
+            format!("{} linked memories", record.related_memory_ids.len());
     } else if !record.session_id.trim().is_empty() {
-        let short = record
-            .session_id
-            .chars()
-            .take(8)
-            .collect::<String>();
+        let short = record.session_id.chars().take(8).collect::<String>();
         record.insight_context_thread = format!("session …{short}");
     }
 
     let pollution = pollution_for_insight(record);
-    let salience = spans.first().map(|s| s.score).unwrap_or(0.0).clamp(0.0, 1.0);
-    record.insight_card_confidence = (salience * (1.0 - pollution) * record.ocr_confidence.clamp(0.0, 1.0))
+    let salience = spans
+        .first()
+        .map(|s| s.score)
+        .unwrap_or(0.0)
         .clamp(0.0, 1.0);
+    record.insight_card_confidence =
+        (salience * (1.0 - pollution) * record.ocr_confidence.clamp(0.0, 1.0)).clamp(0.0, 1.0);
 
     record.insight_spans_json = serde_json::json!({
         "top": top.iter().map(|s| serde_json::json!({"text": s.text, "score": s.score})).collect::<Vec<_>>(),

@@ -6,7 +6,9 @@ use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
 
-use crate::memory::graph::clusters::{attach_louvain_metadata, cluster_0_display_name, louvain_partition};
+use crate::memory::graph::clusters::{
+    attach_louvain_metadata, cluster_0_display_name, louvain_partition,
+};
 use crate::memory::graph::schema::{GraphNode, GraphSubgraph};
 use crate::memory::graph::traversal::{find_path, god_nodes};
 use crate::storage::graph_store::GraphStore;
@@ -83,10 +85,12 @@ pub async fn find_graph_path(
         edges,
         ..Default::default()
     };
-    Ok(find_path(&sub, from, to).map(|(nodes, avg_confidence)| GraphPathDto {
-        nodes,
-        avg_confidence,
-    }))
+    Ok(
+        find_path(&sub, from, to).map(|(nodes, avg_confidence)| GraphPathDto {
+            nodes,
+            avg_confidence,
+        }),
+    )
 }
 
 #[derive(Debug, Clone, Serialize)]

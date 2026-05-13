@@ -931,7 +931,9 @@ pub async fn run_memory_retrieval_eval(
 
     for case in cases {
         let query_ctx = QueryContext::from_query(&case.query);
-        let hits = super::search::run_search_query(state.inner().as_ref(), &case.query, None, None, 5).await?;
+        let hits =
+            super::search::run_search_query(state.inner().as_ref(), &case.query, None, None, 5)
+                .await?;
         let top_1_relevant = hits
             .first()
             .map(|hit| result_relevant_for_query(hit, &query_ctx))

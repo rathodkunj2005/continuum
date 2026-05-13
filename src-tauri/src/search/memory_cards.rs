@@ -767,8 +767,11 @@ fn fallback_card_for_result(query: &str, result: &SearchResult) -> MemoryCard {
         result.internal_context.clone()
     };
     let continuation_of = parse_continuation_of(&anchor_memory_context);
-    let reopen_target =
-        parse_reopen_target(&anchor_memory_context, result.url.as_deref(), &files_touched);
+    let reopen_target = parse_reopen_target(
+        &anchor_memory_context,
+        result.url.as_deref(),
+        &files_touched,
+    );
     MemoryCard {
         id: result.id.clone(),
         title,

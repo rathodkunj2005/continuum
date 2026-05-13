@@ -9,6 +9,4 @@ pub mod traversal;
 
 mod legacy;
 
-pub use legacy::{
-    compress_node_label, GraphStore, MemoryCard, MemoryReconstruction,
-};
+pub use legacy::{compress_node_label, GraphStore, MemoryCard, MemoryReconstruction};

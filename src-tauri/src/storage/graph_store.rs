@@ -16,11 +16,11 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::table::AddDataMode;
 use uuid::Uuid;
 
+use super::Store;
 use crate::config::DEFAULT_TEXT_EMBEDDING_DIM;
 use crate::memory::graph::schema::{
     GraphEdge, GraphEdgeType, GraphNode, GraphNodeType, GraphSubgraph,
 };
-use super::Store;
 
 fn escape_sql_literal(s: &str) -> String {
     s.replace('\'', "''")
@@ -142,7 +142,11 @@ fn nodes_to_batch(nodes: &[GraphNode]) -> Result<RecordBatch, Box<dyn std::error
         label.append_value(&node.label);
         confidence.append_value(node.confidence);
         source_ids.append_value(serde_json::to_string(&node.source_memory_ids)?);
-        let emb = node.embedding.as_ref().cloned().unwrap_or_else(zero_embedding);
+        let emb = node
+            .embedding
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(zero_embedding);
         for v in emb.iter().take(DEFAULT_TEXT_EMBEDDING_DIM) {
             emb_b.values().append_value(*v);
         }
@@ -499,7 +503,9 @@ impl GraphStore {
             edges,
             ..Default::default()
         };
-        Ok(crate::memory::graph::traversal::bfs_neighborhood(&sub, start, depth))
+        Ok(crate::memory::graph::traversal::bfs_neighborhood(
+            &sub, start, depth,
+        ))
     }
 
     pub async fn get_project_subgraph(
@@ -555,17 +561,19 @@ impl GraphStore {
         if query_embedding.len() != DEFAULT_TEXT_EMBEDDING_DIM {
             return Err("embedding dim mismatch".into());
         }
-        let q = self
-            .store
-            .graph_nodes_table
-            .query();
+        let q = self.store.graph_nodes_table.query();
         let batches = q.execute().await?.try_collect::<Vec<_>>().await?;
         let mut nodes = Vec::new();
         for b in batches {
             nodes.extend(batch_to_nodes(&b)?);
         }
         let mut scored: Vec<(f32, GraphNode)> = Vec::new();
-        let qn: f32 = query_embedding.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-6);
+        let qn: f32 = query_embedding
+            .iter()
+            .map(|x| x * x)
+            .sum::<f32>()
+            .sqrt()
+            .max(1e-6);
         for mut n in nodes {
             let emb = n.embedding.take().unwrap_or_else(zero_embedding);
             if emb.len() != query_embedding.len() {
@@ -612,7 +620,10 @@ impl GraphStore {
         Ok(None)
     }
 
-    pub async fn mark_stale(&self, older_than_days: i64) -> Result<usize, Box<dyn std::error::Error>> {
+    pub async fn mark_stale(
+        &self,
+        older_than_days: i64,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
         let cutoff = Utc::now().timestamp_millis() - older_than_days * 86_400_000;
         let mut nodes = self.all_nodes().await?;
         let mut n_stale = 0usize;
@@ -679,7 +690,10 @@ mod tests {
         n2.confidence = 0.5;
         n2.source_memory_ids = vec!["m1".into(), "m2".into()];
         gs.upsert_node(&n2).await.unwrap();
-        let got = gs.get_node_by_label("Alpha topic", GraphNodeType::Concept).await.unwrap();
+        let got = gs
+            .get_node_by_label("Alpha topic", GraphNodeType::Concept)
+            .await
+            .unwrap();
         assert!(got.is_some());
         assert_eq!(got.unwrap().confidence, 0.5);
     }
@@ -737,7 +751,11 @@ mod tests {
         gs.upsert_node(&n).await.unwrap();
         let n_marked = gs.mark_stale(30).await.unwrap();
         assert!(n_marked >= 1);
-        let got = gs.get_node_by_label(&n.label, GraphNodeType::File).await.unwrap().unwrap();
+        let got = gs
+            .get_node_by_label(&n.label, GraphNodeType::File)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(got.stale);
     }
 }

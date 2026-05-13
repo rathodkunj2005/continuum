@@ -32,7 +32,17 @@ fn charging_or_battery_above(min_fraction: f32) -> bool {
     }
     if let Some(idx) = text.find('%') {
         let slice = &text[..idx];
-        if let Some(digits) = slice.chars().rev().take_while(|c| c.is_ascii_digit()).collect::<String>().chars().rev().collect::<String>().parse::<u32>().ok() {
+        if let Some(digits) = slice
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
+            .parse::<u32>()
+            .ok()
+        {
             return (digits as f32 / 100.0) >= min_fraction;
         }
     }

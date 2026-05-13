@@ -1,7 +1,13 @@
-//! CLIP ViT-B/32 vision tower (ONNX) for imported photos — 512-d `image_embedding`.
+//! CLIP ViT-B/32 vision tower (ONNX) — 512-d `image_embedding` for any RGB image.
 //!
-//! Default weights: Xenova `onnx/vision_model_q4.onnx` (placed next to BGE assets).
-//! Override with `FNDR_CLIP_VISION_ONNX` (absolute path to any compatible vision ONNX).
+//! Consumers:
+//!   - Imported photos (`ipc::commands::glasses_import`)
+//!   - Screen captures (`capture::run_capture_loop`)
+//!
+//! The session is loaded lazily on first call and shared process-wide via a
+//! mutex-guarded `OnceLock`. Default weights: Xenova `onnx/vision_model_q4.onnx`
+//! (placed next to BGE assets). Override with `FNDR_CLIP_VISION_ONNX` (absolute
+//! path to any compatible vision ONNX).
 
 use crate::config::DEFAULT_IMAGE_EMBEDDING_DIM;
 use image::imageops::FilterType;
@@ -48,7 +54,12 @@ impl ClipVisionSession {
         let session = Session::builder()
             .map_err(|e| format!("CLIP ort builder: {e}"))?
             .commit_from_file(&onnx_path)
-            .map_err(|e| format!("Failed to load CLIP vision ONNX {}: {e}", onnx_path.display()))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to load CLIP vision ONNX {}: {e}",
+                    onnx_path.display()
+                )
+            })?;
         tracing::info!(
             model = %onnx_path.display(),
             "CLIP vision ONNX session ready"
@@ -170,7 +181,8 @@ fn l2_normalize(v: &mut [f32]) {
     }
 }
 
-/// Lazy-load CLIP once per process; thread-safe.
+/// Lazy-load CLIP once per process; thread-safe. Content-agnostic — used for
+/// both imported photos and screen captures.
 pub fn embed_imported_image(dynamic: &DynamicImage, models_dir: &Path) -> Result<Vec<f32>, String> {
     let mut guard = clip_cell().lock();
     if guard.is_none() {
@@ -192,5 +204,62 @@ mod tests {
         let img = DynamicImage::ImageRgb8(image::RgbImage::new(32, 32));
         let t = clip_preprocess(&img).expect("preprocess");
         assert_eq!(t.shape(), [1, 3, CLIP_SIZE as usize, CLIP_SIZE as usize]);
+    }
+
+    /// Resolve the on-disk CLIP weights the same way `embed_imported_image` does
+    /// at runtime: honor `FNDR_CLIP_VISION_ONNX`, otherwise look in the standard
+    /// macOS app-data models directory.
+    fn try_resolve_clip_for_test() -> Option<PathBuf> {
+        if let Ok(p) = std::env::var("FNDR_CLIP_VISION_ONNX") {
+            let path = PathBuf::from(p);
+            if path.is_file() {
+                return path.parent().map(|p| p.to_path_buf());
+            }
+        }
+        let home = std::env::var("HOME").ok()?;
+        let dir = PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("com.fndr.app")
+            .join("models");
+        if dir.join(CLIP_VISION_ONNX_FILENAME).is_file() {
+            Some(dir)
+        } else {
+            None
+        }
+    }
+
+    /// Exercises the full `embed_imported_image` path against the on-disk CLIP
+    /// weights. Marked `#[ignore]` so CI does not require the ~64 MB ONNX file;
+    /// run locally with:
+    ///     `cargo test -p fndr embedding::clip_vision -- --ignored`.
+    #[test]
+    #[ignore]
+    fn embed_imported_image_produces_unit_norm_512d() {
+        let Some(models_dir) = try_resolve_clip_for_test() else {
+            eprintln!("CLIP weights not present; skipping");
+            return;
+        };
+        // Use a non-uniform synthetic image so the network has actual content
+        // (an all-black tensor would still produce a valid vector, but a
+        // diagonal gradient gives us something visually meaningful).
+        let mut img = image::RgbImage::new(100, 100);
+        for (x, y, pixel) in img.enumerate_pixels_mut() {
+            *pixel = image::Rgb([
+                (x as u8).wrapping_mul(2),
+                (y as u8).wrapping_mul(3),
+                ((x ^ y) as u8).wrapping_mul(5),
+            ]);
+        }
+        let dynamic = DynamicImage::ImageRgb8(img);
+
+        let vec = embed_imported_image(&dynamic, &models_dir).expect("embed");
+        assert_eq!(vec.len(), DEFAULT_IMAGE_EMBEDDING_DIM, "vector dimension");
+
+        let norm = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!(
+            (norm - 1.0).abs() < 0.01,
+            "expected unit-norm vector, got norm={norm}"
+        );
     }
 }

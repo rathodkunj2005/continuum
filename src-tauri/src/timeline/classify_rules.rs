@@ -8,8 +8,7 @@ pub const MEETING_URL_FRAGMENTS: &[&str] = &["zoom", "meet.google"];
 pub const MEETING_TITLE_FRAGMENTS: &[&str] = &["zoom meeting", "zoom", "meet.google"];
 
 /// Mail / chat host fragments (lowercased URL).
-pub const COMMUNICATION_URL_FRAGMENTS: &[&str] =
-    &["mail.google", "slack.com", "discord.com"];
+pub const COMMUNICATION_URL_FRAGMENTS: &[&str] = &["mail.google", "slack.com", "discord.com"];
 
 /// Lowercased title/summary fragments for communication.
 pub const COMMUNICATION_TITLE_FRAGMENTS: &[&str] = &["inbox"];

@@ -665,6 +665,24 @@ export async function listMemoryCards(
     });
 }
 
+// Image-to-image retrieval over the CLIP `image_embedding` column. Returns
+// an empty list when the seed memory is unknown or pre-dates the CLIP wiring
+// (legacy zero image vector). Cross-modal text->image is intentionally NOT
+// supported here; the backend rejects it per ADR-004 / ADR-005.
+export async function findVisuallySimilarMemories(args: {
+    seedMemoryId: string;
+    limit?: number;
+    timeFilter?: string;
+    appFilter?: string;
+}): Promise<SearchResult[]> {
+    return invoke<SearchResult[]>("find_visually_similar_memories", {
+        seedMemoryId: args.seedMemoryId,
+        limit: args.limit,
+        timeFilter: args.timeFilter,
+        appFilter: args.appFilter,
+    });
+}
+
 export interface InsightGraphNode {
     id: string;
     node_type: string;

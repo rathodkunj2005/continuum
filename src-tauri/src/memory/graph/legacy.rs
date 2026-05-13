@@ -1,6 +1,8 @@
 use crate::embedding::Embedder;
 use crate::search::HybridSearcher;
-use crate::storage::{EdgeType, GraphEdge, GraphNode, MeetingSegment, MemoryRecord, NodeType, Store};
+use crate::storage::{
+    EdgeType, GraphEdge, GraphNode, MeetingSegment, MemoryRecord, NodeType, Store,
+};
 use crate::tasks::Task;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -507,24 +509,29 @@ fn trim_label(value: &str, max_chars: usize) -> String {
 /// Prefers `topic` when meaningful, falls back to the first salient span of
 /// `memory_context`, then to a trimmed snippet. The full memory_context is
 /// still carried in node metadata for retrieval/reopen.
+///
+/// When `topic` is empty/unknown and the `memory_context` first line still
+/// contains a `|` (a structured-field leak that escaped sanitization on
+/// older rows), we skip that line and look at the next non-toxic line. Same
+/// structural rule used elsewhere (`clear_if_multi_option`,
+/// `generate_search_aliases`): pipes never belong in human labels.
 pub fn compress_node_label(record: &MemoryRecord) -> String {
     let topic = record.topic.trim();
     if !topic.is_empty()
         && !topic.eq_ignore_ascii_case("unknown")
+        && !topic.contains('|')
         && topic.chars().count() <= 80
     {
         return topic.to_string();
     }
     let context = record.memory_context.trim();
     if !context.is_empty() {
-        let head = context
-            .split("\n\n")
-            .next()
-            .unwrap_or(context)
+        let first_block = context.split("\n\n").next().unwrap_or(context);
+        let head = first_block
             .lines()
-            .next()
-            .unwrap_or(context)
-            .trim();
+            .map(str::trim)
+            .find(|line| !line.is_empty() && !line.contains('|'))
+            .unwrap_or("");
         let words: Vec<&str> = head.split_whitespace().take(12).collect();
         if !words.is_empty() {
             let mut joined = words.join(" ");
@@ -742,14 +749,21 @@ mod compress_node_label_tests {
         r.topic = "unknown".to_string();
         // First 12 words must exceed 90 chars so `compress_node_label` adds "...".
         let chunk = "abcdefghij"; // 10 chars × 12 + 11 spaces > 90
-        let words: String = std::iter::repeat(chunk).take(12).collect::<Vec<_>>().join(" ");
+        let words: String = std::iter::repeat(chunk)
+            .take(12)
+            .collect::<Vec<_>>()
+            .join(" ");
         r.memory_context = format!("{words}\nmore");
         let label = compress_node_label(&r);
         assert!(
             label.ends_with("..."),
             "expected ellipsis truncation, got {label:?}"
         );
-        assert!(label.chars().count() <= 90, "label too long: {}", label.len());
+        assert!(
+            label.chars().count() <= 90,
+            "label too long: {}",
+            label.len()
+        );
     }
 
     #[test]
@@ -759,5 +773,36 @@ mod compress_node_label_tests {
         r.memory_context = String::new();
         r.snippet = "short".to_string();
         assert_eq!(compress_node_label(&r), "short");
+    }
+
+    #[test]
+    fn skips_pipe_toxic_first_line_in_memory_context() {
+        let mut r = MemoryRecord::default();
+        r.topic = "unknown".to_string();
+        r.memory_context =
+            "Activity: coding|debugging|reviewing_agent_output\nClean second line about \
+             screen capture work."
+                .to_string();
+        r.snippet = "fallback snippet".to_string();
+        let label = compress_node_label(&r);
+        assert!(
+            !label.contains('|'),
+            "label must not include pipe-toxic line: {label}"
+        );
+        assert!(
+            label.to_ascii_lowercase().contains("clean second line"),
+            "expected fallback to next clean line, got {label:?}"
+        );
+    }
+
+    #[test]
+    fn skips_pipe_in_topic_field_and_uses_context() {
+        let mut r = MemoryRecord::default();
+        r.topic = "topic|alternative".to_string();
+        r.memory_context = "Genuine narrative line about the work.".to_string();
+        r.snippet = "fallback".to_string();
+        let label = compress_node_label(&r);
+        assert!(!label.contains('|'));
+        assert!(label.to_ascii_lowercase().contains("genuine narrative"));
     }
 }

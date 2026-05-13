@@ -4,17 +4,17 @@
 #![recursion_limit = "512"]
 
 pub mod accessibility;
-pub mod ipc;
 pub mod capture;
 pub mod config;
 pub mod context_runtime;
 pub mod downloads;
 pub mod embedding;
-pub mod memory;
 pub mod http_util;
 pub mod inference;
+pub mod ipc;
 pub mod mcp;
 pub mod meeting;
+pub mod memory;
 pub mod memory_compaction;
 pub mod memory_insight;
 pub mod memory_quality;
@@ -25,15 +25,15 @@ pub mod search;
 pub mod speech;
 pub mod storage;
 pub mod summariser;
+pub mod system_resources;
 pub mod tasks;
 pub mod telemetry;
 pub mod timeline;
-pub mod system_resources;
 pub mod wiki;
 
 use config::Config;
-use memory::graph::GraphStore;
 use inference::{InferenceEngine, VlmEngine};
+use memory::graph::GraphStore;
 use parking_lot::{Mutex, RwLock};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -307,24 +307,20 @@ impl AppState {
 
 pub async fn load_ai_engines(app_data_dir: &Path, config: &Config) -> LoadedAiEngines {
     let preferred_model_id = models::inference_preferred_model_id(app_data_dir, config);
-    let inference = match InferenceEngine::new(
-        Some(app_data_dir.to_path_buf()),
-        preferred_model_id,
-    )
-    .await
-    {
-        Ok(engine) => {
-            tracing::info!(
-                "AI inference engine initialized successfully with {}",
-                engine.model_id()
-            );
-            Some(Arc::new(engine))
-        }
-        Err(err) => {
-            tracing::warn!("AI inference initialization failed: {}", err);
-            None
-        }
-    };
+    let inference =
+        match InferenceEngine::new(Some(app_data_dir.to_path_buf()), preferred_model_id).await {
+            Ok(engine) => {
+                tracing::info!(
+                    "AI inference engine initialized successfully with {}",
+                    engine.model_id()
+                );
+                Some(Arc::new(engine))
+            }
+            Err(err) => {
+                tracing::warn!("AI inference initialization failed: {}", err);
+                None
+            }
+        };
 
     tracing::info!(
         "Skipping eager VLM warm-up; VLM loads on demand (Settings tier: {}).",

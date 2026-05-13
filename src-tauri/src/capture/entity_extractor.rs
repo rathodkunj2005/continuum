@@ -1,8 +1,6 @@
 //! Deterministic entity extraction from **finalized** memory fields only (no raw OCR, no Lance).
 
-use crate::memory::graph::schema::{
-    GraphEdge, GraphEdgeType, GraphNode, GraphNodeType,
-};
+use crate::memory::graph::schema::{GraphEdge, GraphEdgeType, GraphNode, GraphNodeType};
 use crate::storage::MemoryRecord;
 use chrono::Utc;
 use std::collections::HashSet;
@@ -22,13 +20,17 @@ pub struct ExtractionResult {
 }
 
 fn norm_label(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string()
 }
 
 fn is_stop_phrase(lower: &str) -> bool {
     const STOPS: &[&str] = &[
-        "the", "and", "for", "with", "from", "this", "that", "unknown", "none", "n/a",
-        "untitled", "page", "window", "document", "loading", "error", "home", "search",
+        "the", "and", "for", "with", "from", "this", "that", "unknown", "none", "n/a", "untitled",
+        "page", "window", "document", "loading", "error", "home", "search",
     ];
     STOPS.iter().any(|w| *w == lower)
 }
@@ -252,7 +254,14 @@ pub fn extract(record: &MemoryRecord) -> ExtractionResult {
         first_id(&nodes, GraphNodeType::Session),
         first_id(&nodes, GraphNodeType::Concept),
     ) {
-        push_edge(&mut edges, s, c, GraphEdgeType::MentionedIn, base * 0.7, false);
+        push_edge(
+            &mut edges,
+            s,
+            c,
+            GraphEdgeType::MentionedIn,
+            base * 0.7,
+            false,
+        );
     }
     if let (Some(proj), Some(u)) = (
         first_id(&nodes, GraphNodeType::Project),
@@ -338,9 +347,15 @@ mod tests {
         r.decisions = vec!["Ship dark mode first".into()];
         r.errors = vec!["Flaky integration test".into()];
         let ex = extract(&r);
-        assert!(ex.nodes.iter().any(|n| n.node_type == GraphNodeType::Decision));
+        assert!(ex
+            .nodes
+            .iter()
+            .any(|n| n.node_type == GraphNodeType::Decision));
         assert!(ex.nodes.iter().any(|n| n.node_type == GraphNodeType::Error));
-        assert!(ex.edges.iter().any(|e| e.edge_type == GraphEdgeType::Contradicts));
+        assert!(ex
+            .edges
+            .iter()
+            .any(|e| e.edge_type == GraphEdgeType::Contradicts));
     }
 
     #[test]

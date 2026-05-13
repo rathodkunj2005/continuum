@@ -26,11 +26,14 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
-/// Where the import originated (product / analytics).
+/// Where the visual-semantics path was invoked from (product / analytics).
+/// `ScreenCapture` is the screen-capture pipeline using the same VLM as
+/// imports but only on frames the adaptive visual-novelty gate admitted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageImportSource {
     MetaGlasses,
     FilePicker,
+    ScreenCapture,
 }
 
 impl ImageImportSource {
@@ -38,6 +41,18 @@ impl ImageImportSource {
         match self {
             ImageImportSource::MetaGlasses => "meta_glasses_import",
             ImageImportSource::FilePicker => "file_picker_import",
+            ImageImportSource::ScreenCapture => "screen_capture_visual",
+        }
+    }
+
+    /// Human-readable header used as the first sentence of the durable
+    /// `memory_context`. Kept short and content-agnostic — no per-app
+    /// hardcoding, just the kind of pipeline that produced the row.
+    pub fn header_label(&self) -> &'static str {
+        match self {
+            ImageImportSource::MetaGlasses => "Meta glasses import",
+            ImageImportSource::FilePicker => "Imported photo",
+            ImageImportSource::ScreenCapture => "Screen capture (visual)",
         }
     }
 }
@@ -166,7 +181,9 @@ fn lexical_diversity(text: &str) -> f32 {
 }
 
 fn has_meaningful_word(text: &str) -> bool {
-    const STOP: &[&str] = &["ja", "jj", "jpg", "jpeg", "png", "meta", "glasses", "import"];
+    const STOP: &[&str] = &[
+        "ja", "jj", "jpg", "jpeg", "png", "meta", "glasses", "import",
+    ];
     text.split(|c: char| !c.is_alphanumeric())
         .filter_map(|w| {
             let w = w.trim();
@@ -184,12 +201,18 @@ fn has_meaningful_word(text: &str) -> bool {
 }
 
 /// Build durable memory strings from vision insight; optional OCR appendix when allowed.
+///
+/// `source` controls the leading sentence ("Meta glasses import:", "Screen
+/// capture (visual):" …) so the same composer works for both the glasses
+/// import flow and the screen-capture visual-narrative path. The rest of
+/// the composition is content-agnostic.
 pub fn compose_import_memory_context(
     filename: &str,
     insight: &ImageSemanticInsight,
     ocr_text: Option<&str>,
+    source: ImageImportSource,
 ) -> ImportMemoryText {
-    let header = format!("Meta glasses import: {filename}");
+    let header = format!("{}: {filename}", source.header_label());
     let mut body = if !insight.summary_detailed.trim().is_empty() {
         insight.summary_detailed.trim().to_string()
     } else {
@@ -318,7 +341,10 @@ struct VisionJsonRow {
 fn parse_vision_json(raw: &str, model_id: &str) -> Result<ImageSemanticInsight, String> {
     let trimmed = strip_markdown_fence(raw);
     let slice = extract_json_object_slice(&trimmed).ok_or_else(|| {
-        format!("no JSON object in model output: {}", short_preview(&trimmed, 200))
+        format!(
+            "no JSON object in model output: {}",
+            short_preview(&trimmed, 200)
+        )
     })?;
     let row: VisionJsonRow = serde_json::from_str(slice).map_err(|e| {
         format!(
@@ -362,16 +388,17 @@ fn clamp_field(s: String, max_chars: usize) -> String {
     if s.chars().count() <= max_chars {
         s.replace('\0', " ")
     } else {
-        s.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…"
+        s.chars()
+            .take(max_chars.saturating_sub(1))
+            .collect::<String>()
+            + "…"
     }
 }
 
 fn sanitize_list(mut v: Vec<String>, max_items: usize, max_each: usize) -> Vec<String> {
     v.retain(|s| !s.trim().is_empty());
     v.truncate(max_items);
-    v.into_iter()
-        .map(|s| clamp_field(s, max_each))
-        .collect()
+    v.into_iter().map(|s| clamp_field(s, max_each)).collect()
 }
 
 fn strip_markdown_fence(s: &str) -> String {
@@ -406,7 +433,9 @@ pub fn insight_vision_extraction_failed(filename: &str, err: &str) -> ImageSeman
         scene_type: "unknown".to_string(),
         setting: None,
         activity_type: Some("import".to_string()),
-        user_intent: Some("importing a photo without successful on-device vision analysis".to_string()),
+        user_intent: Some(
+            "importing a photo without successful on-device vision analysis".to_string(),
+        ),
         visible_objects: vec![],
         people_roles: vec![],
         entities: vec!["photo import".to_string()],
@@ -452,8 +481,8 @@ impl QwenVlImportRuntime {
     }
 
     fn load(app_data_dir: &Path) -> Result<Self, String> {
-        let resolved = models::resolve_model(Some("qwen3-vl-4b"), Some(app_data_dir))
-            .ok_or_else(|| {
+        let resolved =
+            models::resolve_model(Some("qwen3-vl-4b"), Some(app_data_dir)).ok_or_else(|| {
                 "Qwen3-VL 4B GGUF not found. Install it (see README / model picker), \
                  including mmproj weights for vision."
                     .to_string()
@@ -536,7 +565,11 @@ impl QwenVlImportRuntime {
         })
     }
 
-    fn run_blocking(&self, image_bytes: &[u8], filename: &str) -> Result<ImageSemanticInsight, String> {
+    fn run_blocking(
+        &self,
+        image_bytes: &[u8],
+        filename: &str,
+    ) -> Result<ImageSemanticInsight, String> {
         let mut guard = self.inner.lock();
         let LlamaMtmdPair { llama, mtmd } = &mut *guard;
         llama.clear_kv_cache();
@@ -552,7 +585,8 @@ impl QwenVlImportRuntime {
         let messages = vec![
             LlamaChatMessage::new("system".to_string(), system.to_string())
                 .map_err(|e| e.to_string())?,
-            LlamaChatMessage::new("user".to_string(), user_with_media).map_err(|e| e.to_string())?,
+            LlamaChatMessage::new("user".to_string(), user_with_media)
+                .map_err(|e| e.to_string())?,
         ];
         let formatted = self
             .model
@@ -730,13 +764,26 @@ mod tests {
             confidence: 0.82,
             model_id: "qwen3-vl-4b-mtmd".to_string(),
         };
-        let composed = compose_import_memory_context("Pitch.jpeg", &insight, None);
-        assert!(composed.memory_context.to_ascii_lowercase().contains("conference"));
-        assert!(composed.memory_context.contains("presenters") || composed.embedding_text.contains("presenters"));
+        let composed = compose_import_memory_context(
+            "Pitch.jpeg",
+            &insight,
+            None,
+            ImageImportSource::MetaGlasses,
+        );
+        assert!(composed
+            .memory_context
+            .to_ascii_lowercase()
+            .contains("conference"));
+        assert!(
+            composed.memory_context.contains("presenters")
+                || composed.embedding_text.contains("presenters")
+        );
         assert!(composed.topic.to_ascii_lowercase().contains("pitch"));
         assert_eq!(composed.activity_type, "presentation");
-        assert!(composed.user_intent.to_ascii_lowercase().contains("demo")
-            || composed.user_intent.contains("feedback"));
+        assert!(
+            composed.user_intent.to_ascii_lowercase().contains("demo")
+                || composed.user_intent.contains("feedback")
+        );
         let joined = composed.search_aliases.join(" ").to_ascii_lowercase();
         assert!(joined.contains("pitch"));
         assert!(joined.contains("demo") || joined.contains("feedback"));

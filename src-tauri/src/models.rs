@@ -345,11 +345,7 @@ mod tests {
     fn inference_preferred_model_id_1b_tier_ignores_stale_qwen_onboarding() {
         let temp_dir = make_temp_dir();
         let onboarding_path = temp_dir.join("onboarding.json");
-        std::fs::write(
-            &onboarding_path,
-            r#"{"model_id":"qwen3-vl-4b"}"#,
-        )
-        .unwrap();
+        std::fs::write(&onboarding_path, r#"{"model_id":"qwen3-vl-4b"}"#).unwrap();
         let mut cfg = crate::config::Config::default();
         cfg.vlm_model_size = "1B".to_string();
         assert_eq!(

@@ -1477,10 +1477,6 @@ pub async fn run_idle_wiki_knowledge_compile(
         return Ok(IdleWikiCompileSummary { pages_upserted: 0 });
     }
     let n = pages.len();
-    state
-        .inner()
-        .store
-        .upsert_knowledge_pages(&pages)
-        .await?;
+    state.inner().store.upsert_knowledge_pages(&pages).await?;
     Ok(IdleWikiCompileSummary { pages_upserted: n })
 }

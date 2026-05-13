@@ -100,7 +100,13 @@ impl RuntimeMetrics {
         *g.counters.entry(counter).or_insert(0) += 1;
     }
 
-    fn snapshot_inner(&self) -> (BTreeMap<String, AggregateSnapshot>, BTreeMap<String, u64>, Vec<RecentSnapshot>) {
+    fn snapshot_inner(
+        &self,
+    ) -> (
+        BTreeMap<String, AggregateSnapshot>,
+        BTreeMap<String, u64>,
+        Vec<RecentSnapshot>,
+    ) {
         let g = self.inner.lock();
         let aggregates = g
             .aggregates
@@ -161,11 +167,11 @@ const RSS_CACHE_TTL_MS: i64 = 8_000;
 
 #[cfg(target_os = "macos")]
 fn process_rss_bytes_sample() -> Option<u64> {
-    use std::mem::MaybeUninit;
     use libc::{
-        kern_return_t, mach_task_self, task_info, mach_task_basic_info, MACH_TASK_BASIC_INFO,
-        MACH_TASK_BASIC_INFO_COUNT, KERN_SUCCESS,
+        kern_return_t, mach_task_basic_info, mach_task_self, task_info, KERN_SUCCESS,
+        MACH_TASK_BASIC_INFO, MACH_TASK_BASIC_INFO_COUNT,
     };
+    use std::mem::MaybeUninit;
 
     let mut info = MaybeUninit::<mach_task_basic_info>::uninit();
     let mut count = MACH_TASK_BASIC_INFO_COUNT;

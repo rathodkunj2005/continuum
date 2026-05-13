@@ -49,6 +49,15 @@ pub const DEFAULT_CAPTURE_DEEP_IDLE_SECONDS: f64 = 300.0;
 pub const DEFAULT_CAPTURE_IDLE_BLEND_SECONDS: f64 = 30.0;
 pub const DEFAULT_FOCUS_DRIFT_SIMILARITY_THRESHOLD: f32 = 0.30;
 pub const DEFAULT_FOCUS_DRIFT_CAPTURE_COUNT: u32 = 3;
+// Adaptive visual-novelty admission for low-OCR frames. Defaults chosen so
+// the first admit per session needs at least 30% CLIP novelty, the second
+// 35%, and so on up to a hard cap of 85%. This produces a small number of
+// scene-transition cards instead of a flood of near-duplicates.
+pub const DEFAULT_VISUAL_NOVELTY_BASE: f32 = 0.30;
+pub const DEFAULT_VISUAL_NOVELTY_ALPHA: f32 = 0.05;
+pub const DEFAULT_VISUAL_NOVELTY_CEILING: f32 = 0.85;
+pub const DEFAULT_VISUAL_NOVELTY_RING_CAPACITY: usize = 16;
+pub const DEFAULT_VISUAL_ADMISSION_MIN_IMAGE_DIM: u32 = 256;
 
 pub const DEFAULT_MEMORY_CARD_MAX_GROUPS: usize = 6;
 pub const DEFAULT_MEMORY_CARD_MAX_LLM_GROUPS: usize = 3;
@@ -296,6 +305,29 @@ pub struct CapturePipelineConfig {
     pub focus_drift_similarity_threshold: f32,
     #[serde(default = "default_focus_drift_capture_count")]
     pub focus_drift_capture_count: u32,
+    /// Minimum CLIP-novelty for the *first* visual-only admission per
+    /// session. Novelty = `1.0 - max(cosine_similarity)` against the
+    /// recent-vector ring. Lower = more permissive on the first frame.
+    #[serde(default = "default_visual_novelty_base")]
+    pub visual_novelty_base: f32,
+    /// Per-admission increase to the novelty threshold (adaptive). The Nth
+    /// admit must clear `base + (N-1) * alpha` (capped at the ceiling), so
+    /// the gate self-throttles when a single scene keeps changing slightly.
+    #[serde(default = "default_visual_novelty_alpha")]
+    pub visual_novelty_alpha: f32,
+    /// Hard upper bound on the adaptive threshold so we are never locked
+    /// out of admitting a genuinely new scene mid-session.
+    #[serde(default = "default_visual_novelty_ceiling")]
+    pub visual_novelty_ceiling: f32,
+    /// How many recent visual vectors per session the novelty gate compares
+    /// against. Larger = stricter (more diverse history); smaller = faster.
+    #[serde(default = "default_visual_novelty_ring_capacity")]
+    pub visual_novelty_ring_capacity: usize,
+    /// Reject visual-only admission when either capture dimension is below
+    /// this (px). Filters tiny / mostly-hidden windows before invoking the
+    /// CLIP + VLM cost.
+    #[serde(default = "default_visual_admission_min_image_dim")]
+    pub visual_admission_min_image_dim: u32,
 }
 
 impl Default for CapturePipelineConfig {
@@ -310,6 +342,11 @@ impl Default for CapturePipelineConfig {
             idle_blend_seconds: default_capture_idle_blend_seconds(),
             focus_drift_similarity_threshold: default_focus_drift_similarity_threshold(),
             focus_drift_capture_count: default_focus_drift_capture_count(),
+            visual_novelty_base: default_visual_novelty_base(),
+            visual_novelty_alpha: default_visual_novelty_alpha(),
+            visual_novelty_ceiling: default_visual_novelty_ceiling(),
+            visual_novelty_ring_capacity: default_visual_novelty_ring_capacity(),
+            visual_admission_min_image_dim: default_visual_admission_min_image_dim(),
         }
     }
 }
@@ -326,6 +363,13 @@ impl CapturePipelineConfig {
         self.focus_drift_similarity_threshold =
             self.focus_drift_similarity_threshold.clamp(0.0, 1.0);
         self.focus_drift_capture_count = self.focus_drift_capture_count.clamp(1, 60);
+        self.visual_novelty_base = self.visual_novelty_base.clamp(0.0, 1.0);
+        self.visual_novelty_alpha = self.visual_novelty_alpha.clamp(0.0, 0.5);
+        self.visual_novelty_ceiling = self
+            .visual_novelty_ceiling
+            .clamp(self.visual_novelty_base, 1.0);
+        self.visual_novelty_ring_capacity = self.visual_novelty_ring_capacity.clamp(1, 256);
+        self.visual_admission_min_image_dim = self.visual_admission_min_image_dim.clamp(32, 4096);
         self
     }
 }
@@ -773,6 +817,26 @@ fn default_focus_drift_similarity_threshold() -> f32 {
 
 fn default_focus_drift_capture_count() -> u32 {
     DEFAULT_FOCUS_DRIFT_CAPTURE_COUNT
+}
+
+fn default_visual_novelty_base() -> f32 {
+    DEFAULT_VISUAL_NOVELTY_BASE
+}
+
+fn default_visual_novelty_alpha() -> f32 {
+    DEFAULT_VISUAL_NOVELTY_ALPHA
+}
+
+fn default_visual_novelty_ceiling() -> f32 {
+    DEFAULT_VISUAL_NOVELTY_CEILING
+}
+
+fn default_visual_novelty_ring_capacity() -> usize {
+    DEFAULT_VISUAL_NOVELTY_RING_CAPACITY
+}
+
+fn default_visual_admission_min_image_dim() -> u32 {
+    DEFAULT_VISUAL_ADMISSION_MIN_IMAGE_DIM
 }
 
 fn default_memory_card_max_groups() -> usize {

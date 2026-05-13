@@ -810,8 +810,7 @@ fn resolve_model_dir() -> Option<PathBuf> {
 
     // 2b. Tauri app bundle data dir (matches `tauri.conf.json` identifier `com.fndr.app`)
     if let Some(home) = dirs::home_dir() {
-        let tauri_models = home
-            .join("Library/Application Support/com.fndr.app/models");
+        let tauri_models = home.join("Library/Application Support/com.fndr.app/models");
         if model_assets_present(&tauri_models) {
             tracing::info!("Embedder model found at {}", tauri_models.display());
             return Some(tauri_models);

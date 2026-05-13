@@ -20,8 +20,8 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
-mod vlm;
 mod image_semantics;
+mod vlm;
 
 /// Global shared LlamaBackend singleton.
 /// Both InferenceEngine and VlmEngine must share one backend instance

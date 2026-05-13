@@ -349,9 +349,8 @@ impl VlmEngine {
                     .add(tokens_list[pos], pos as i32, &[0], logits)
                     .map_err(|e| VlmError::InferenceError(format!("Batch add failed: {}", e)))?;
             }
-            ctx.decode(&mut batch).map_err(|e| {
-                VlmError::InferenceError(format!("Initial decode failed: {}", e))
-            })?;
+            ctx.decode(&mut batch)
+                .map_err(|e| VlmError::InferenceError(format!("Initial decode failed: {}", e)))?;
             offset = end;
         }
 
