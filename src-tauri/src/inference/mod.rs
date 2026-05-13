@@ -1118,6 +1118,7 @@ TRANSCRIPT:\n{}",
 
     /// Synchronous generation core. Called from inside `spawn_blocking`.
     fn complete_blocking(&self, prompt: &str, max_tokens: i32) -> String {
+        let t0 = std::time::Instant::now();
         let mut ctx = self.context.lock();
 
         // Reset KV cache between independent requests.
@@ -1194,6 +1195,10 @@ TRANSCRIPT:\n{}",
             "Completion result ({} tokens): {}",
             n_cur - tokens_list.len() as i32,
             result.trim()
+        );
+        crate::telemetry::runtime_metrics::record_ms(
+            "llm.complete_ms",
+            t0.elapsed().as_millis() as u64,
         );
         result.trim().to_string()
     }

@@ -566,6 +566,7 @@ impl RealEmbedder {
             return Ok(Vec::new());
         }
 
+        let t_onnx = std::time::Instant::now();
         let encodings = self
             .tokenizer
             .encode_batch(texts.to_vec(), true)
@@ -702,6 +703,10 @@ impl RealEmbedder {
                 batch_size
             ));
         }
+        crate::telemetry::runtime_metrics::record_ms(
+            "embedding.onnx_batch_ms",
+            t_onnx.elapsed().as_millis() as u64,
+        );
         Ok(embeddings)
     }
 }

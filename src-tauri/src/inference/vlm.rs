@@ -16,6 +16,7 @@ use parking_lot::Mutex;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 /// Errors that can occur during VLM operations
 #[derive(Debug, thiserror::Error)]
@@ -288,6 +289,7 @@ impl VlmEngine {
     /// Internal completion method with improved sampling
     async fn complete(&self, prompt: &str, max_tokens: Option<i32>) -> Result<String, VlmError> {
         let max_tokens = max_tokens.unwrap_or(self.config.max_tokens);
+        let t0 = Instant::now();
         let mut ctx = self.context.lock();
 
         // Clear previous context
@@ -382,6 +384,10 @@ impl VlmEngine {
             n_cur += 1;
         }
 
+        crate::telemetry::runtime_metrics::record_ms(
+            "vlm.complete_ms",
+            t0.elapsed().as_millis() as u64,
+        );
         Ok(result.trim().to_string())
     }
 

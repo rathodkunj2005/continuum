@@ -43,6 +43,7 @@ use crate::storage::{MemoryRecord, SearchResult, Task, TaskType};
 use crate::summariser::narration_filter::clean_or_fallback_display_summary;
 use crate::tasks::parse_tasks_from_llm_response;
 use crate::telemetry::quality_logger::append_quality_event;
+use crate::telemetry::runtime_metrics;
 use crate::AppState;
 use chrono::{Local, Timelike};
 use regex::Regex;
@@ -962,10 +963,12 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 }
                 purge_capture_artifacts(state.store.frames_dir());
                 state.invalidate_memory_derived_caches();
+                let flush_ms = flush_start.elapsed().as_millis() as u64;
+                runtime_metrics::record_ms("capture.flush_ms", flush_ms);
                 tracing::info!(
                     "Flushed {} records in {:?}",
                     batch.len(),
-                    flush_start.elapsed()
+                    std::time::Duration::from_millis(flush_ms)
                 );
             }
             batch.clear();

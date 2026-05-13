@@ -4,6 +4,7 @@ use crate::capture::text_cleanup;
 use crate::config::SearchConfig;
 use crate::embedding::{Embedder, EmbeddingBackend};
 use crate::storage::{SearchResult, Store};
+use crate::telemetry::runtime_metrics;
 use std::collections::{HashMap, HashSet};
 use tokio::time::{timeout, Duration, Instant};
 
@@ -305,13 +306,19 @@ impl HybridSearcher {
         let semantic_enabled = matches!(embedder.backend(), EmbeddingBackend::Real);
         let query_embedding = if semantic_enabled {
             let embedding_query = profile.embedding_query();
-            match embedder.embed_batch(&[embedding_query]) {
+            let t_embed = Instant::now();
+            let out = match embedder.embed_batch(&[embedding_query]) {
                 Ok(vectors) => Some(vectors.into_iter().next().unwrap_or_default()),
                 Err(err) => {
                     tracing::warn!(err = %err, "hybrid_search:embed_failed");
                     None
                 }
-            }
+            };
+            runtime_metrics::record_ms(
+                "hybrid.embed_query_ms",
+                t_embed.elapsed().as_millis() as u64,
+            );
+            out
         } else {
             None
         };
@@ -446,6 +453,21 @@ impl HybridSearcher {
             elapsed_ms = started.elapsed().as_millis(),
             "hybrid_search:branches_complete"
         );
+        runtime_metrics::record_ms(
+            "hybrid.semantic_ms",
+            semantic_elapsed.as_millis() as u64,
+        );
+        runtime_metrics::record_ms("hybrid.snippet_ms", snippet_elapsed.as_millis() as u64);
+        runtime_metrics::record_ms("hybrid.keyword_ms", keyword_elapsed.as_millis() as u64);
+        if semantic_timed_out {
+            runtime_metrics::bump("hybrid.semantic_timeout");
+        }
+        if snippet_timed_out {
+            runtime_metrics::bump("hybrid.snippet_timeout");
+        }
+        if keyword_timed_out {
+            runtime_metrics::bump("hybrid.keyword_timeout");
+        }
 
         let fused = Self::hybrid_fusion(
             &profile,
@@ -459,6 +481,10 @@ impl HybridSearcher {
             results = reranked.len(),
             elapsed_ms = started.elapsed().as_millis(),
             "hybrid_search:complete"
+        );
+        runtime_metrics::record_ms(
+            "hybrid.total_ms",
+            started.elapsed().as_millis() as u64,
         );
 
         Ok(reranked)

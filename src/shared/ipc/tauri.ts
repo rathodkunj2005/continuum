@@ -938,6 +938,52 @@ export async function getStats(): Promise<Stats> {
     };
 }
 
+export interface RuntimeAggregateSnapshot {
+    n: number;
+    sum_ms: number;
+    max_ms: number;
+    avg_ms: number;
+    ewma_ms: number;
+}
+
+export interface RuntimeRecentSnapshot {
+    ts_ms: number;
+    op: string;
+    ms: number;
+    meta: string | null;
+}
+
+export interface RuntimeMetricsSnapshot {
+    generated_at_ms: number;
+    process_rss_bytes: number | null;
+    capture: {
+        frames_captured: number;
+        frames_dropped: number;
+        last_capture_time_ms: number;
+    };
+    embedding: {
+        backend: string;
+        degraded: boolean;
+        detail: string;
+        model_name: string;
+        dimension: number;
+        clip_session_loaded: boolean;
+        last_clip_infer_ms: number;
+    };
+    inference: {
+        ai_model_available: boolean;
+        ai_model_loaded: boolean;
+        loaded_model_id: string | null;
+    };
+    aggregates: Record<string, RuntimeAggregateSnapshot>;
+    counters: Record<string, number>;
+    recent: RuntimeRecentSnapshot[];
+}
+
+export async function getRuntimeMetrics(): Promise<RuntimeMetricsSnapshot> {
+    return invoke<RuntimeMetricsSnapshot>("get_runtime_metrics");
+}
+
 export async function getRetentionDays(): Promise<number> {
     return invoke<number>("get_retention_days");
 }

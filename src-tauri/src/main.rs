@@ -535,6 +535,7 @@ fn main() {
             ipc::commands::delete_all_data,
             ipc::commands::delete_memory,
             ipc::commands::get_stats,
+            ipc::commands::get_runtime_metrics,
             ipc::commands::get_retention_days,
             ipc::commands::set_retention_days,
             ipc::commands::delete_older_than,

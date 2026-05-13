@@ -10,6 +10,7 @@ use crate::memory::graph::clusters::{attach_louvain_metadata, cluster_0_display_
 use crate::memory::graph::schema::{GraphNode, GraphSubgraph};
 use crate::memory::graph::traversal::{find_path, god_nodes};
 use crate::storage::graph_store::GraphStore;
+use crate::telemetry::runtime_metrics;
 use crate::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -149,13 +150,15 @@ pub async fn commit_graph_updates(state: Arc<AppState>) -> Result<(), String> {
         }
     }
     let stale = gs.mark_stale(30).await.map_err(|e| e.to_string())?;
+    let elapsed_ms = t0.elapsed().as_millis() as u64;
+    runtime_metrics::record_ms("graph.commit_ms", elapsed_ms);
     tracing::info!(
         target: "fndr::graph_commit",
         merged_nodes,
         merged_edges,
         conflicts,
         stale_marked = stale,
-        elapsed_ms = t0.elapsed().as_millis() as u64,
+        elapsed_ms,
         "commit_graph_updates completed"
     );
     Ok(())

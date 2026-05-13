@@ -11,7 +11,9 @@ use ort::session::Session;
 use ort::value::Tensor;
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::time::Instant;
 
 const CLIP_VISION_ONNX_FILENAME: &str = "clip-vit-base-patch32-vision_q4.onnx";
 const CLIP_INPUT: &str = "pixel_values";
@@ -19,6 +21,18 @@ const CLIP_OUTPUT: &str = "image_embeds";
 const CLIP_SIZE: u32 = 224;
 
 static CLIP_RUNTIME: OnceLock<Mutex<Option<ClipVisionSession>>> = OnceLock::new();
+static CLIP_SESSION_LOADED: AtomicBool = AtomicBool::new(false);
+static LAST_CLIP_INFER_MS: AtomicU64 = AtomicU64::new(0);
+
+/// True after the CLIP ONNX session has been created in this process.
+pub fn clip_session_loaded() -> bool {
+    CLIP_SESSION_LOADED.load(Ordering::Relaxed)
+}
+
+/// Wall time of the last successful CLIP vision forward pass (milliseconds).
+pub fn last_clip_infer_ms() -> u64 {
+    LAST_CLIP_INFER_MS.load(Ordering::Relaxed)
+}
 
 fn clip_cell() -> &'static Mutex<Option<ClipVisionSession>> {
     CLIP_RUNTIME.get_or_init(|| Mutex::new(None))
@@ -43,6 +57,7 @@ impl ClipVisionSession {
     }
 
     fn embed(&mut self, dynamic: &DynamicImage) -> Result<Vec<f32>, String> {
+        let t0 = Instant::now();
         let tensor = clip_preprocess(dynamic)?;
         let input = Tensor::from_array(tensor).map_err(|e| format!("CLIP input tensor: {e}"))?;
         let outputs = self
@@ -82,6 +97,9 @@ impl ClipVisionSession {
             ));
         }
         l2_normalize(&mut vec);
+        let ms = t0.elapsed().as_millis() as u64;
+        LAST_CLIP_INFER_MS.store(ms, Ordering::Relaxed);
+        crate::telemetry::runtime_metrics::record_ms("clip.infer_ms", ms);
         Ok(vec)
     }
 }
@@ -143,6 +161,7 @@ pub fn embed_imported_image(dynamic: &DynamicImage, models_dir: &Path) -> Result
     let mut guard = clip_cell().lock();
     if guard.is_none() {
         *guard = Some(ClipVisionSession::load(models_dir)?);
+        CLIP_SESSION_LOADED.store(true, Ordering::Relaxed);
     }
     guard
         .as_mut()
