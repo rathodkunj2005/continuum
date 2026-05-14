@@ -138,6 +138,28 @@ pub fn smolvlm_500m_fully_available(app_data_dir: Option<&Path>) -> bool {
 /// Rejects Git LFS pointer files, empty placeholders, or unrelated GGUFs renamed to the
 /// expected filename (a common cause of `n_embd` mismatch vs the official mmproj).
 pub const QWEN3_VL_4B_MAIN_GGUF_MIN_BYTES: u64 = 1_800_000_000;
+pub const SMOLVLM_500M_MIN_BYTES: u64 = 260_000_000;
+
+/// Returns `Err` if `path` exists but is too small to be a real SmolVLM 500M weights file.
+pub fn validate_smolvlm_main_gguf_file(path: &Path) -> Result<(), String> {
+    let len = std::fs::metadata(path)
+        .map_err(|e| format!("stat {}: {e}", path.display()))?
+        .len();
+    if len < SMOLVLM_500M_MIN_BYTES {
+        let def = model_by_id("smolvlm-500m").expect("smolvlm-500m in catalog");
+        return Err(format!(
+            "SmolVLM 500M GGUF at {} is only {} bytes (expected at least ~{} bytes for {}). \
+             This is often a Git LFS pointer, incomplete download, or the wrong file. \
+             Re-download: {}",
+            path.display(),
+            len,
+            SMOLVLM_500M_MIN_BYTES,
+            def.filename,
+            def.download_url
+        ));
+    }
+    Ok(())
+}
 
 /// Returns `Err` if `path` exists but is too small to be a real Qwen3-VL 4B weights file.
 pub fn validate_qwen3_vl_main_gguf_file(path: &Path) -> Result<(), String> {
@@ -412,8 +434,15 @@ mod tests {
         let model = model_by_id("smolvlm-500m");
         assert!(model.is_some(), "smolvlm-500m not in MODEL_CATALOG");
         let m = model.unwrap();
-        assert!(m.ram_gb <= 2.0, "SmolVLM 500M should be <= 2 GB RAM, got {}", m.ram_gb);
-        assert!(!m.recommended, "SmolVLM should not be recommended by default");
+        assert!(
+            m.ram_gb <= 2.0,
+            "SmolVLM 500M should be <= 2 GB RAM, got {}",
+            m.ram_gb
+        );
+        assert!(
+            !m.recommended,
+            "SmolVLM should not be recommended by default"
+        );
         assert_eq!(m.filename, "SmolVLM-500M-Instruct-Q4_K_M.gguf");
     }
 

@@ -1,6 +1,6 @@
 //! Pixel-based visual semantic extraction for imported photos (Meta glasses, file picker).
 //!
-//! Uses llama.cpp **MTMD** with **Qwen3-VL** GGUF + matching **mmproj** weights. This path
+//! Uses llama.cpp **MTMD** with **SmolVLM 500M** or **Qwen3-VL 4B** GGUF + matching **mmproj** weights. This path
 //! passes image bytes through `MtmdBitmap::from_buffer` — it does **not** claim vision when
 //! only OCR or text-only models are available.
 
@@ -67,7 +67,7 @@ pub enum MtmdModelFamily {
 }
 
 impl MtmdModelFamily {
-    pub fn from_model_id(model_id: &str) -> Option<Self> {
+    pub(crate) fn from_model_id(model_id: &str) -> Option<Self> {
         match model_id {
             "qwen3-vl-4b" => Some(Self::Qwen3Vl4B),
             "smolvlm-500m" => Some(Self::SmolVlm500M),
@@ -130,7 +130,7 @@ pub struct ImportOcrStats {
     pub blocks: u32,
 }
 
-/// Run Qwen3-VL + mmproj on **pixels** (lazy singleton; first call loads weights).
+/// Run MTMD model (SmolVLM 500M or Qwen3-VL 4B) on **pixels** (lazy singleton; first call loads weights).
 ///
 /// Returns [`Err`] when the multimodal stack is unavailable (missing model/mmproj, init
 /// failure, or inference error). Callers must **not** treat OCR as a substitute for success.
@@ -143,7 +143,7 @@ pub async fn extract_image_semantics(
     let filename = filename.to_string();
     tracing::debug!(?source, %filename, "extract_image_semantics: scheduling blocking vision run");
     tokio::task::spawn_blocking(move || {
-        let runtime = QwenVlImportRuntime::instance(&app_data_dir)?;
+        let runtime = MtmdVlmRuntime::instance(&app_data_dir)?;
         runtime.run_blocking(&image_bytes, &filename)
     })
     .await
@@ -860,7 +860,7 @@ struct LlamaMtmdPair {
     mtmd: MtmdContext,
 }
 
-struct QwenVlImportRuntime {
+struct MtmdVlmRuntime {
     model: &'static LlamaModel,
     chat_template: LlamaChatTemplate,
     _backend: Arc<LlamaBackend>,
@@ -870,13 +870,13 @@ struct QwenVlImportRuntime {
 
 /// [`LlamaContext`] is not `Send` in the Rust bindings, but this runtime is only used behind
 /// `Arc` + [`Mutex`] from blocking import tasks (same pattern as [`super::VlmEngine`]).
-unsafe impl Send for QwenVlImportRuntime {}
-unsafe impl Sync for QwenVlImportRuntime {}
+unsafe impl Send for MtmdVlmRuntime {}
+unsafe impl Sync for MtmdVlmRuntime {}
 
-static IMPORT_VISION: OnceLock<Mutex<Option<Arc<QwenVlImportRuntime>>>> = OnceLock::new();
+static IMPORT_VISION: OnceLock<Mutex<Option<Arc<MtmdVlmRuntime>>>> = OnceLock::new();
 
-impl QwenVlImportRuntime {
-    fn instance(app_data_dir: &Path) -> Result<Arc<QwenVlImportRuntime>, String> {
+impl MtmdVlmRuntime {
+    fn instance(app_data_dir: &Path) -> Result<Arc<MtmdVlmRuntime>, String> {
         let cell = IMPORT_VISION.get_or_init(|| Mutex::new(None));
         let mut slot = cell.lock();
         if let Some(ref arc) = *slot {
@@ -894,8 +894,11 @@ impl QwenVlImportRuntime {
             let smolvlm_mmproj = models::resolve_smolvlm_mmproj(Some(app_data_dir));
 
             if let (Some(main), Some(mmproj)) = (smolvlm_model, smolvlm_mmproj) {
+                models::validate_smolvlm_main_gguf_file(&main.path)
+                    .map_err(|e| format!("SmolVLM GGUF invalid: {e}"))?;
                 (main.path, mmproj, MtmdModelFamily::SmolVlm500M)
             } else {
+                tracing::debug!("SmolVLM 500M not fully available; trying Qwen3-VL 4B fallback");
                 // Fall back to Qwen3-VL 4B
                 let qwen_model = models::resolve_model(Some("qwen3-vl-4b"), Some(app_data_dir))
                     .ok_or_else(|| {
@@ -904,12 +907,13 @@ impl QwenVlImportRuntime {
                 if let Err(e) = models::validate_qwen3_vl_main_gguf_file(&qwen_model.path) {
                     return Err(format!("Qwen3-VL main GGUF invalid: {e}"));
                 }
-                let mmproj = models::resolve_qwen3_vl_mmproj(Some(app_data_dir)).ok_or_else(|| {
-                    format!(
-                        "Qwen3-VL 4B model found but mmproj missing. Download one of: {}",
-                        models::QWEN3_VL_MMPROJ_FILENAMES.join(", ")
-                    )
-                })?;
+                let mmproj =
+                    models::resolve_qwen3_vl_mmproj(Some(app_data_dir)).ok_or_else(|| {
+                        format!(
+                            "Qwen3-VL 4B model found but mmproj missing. Download one of: {}",
+                            models::QWEN3_VL_MMPROJ_FILENAMES.join(", ")
+                        )
+                    })?;
                 (qwen_model.path, mmproj, MtmdModelFamily::Qwen3Vl4B)
             }
         };
@@ -939,8 +943,8 @@ impl QwenVlImportRuntime {
             }
         };
 
-        let n_ctx =
-            NonZeroU32::new(model_family.context_size() * 8).unwrap_or(NonZeroU32::new(8192).expect("nonzero"));
+        let n_ctx = NonZeroU32::new(model_family.context_size() * 8)
+            .expect("context_size * 8 is always nonzero");
         let n_batch: u32 = 512;
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(Some(n_ctx))
@@ -1206,7 +1210,7 @@ mod tests {
                 "feedback session".to_string(),
             ],
             confidence: 0.82,
-            model_id: "qwen3-vl-4b-mtmd".to_string(),
+            model_id: "qwen3-vl-4b".to_string(),
         };
         let composed = compose_import_memory_context(
             "Pitch.jpeg",
