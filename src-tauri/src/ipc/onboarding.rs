@@ -92,10 +92,6 @@ impl Default for OnboardingState {
 }
 
 fn normalize_onboarding_state(mut state: OnboardingState) -> OnboardingState {
-    if matches!(state.model_id.as_deref(), Some("smolvlm-500m")) {
-        state.model_id = Some("llama-3.2-1b".to_string());
-    }
-
     if !state.model_downloaded
         && matches!(
             state.step,
@@ -473,6 +469,12 @@ pub struct AiRuntimeStatus {
     pub vlm_loaded: bool,
     pub loaded_model_id: Option<String>,
     pub loaded_model_path: Option<String>,
+    /// "ocr_only" | "lightweight_vlm" | "heavy_vlm" | "disabled"
+    pub model_mode: String,
+    /// "unavailable" | "loaded" | "fallback"
+    pub vlm_status: String,
+    /// ID of the VLM model if loaded ("smolvlm-500m", "qwen3-vl-4b", or None)
+    pub vlm_model_id: Option<String>,
 }
 
 static DOWNLOAD_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
@@ -659,6 +661,37 @@ pub async fn refresh_ai_models(
     let ai_model_loaded = loaded_ai.inference.is_some();
     let vlm_loaded = loaded_ai.vlm.is_some();
 
+    let vlm_model_id_str = config.vlm_model_id.clone().or_else(|| {
+        if config.vlm_model_size == "4B" {
+            Some("qwen3-vl-4b".to_string())
+        } else if config.vlm_model_size == "500M" {
+            Some("smolvlm-500m".to_string())
+        } else {
+            None
+        }
+    });
+
+    let model_mode = if !config.use_vlm {
+        "disabled".to_string()
+    } else if vlm_loaded {
+        match vlm_model_id_str.as_deref() {
+            Some("qwen3-vl-4b") => "heavy_vlm".to_string(),
+            _ => "lightweight_vlm".to_string(),
+        }
+    } else {
+        "ocr_only".to_string()
+    };
+
+    let vlm_status = if vlm_loaded {
+        "loaded".to_string()
+    } else if config.use_vlm {
+        "unavailable".to_string()
+    } else {
+        "fallback".to_string()
+    };
+
+    let vlm_model_id = if vlm_loaded { vlm_model_id_str } else { None };
+
     state
         .inner()
         .replace_ai_engines(loaded_ai.inference, loaded_ai.vlm);
@@ -669,6 +702,9 @@ pub async fn refresh_ai_models(
         vlm_loaded,
         loaded_model_id,
         loaded_model_path,
+        model_mode,
+        vlm_status,
+        vlm_model_id,
     })
 }
 

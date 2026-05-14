@@ -119,6 +119,9 @@ export interface AiRuntimeStatus {
     vlm_loaded: boolean;
     loaded_model_id: string | null;
     loaded_model_path: string | null;
+    model_mode: 'ocr_only' | 'lightweight_vlm' | 'heavy_vlm' | 'disabled';
+    vlm_status: 'unavailable' | 'loaded' | 'fallback';
+    vlm_model_id: string | null;
 }
 
 export function onDownloadProgress(handler: (p: DownloadProgress) => void): Promise<() => void> {
