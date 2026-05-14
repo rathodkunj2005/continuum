@@ -2096,7 +2096,19 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             && noise_score <= config.capture_pipeline.noise_skip_threshold
             && capture_quality.avg_line_score >= 0.30
             && !drop_due_to_stacked_issues;
-        if extraction_grounding_confidence <= 0.10 && !ocr_grounded_enough
+        // Text-heavy override: when OCR evidence is rich (many chars + blocks,
+        // screen-typical confidence), admit the frame even if structured extraction
+        // produced a low grounding score. Prevents high-value developer-context
+        // frames from being silently dropped when the 1B model mis-shapes JSON.
+        let text_heavy_override = should_text_heavy_override(
+            text.len(),
+            observed_confidence,
+            observed_block_count,
+            noise_score,
+            config.capture_pipeline.noise_skip_threshold,
+            drop_due_to_stacked_issues,
+        );
+        if (extraction_grounding_confidence <= 0.10 && !ocr_grounded_enough && !text_heavy_override)
             || drop_due_to_stacked_issues
         {
             emit_capture_quality_signal(
@@ -2121,6 +2133,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     "grounding_confidence": extraction_grounding_confidence,
                     "stacked_critical_extraction_issues": stacked_critical_extraction_issues,
                     "extraction_issues": extraction_issues,
+                    "text_heavy_override": text_heavy_override,
                     "quality_stats": {
                         "total_lines": capture_quality.total_lines,
                         "kept_lines": capture_quality.kept_lines,
@@ -4415,6 +4428,30 @@ fn extract_domain(url: &str) -> Option<String> {
     }
 }
 
+/// Returns true when the OCR volume alone justifies admitting the frame,
+/// bypassing a low extraction_grounding_confidence score.
+///
+/// Conditions that still block admission:
+/// - `drop_due_to_stacked` is true (≥2 critical extraction failures)
+/// - `noise_score` exceeds the pipeline threshold
+/// - `text_volume_qualifies` returns false (too short / low confidence)
+fn should_text_heavy_override(
+    text_len: usize,
+    observed_confidence: f32,
+    observed_block_count: usize,
+    noise_score: f32,
+    noise_threshold: f32,
+    drop_due_to_stacked: bool,
+) -> bool {
+    !drop_due_to_stacked
+        && noise_score <= noise_threshold
+        && crate::ocr::text_volume_qualifies(
+            text_len,
+            observed_confidence,
+            observed_block_count,
+        )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5149,5 +5186,29 @@ mod tests {
         );
         // Narrative content from the VLM must appear right after the header.
         assert!(composed.memory_context.contains("livestream"));
+    }
+
+    #[test]
+    fn text_heavy_override_fires_for_large_clean_ocr() {
+        // 1,400 chars, 38 blocks, confidence 0.49, low noise — should override
+        assert!(should_text_heavy_override(1400, 0.49, 38, 0.20, 0.50, false));
+    }
+
+    #[test]
+    fn text_heavy_override_blocked_by_stacked_issues() {
+        // Even with good OCR, stacked issues prevent override
+        assert!(!should_text_heavy_override(1400, 0.49, 38, 0.20, 0.50, true));
+    }
+
+    #[test]
+    fn text_heavy_override_blocked_by_high_noise() {
+        // High noise_score prevents override even for large text
+        assert!(!should_text_heavy_override(1400, 0.49, 38, 0.80, 0.50, false));
+    }
+
+    #[test]
+    fn text_heavy_override_blocked_for_tiny_text() {
+        // 50 chars doesn't qualify
+        assert!(!should_text_heavy_override(50, 0.49, 5, 0.20, 0.50, false));
     }
 }
