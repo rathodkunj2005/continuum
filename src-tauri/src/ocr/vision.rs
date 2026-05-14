@@ -146,9 +146,24 @@ pub struct RecognizedText {
 
 impl RecognizedText {
     pub fn is_low_signal(&self, min_chars: usize) -> bool {
-        self.text.trim().len() < min_chars
-            || (self.block_count <= 1 && self.confidence < 0.40)
-            || self.confidence < 0.15
+        let char_count = self.text.trim().len();
+        if char_count < min_chars {
+            return true;
+        }
+        // OCR engine failure or completely garbled output.
+        if self.confidence < 0.15 {
+            return true;
+        }
+        // Single block with truly low (non-screen-typical) confidence.
+        if self.block_count <= 1 && self.confidence < 0.35 {
+            return true;
+        }
+        // Volume-based override: text-heavy frames are not low signal
+        // even when Apple Vision confidence is screen-typical (~0.5).
+        if text_volume_qualifies(char_count, self.confidence, self.block_count) {
+            return false;
+        }
+        false
     }
 }
 
@@ -580,6 +595,36 @@ fn size_regex() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"^\d+(\.\d+)?\s*(B|KB|MB|GB|TB)$").expect("valid size regex"))
 }
 
+/// Assess whether OCR evidence is worth storing based on text volume + confidence,
+/// independently of Apple Vision's per-line confidence scores.
+///
+/// Screen OCR naturally produces confidence ~0.40–0.65 regardless of text quality
+/// because Apple Vision's confidence model is calibrated for documents, not UI.
+/// Do not use confidence alone to gate high-volume frames.
+pub fn text_volume_qualifies(char_count: usize, ocr_confidence: f32, block_count: usize) -> bool {
+    if char_count == 0 {
+        return false;
+    }
+    // Hard floor: very short text is never worth storing.
+    if char_count < 80 {
+        return false;
+    }
+    // Long text with screen-typical confidence (>= 0.35) always qualifies.
+    // Apple Vision returns 0.35–0.65 for most UI text; do not penalize this.
+    if char_count >= 400 && ocr_confidence >= 0.35 {
+        return true;
+    }
+    // Medium text: require block count as corroboration.
+    if char_count >= 200 && block_count >= 10 && ocr_confidence >= 0.35 {
+        return true;
+    }
+    // Short-medium text: require both higher confidence AND significant blocks.
+    if char_count >= 80 && block_count >= 5 && ocr_confidence >= 0.55 {
+        return true;
+    }
+    false
+}
+
 /// Preprocess per-line OCR data for structured Qwen3-VL extraction.
 ///
 /// - Drops lines with confidence < 0.40 (unreliable, not worth sending to VLM)
@@ -657,6 +702,57 @@ pub fn preprocess_ocr_for_qwen(lines: &[(String, f32)]) -> (String, OcrAggregate
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_volume_qualifies_large_text_screen_typical_confidence() {
+        // 1,459 chars, 38 blocks, confidence 0.49 — real observed pattern, must qualify
+        assert!(text_volume_qualifies(1459, 0.49, 38));
+    }
+
+    #[test]
+    fn text_volume_qualifies_medium_text_with_blocks() {
+        // 622 chars, 15 blocks, confidence 0.50 — must qualify
+        assert!(text_volume_qualifies(622, 0.50, 15));
+    }
+
+    #[test]
+    fn text_volume_fails_short_low_confidence() {
+        // 80 chars, 2 blocks, confidence 0.42 — must NOT qualify
+        assert!(!text_volume_qualifies(80, 0.42, 2));
+    }
+
+    #[test]
+    fn text_volume_fails_tiny_text() {
+        // 30 chars regardless of confidence — must NOT qualify
+        assert!(!text_volume_qualifies(30, 0.80, 10));
+    }
+
+    #[test]
+    fn text_volume_fails_zero_text() {
+        assert!(!text_volume_qualifies(0, 0.90, 5));
+    }
+
+    #[test]
+    fn is_low_signal_large_text_screen_confidence_not_low() {
+        let rt = RecognizedText {
+            text: "a".repeat(500),
+            confidence: 0.49,
+            block_count: 20,
+            ocr_stats: OcrAggregateStats::default(),
+        };
+        assert!(!rt.is_low_signal(10));
+    }
+
+    #[test]
+    fn is_low_signal_garbled_confidence_is_low() {
+        let rt = RecognizedText {
+            text: "a".repeat(500),
+            confidence: 0.10, // catastrophically bad
+            block_count: 20,
+            ocr_stats: OcrAggregateStats::default(),
+        };
+        assert!(rt.is_low_signal(10));
+    }
 
     #[test]
     fn test_noise_filter_basic() {
