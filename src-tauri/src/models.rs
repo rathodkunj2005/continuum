@@ -18,7 +18,7 @@ pub struct ModelDefinition {
     pub download_url: &'static str,
 }
 
-pub const MODEL_CATALOG: [ModelDefinition; 2] = [
+pub const MODEL_CATALOG: [ModelDefinition; 3] = [
     ModelDefinition {
         id: "llama-3.2-1b",
         name: "Llama 3.2 · 1B",
@@ -32,6 +32,20 @@ pub const MODEL_CATALOG: [ModelDefinition; 2] = [
         filename: "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         download_url:
             "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+    },
+    ModelDefinition {
+        id: "smolvlm-500m",
+        name: "SmolVLM 500M (lightweight VLM)",
+        description: "Lightweight vision-language model for on-demand visual understanding. Safe for 8 GB RAM alongside dev tools. Requires matching mmproj weights.",
+        size_bytes: 320_000_000,
+        size_label: "320 MB",
+        quality_label: "Good",
+        speed_label: "Fast",
+        ram_gb: 1.2,
+        recommended: false,
+        filename: "SmolVLM-500M-Instruct-Q4_K_M.gguf",
+        download_url:
+            "https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct-GGUF/resolve/main/SmolVLM-500M-Instruct-Q4_K_M.gguf",
     },
     ModelDefinition {
         id: "qwen3-vl-4b",
@@ -94,6 +108,31 @@ pub fn resolve_qwen3_vl_mmproj(app_data_dir: Option<&Path>) -> Option<PathBuf> {
     None
 }
 
+/// Filenames for SmolVLM-500M multimodal projection weights.
+pub const SMOLVLM_500M_MMPROJ_FILENAMES: &[&str] = &[
+    "mmproj-SmolVLM-500M-Instruct-f16.gguf",
+    "mmproj-SmolVLM-500M-Instruct-Q8_0.gguf",
+];
+
+/// Resolve a SmolVLM-500M mmproj GGUF on disk.
+pub fn resolve_smolvlm_mmproj(app_data_dir: Option<&Path>) -> Option<PathBuf> {
+    for dir in candidate_model_dirs(app_data_dir) {
+        for name in SMOLVLM_500M_MMPROJ_FILENAMES {
+            let path = dir.join(name);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// True if smolvlm-500m GGUF and its mmproj are both present on disk.
+pub fn smolvlm_500m_fully_available(app_data_dir: Option<&Path>) -> bool {
+    is_model_available("smolvlm-500m", app_data_dir)
+        && resolve_smolvlm_mmproj(app_data_dir).is_some()
+}
+
 /// Minimum on-disk size for the catalog `Qwen3VL-4B-Instruct-*.gguf` to be treated as plausible.
 ///
 /// Rejects Git LFS pointer files, empty placeholders, or unrelated GGUFs renamed to the
@@ -145,6 +184,7 @@ pub fn preferred_model_id_from_onboarding(app_data_dir: &Path) -> Option<String>
 pub fn inference_preferred_model_id(app_data_dir: &Path, config: &Config) -> Option<String> {
     let from_onboarding = preferred_model_id_from_onboarding(app_data_dir);
     match config.vlm_model_size.as_str() {
+        "500M" => Some("smolvlm-500m".to_string()),
         "4B" => Some("qwen3-vl-4b".to_string()),
         _ => {
             let id = match from_onboarding.as_deref() {
@@ -363,6 +403,62 @@ mod tests {
         assert_eq!(
             super::inference_preferred_model_id(temp_dir.as_path(), &cfg).as_deref(),
             Some("qwen3-vl-4b")
+        );
+        std::fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn smolvlm_500m_is_in_catalog() {
+        let model = model_by_id("smolvlm-500m");
+        assert!(model.is_some(), "smolvlm-500m not in MODEL_CATALOG");
+        let m = model.unwrap();
+        assert!(m.ram_gb <= 2.0, "SmolVLM 500M should be <= 2 GB RAM, got {}", m.ram_gb);
+        assert!(!m.recommended, "SmolVLM should not be recommended by default");
+        assert_eq!(m.filename, "SmolVLM-500M-Instruct-Q4_K_M.gguf");
+    }
+
+    #[test]
+    fn resolve_smolvlm_mmproj_finds_known_filename() {
+        let temp_dir = make_temp_dir();
+        let model_dir = models_dir(&temp_dir);
+        std::fs::create_dir_all(&model_dir).unwrap();
+        let mm = model_dir.join("mmproj-SmolVLM-500M-Instruct-f16.gguf");
+        std::fs::write(&mm, b"x").unwrap();
+        let found = resolve_smolvlm_mmproj(Some(temp_dir.as_path()));
+        assert_eq!(found, Some(mm));
+        std::fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn smolvlm_500m_fully_available_requires_both_files() {
+        let temp_dir = make_temp_dir();
+        let model_dir = models_dir(&temp_dir);
+        std::fs::create_dir_all(&model_dir).unwrap();
+
+        // Neither file present
+        assert!(!smolvlm_500m_fully_available(Some(temp_dir.as_path())));
+
+        // Only main GGUF
+        let main = model_dir.join("SmolVLM-500M-Instruct-Q4_K_M.gguf");
+        std::fs::write(&main, b"x").unwrap();
+        assert!(!smolvlm_500m_fully_available(Some(temp_dir.as_path())));
+
+        // Both files present
+        let mm = model_dir.join("mmproj-SmolVLM-500M-Instruct-f16.gguf");
+        std::fs::write(&mm, b"x").unwrap();
+        assert!(smolvlm_500m_fully_available(Some(temp_dir.as_path())));
+
+        std::fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn inference_preferred_model_id_500m_tier_returns_smolvlm() {
+        let temp_dir = make_temp_dir();
+        let mut cfg = crate::config::Config::default();
+        cfg.vlm_model_size = "500M".to_string();
+        assert_eq!(
+            inference_preferred_model_id(temp_dir.as_path(), &cfg).as_deref(),
+            Some("smolvlm-500m")
         );
         std::fs::remove_dir_all(temp_dir).unwrap();
     }
