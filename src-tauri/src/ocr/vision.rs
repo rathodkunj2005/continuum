@@ -160,10 +160,7 @@ impl RecognizedText {
         }
         // Volume-based override: text-heavy frames are not low signal
         // even when Apple Vision confidence is screen-typical (~0.5).
-        if text_volume_qualifies(char_count, self.confidence, self.block_count) {
-            return false;
-        }
-        false
+        !text_volume_qualifies(char_count, self.confidence, self.block_count)
     }
 }
 
@@ -711,8 +708,14 @@ mod tests {
 
     #[test]
     fn text_volume_qualifies_medium_text_with_blocks() {
-        // 622 chars, 15 blocks, confidence 0.50 — must qualify
-        assert!(text_volume_qualifies(622, 0.50, 15));
+        // 250 chars, 12 blocks, confidence 0.48 — hits the medium-text branch (200+ chars, 10+ blocks)
+        assert!(text_volume_qualifies(250, 0.48, 12));
+    }
+
+    #[test]
+    fn text_volume_qualifies_short_medium_with_high_confidence() {
+        // 150 chars, 6 blocks, confidence 0.60 — hits the short-medium branch
+        assert!(text_volume_qualifies(150, 0.60, 6));
     }
 
     #[test]
