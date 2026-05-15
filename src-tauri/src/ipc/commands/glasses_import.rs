@@ -9,8 +9,8 @@ use crate::embedding::{embed_imported_image, EMBEDDING_DIM};
 use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
 use crate::inference::{
     build_import_raw_evidence, compose_import_memory_context, extract_image_semantics,
-    insight_from_ocr_only, insight_from_structured, should_include_import_ocr, ImageImportSource,
-    ImageSemanticInsight, ImportOcrStats,
+    insight_from_ocr_only, insight_from_structured, should_include_import_ocr,
+    synthesize_vision_insight, ImageImportSource, ImageSemanticInsight, ImportOcrStats,
 };
 use crate::memory_compaction::{
     build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
@@ -51,7 +51,8 @@ fn fallback_reason(decision: &VlmRouteDecision) -> Option<&str> {
 fn route_import_pixel_vlm(
     config: &crate::config::Config,
     model_id: Option<&str>,
-    host_supports_vlm: bool,
+    host_supports_lightweight_vlm: bool,
+    host_supports_heavy_vlm: bool,
     pressure_skip: bool,
     vlm_available: bool,
     calls_remaining: u32,
@@ -63,7 +64,8 @@ fn route_import_pixel_vlm(
         visual_signal: true,
         is_duplicate: false,
         system_pressure_skip: pressure_skip,
-        host_supports_vlm,
+        host_supports_lightweight_vlm,
+        host_supports_heavy_vlm,
         vlm_enabled: config.use_vlm,
         vlm_model_id: model_id,
         vlm_available,
@@ -180,19 +182,22 @@ pub async fn import_meta_glasses_photo(
 
     let config = state.config.read().clone();
     let model_id = models::configured_vlm_model_id(&config);
-    let host_supports_vlm = crate::telemetry::system_metrics::host_supports_vlm();
+    let host_supports_lightweight_vlm =
+        crate::telemetry::system_metrics::host_supports_lightweight_vlm();
+    let host_supports_heavy_vlm = crate::telemetry::system_metrics::host_supports_vlm();
     let vlm_available =
         models::pixel_vlm_available(model_id.as_deref(), Some(app_data_dir.as_path()));
 
-    // System-pressure and host-size throttle: when the host cannot safely hold
-    // a pixel VLM, or the current process is hot, skip MTMD entirely and use
-    // OCR-grounded fallback semantics.
+    // System-pressure and host-size throttle: when even the lightweight VLM
+    // cannot safely run on this host, skip MTMD and use OCR-grounded fallback.
+    // 8 GB machines can run SmolVLM 500M; Qwen3-VL 4B requires ≥ 12 GB.
     let (skip_vlm, skip_reason) =
         crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
     let vlm_route = route_import_pixel_vlm(
         &config,
         model_id.as_deref(),
-        host_supports_vlm,
+        host_supports_lightweight_vlm,
+        host_supports_heavy_vlm,
         skip_vlm,
         vlm_available,
         config.vlm_max_calls_per_minute,
@@ -252,18 +257,38 @@ pub async fn import_meta_glasses_photo(
         }
     };
 
+    // Knowledge-rich synthesis: after a successful pixel-VLM run, pass the scene
+    // understanding through the text LLM to produce a `why_mattered` sentence and
+    // richer search aliases. Skipped silently when LLM is unavailable or insight
+    // came from the OCR-only / LLM-on-OCR fallback paths.
+    let synthesis = if let Some(engine) = state.inference_engine() {
+        synthesize_vision_insight(&insight, &engine).await
+    } else {
+        Default::default()
+    };
+
     let ocr_append = if include_ocr {
         Some(ocr_text.trim())
     } else {
         None
     };
 
-    let composed = compose_import_memory_context(
+    let mut composed = compose_import_memory_context(
         &filename,
         &insight,
         ocr_append,
         ImageImportSource::MetaGlasses,
     );
+
+    // Merge synthesis results into the composed memory fields when non-empty.
+    if !synthesis.why_mattered.is_empty() {
+        composed.insight_why_mattered = synthesis.why_mattered;
+    }
+    for alias in synthesis.enriched_aliases {
+        if !composed.search_aliases.contains(&alias) {
+            composed.search_aliases.push(alias);
+        }
+    }
 
     let clean_text = composed.memory_context.clone();
     let snippet = if !insight.summary_short.trim().is_empty() {
@@ -337,7 +362,7 @@ pub async fn import_meta_glasses_photo(
         serde_json::from_str(&raw_evidence_base).unwrap_or_else(|_| json!({}));
     raw_evidence_json["vlm_route"] = json!(route_label(&vlm_route));
     raw_evidence_json["vlm_block_reason"] = json!(fallback_reason(&vlm_route));
-    raw_evidence_json["host_supports_vlm"] = json!(host_supports_vlm);
+    raw_evidence_json["host_supports_vlm"] = json!(host_supports_lightweight_vlm);
     raw_evidence_json["pressure_reason"] = json!(skip_reason);
     raw_evidence_json["clip_embedding_status"] =
         json!(if image_embedding.iter().all(|v| *v == 0.0) {
@@ -355,7 +380,7 @@ pub async fn import_meta_glasses_photo(
         "ocr_rejected_reason": ocr_rejected_reason,
         "vlm_route": route_label(&vlm_route),
         "vlm_block_reason": fallback_reason(&vlm_route),
-        "host_supports_vlm": host_supports_vlm,
+        "host_supports_vlm": host_supports_lightweight_vlm,
         "pressure_reason": skip_reason,
     })
     .to_string();
@@ -448,14 +473,15 @@ mod tests {
     fn import_pixel_vlm_route_blocks_low_ram_before_model_availability() {
         let mut config = crate::config::Config::default().normalized();
         config.use_vlm = true;
-        config.vlm_model_size = "500M".to_string();
         config.vlm_max_calls_per_minute = 10;
         config.vlm_timeout_secs = 30;
 
+        // Neither lightweight nor heavy VLM supported (< 8 GB host)
         let decision = route_import_pixel_vlm(
             &config,
             Some("smolvlm-500m"),
-            false,
+            false, // host_supports_lightweight_vlm
+            false, // host_supports_heavy_vlm
             false,
             true,
             config.vlm_max_calls_per_minute,
@@ -470,6 +496,27 @@ mod tests {
     }
 
     #[test]
+    fn import_pixel_vlm_route_allows_lightweight_on_eight_gb_host() {
+        let mut config = crate::config::Config::default().normalized();
+        config.use_vlm = true;
+        config.vlm_max_calls_per_minute = 10;
+        config.vlm_timeout_secs = 30;
+
+        // 8 GB host: lightweight OK, heavy blocked
+        let decision = route_import_pixel_vlm(
+            &config,
+            Some("smolvlm-500m"),
+            true,  // host_supports_lightweight_vlm
+            false, // host_supports_heavy_vlm
+            false,
+            true,
+            config.vlm_max_calls_per_minute,
+        );
+
+        assert_eq!(decision, VlmRouteDecision::RunLightweightVlm);
+    }
+
+    #[test]
     fn import_pixel_vlm_route_honors_disabled_config() {
         let mut config = crate::config::Config::default().normalized();
         config.use_vlm = false;
@@ -477,7 +524,8 @@ mod tests {
         let decision = route_import_pixel_vlm(
             &config,
             Some("smolvlm-500m"),
-            true,
+            true, // host_supports_lightweight_vlm
+            true, // host_supports_heavy_vlm
             false,
             true,
             config.vlm_max_calls_per_minute,

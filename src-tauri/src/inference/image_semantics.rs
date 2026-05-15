@@ -1,6 +1,6 @@
 //! Pixel-based visual semantic extraction for imported photos (Meta glasses, file picker).
 //!
-//! Uses llama.cpp **MTMD** with **SmolVLM 500M** or **Qwen3-VL 4B** GGUF + matching **mmproj** weights. This path
+//! Uses llama.cpp **MTMD** with **Qwen3-VL 2B** GGUF + matching **mmproj** weights. This path
 //! passes image bytes through `MtmdBitmap::from_buffer` — it does **not** claim vision when
 //! only OCR or text-only models are available.
 
@@ -171,7 +171,7 @@ pub async fn synthesize_vision_insight(
     engine.synthesize_vision_description(&scene_block).await
 }
 
-/// Run MTMD model (SmolVLM 500M or Qwen3-VL 4B) on **pixels** (lazy singleton; first call loads weights).
+/// Run MTMD model (Qwen3-VL 2B) on **pixels** (lazy singleton; first call loads weights).
 ///
 /// Returns [`Err`] when the multimodal stack is unavailable (missing model/mmproj, init
 /// failure, or inference error). Callers must **not** treat OCR as a substitute for success.
@@ -1187,7 +1187,8 @@ mod tests {
             MtmdModelFamily::from_model_id("qwen3-vl-2b"),
             Some(MtmdModelFamily::Qwen3Vl2B)
         );
-        assert_eq!(MtmdModelFamily::from_model_id("unknown"), None);
+        assert_eq!(MtmdModelFamily::from_model_id("smolvlm-500m"), None);
+        assert_eq!(MtmdModelFamily::from_model_id("qwen3-vl-4b"), None);
         assert_eq!(MtmdModelFamily::Qwen3Vl2B.model_id_str(), "qwen3-vl-2b");
         assert_eq!(
             MtmdModelFamily::Qwen3Vl2B.context_size(),
