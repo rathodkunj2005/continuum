@@ -807,8 +807,10 @@ fn sample_gpu() -> GpuSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn snapshot_defaults_are_zero_when_never_refreshed() {
         // OnceLock starts empty -> latest_snapshot returns Default.
         let snap = latest_snapshot();
@@ -816,6 +818,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn refresh_once_populates_process_memory_on_macos() {
         refresh_once(Vec::new());
         let snap = latest_snapshot();
@@ -829,6 +832,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cpu_percent_is_finite_and_non_negative() {
         refresh_once(Vec::new());
         // Sleep so a second sample has a non-zero interval delta.
@@ -845,6 +849,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn process_memory_phys_footprint_is_nonzero_on_macos() {
         refresh_once(Vec::new());
         let snap = latest_snapshot();
@@ -862,6 +867,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn first_energy_sample_returns_calibration_zero_not_lifetime_total() {
         // The very first refresh after process start has no baseline; we
         // must not report the lifetime cumulative wakeup count as a one-
@@ -873,7 +879,11 @@ mod tests {
             // label=low) or we already had a previous baseline in this
             // process — both are acceptable, but the label cannot be
             // "high" purely from the calibration call.
-            if snap.process_energy.idle_wakeups == 0 {
+            // Calibration round: both delta counters must be zero before
+            // we can assert the label is the calmest value.
+            if snap.process_energy.idle_wakeups == 0
+                && snap.process_energy.interrupt_wakeups == 0
+            {
                 assert_eq!(snap.process_energy.label, "low");
             }
             assert!(snap.process_energy.idle_wakeups < 100_000_000);
@@ -881,25 +891,36 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn pressure_label_is_not_high_when_only_free_is_low_but_inactive_is_plentiful() {
         // Sanity: real macOS keeps `free` tiny and stores evictable pages
         // in `inactive`/`speculative`. The label must reflect available
         // memory, not raw free.
         refresh_once(Vec::new());
         let snap = latest_snapshot();
+        // Test only applies when BOTH gates would correctly say not-high:
+        // the available pool is plentiful AND compressor isn't saturated.
+        // If the live machine has the compressor working hard (real
+        // pressure!) we can't make any claim — that's correct behavior.
         let available = snap.host_memory.free_bytes + snap.host_memory.inactive_bytes;
-        // If at least 20% of total is available, we must report "low".
+        let compressor_calm = snap.host_memory.total_bytes == 0
+            || (snap.host_memory.compressed_bytes as f32
+                / snap.host_memory.total_bytes as f32)
+                <= 0.15;
         if snap.host_memory.total_bytes > 0
             && (available as f32 / snap.host_memory.total_bytes as f32) >= 0.20
+            && compressor_calm
         {
             assert_ne!(
                 snap.host_memory.pressure_label, "high",
-                "pressure must not be 'high' when inactive memory is plentiful"
+                "label must reflect available pool, not raw free \
+                 (only valid to assert when compressor is also calm)"
             );
         }
     }
 
     #[test]
+    #[serial]
     fn pressure_helper_is_quiet_under_normal_load() {
         // On a typical CI/dev box memory pressure is "low" and the test
         // process is nowhere near 380% CPU. The helper must therefore
@@ -969,6 +990,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn host_total_ram_bytes_returns_nonzero() {
         let bytes = host_total_ram_bytes();
         assert!(bytes > 0, "should always read some RAM size on real hosts");
@@ -984,6 +1006,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn host_supports_vlm_matches_threshold() {
         let supports = host_supports_vlm();
         if host_total_ram_bytes() < VLM_SAFE_MIN_HOST_RAM_BYTES {
