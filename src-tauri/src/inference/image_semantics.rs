@@ -60,33 +60,28 @@ impl ImageImportSource {
 /// Which MTMD model family is loaded in the singleton runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MtmdModelFamily {
-    /// Qwen3-VL 4B — high quality, ~6 GB RAM
-    Qwen3Vl4B,
-    /// SmolVLM 500M — lightweight, ~1.2 GB RAM
-    SmolVlm500M,
+    /// Qwen3-VL 2B — balanced quality and RAM for 8 GB M1 Mac, ~3.5 GB RAM
+    Qwen3Vl2B,
 }
 
 impl MtmdModelFamily {
     pub(crate) fn from_model_id(model_id: &str) -> Option<Self> {
         match model_id {
-            "qwen3-vl-4b" => Some(Self::Qwen3Vl4B),
-            "smolvlm-500m" => Some(Self::SmolVlm500M),
+            "qwen3-vl-2b" => Some(Self::Qwen3Vl2B),
             _ => None,
         }
     }
 
     pub fn model_id_str(&self) -> &'static str {
         match self {
-            Self::Qwen3Vl4B => "qwen3-vl-4b",
-            Self::SmolVlm500M => "smolvlm-500m",
+            Self::Qwen3Vl2B => "qwen3-vl-2b",
         }
     }
 
     /// Context size to use for this model family.
     pub fn context_size(&self) -> u32 {
         match self {
-            Self::Qwen3Vl4B => 1536,
-            Self::SmolVlm500M => 1024,
+            Self::Qwen3Vl2B => crate::inference::model_config::QWEN_CONTEXT_SIZE,
         }
     }
 }
@@ -130,6 +125,52 @@ pub struct ImportOcrStats {
     pub blocks: u32,
 }
 
+/// LLM-authored enrichment layered on top of raw VLM output.
+/// Produced by [`synthesize_vision_insight`] when a text LLM is available.
+#[derive(Debug, Clone, Default)]
+pub struct SynthesizedVisionMemory {
+    /// One sentence explaining why this memory matters to the user.
+    pub why_mattered: String,
+    /// Additional search terms derived from the scene (beyond raw VLM aliases).
+    pub enriched_aliases: Vec<String>,
+}
+
+/// Pass the VLM-produced [`ImageSemanticInsight`] through the text LLM to
+/// generate a knowledge-rich `why_mattered` sentence and additional search
+/// aliases. Returns a default (empty) struct when the engine is unavailable
+/// or the insight has no real content (OCR-only / empty summary).
+pub async fn synthesize_vision_insight(
+    insight: &ImageSemanticInsight,
+    engine: &crate::inference::InferenceEngine,
+) -> SynthesizedVisionMemory {
+    // Only synthesize when VLM produced real pixel-based content.
+    let has_content = !insight.summary_detailed.trim().is_empty()
+        || !insight.summary_short.trim().is_empty();
+    let is_fallback = matches!(
+        insight.model_id.as_str(),
+        "ocr_only" | "llm_ocr_grounded" | ""
+    );
+    if !has_content || is_fallback {
+        return SynthesizedVisionMemory::default();
+    }
+
+    let scene_block = format!(
+        "Scene type: {scene}\nSummary: {summary}\nPeople/roles: {people}\nEntities: {entities}\nTopics: {topics}\nActivity: {activity}",
+        scene = insight.scene_type,
+        summary = if insight.summary_detailed.trim().is_empty() {
+            &insight.summary_short
+        } else {
+            &insight.summary_detailed
+        },
+        people = insight.people_roles.join(", "),
+        entities = insight.entities.join(", "),
+        topics = insight.topics.join(", "),
+        activity = insight.activity_type.as_deref().unwrap_or("photo_capture"),
+    );
+
+    engine.synthesize_vision_description(&scene_block).await
+}
+
 /// Run MTMD model (SmolVLM 500M or Qwen3-VL 4B) on **pixels** (lazy singleton; first call loads weights).
 ///
 /// Returns [`Err`] when the multimodal stack is unavailable (missing model/mmproj, init
@@ -140,7 +181,10 @@ pub async fn extract_image_semantics(
     source: ImageImportSource,
     app_data_dir: PathBuf,
 ) -> Result<ImageSemanticInsight, String> {
-    if !crate::telemetry::system_metrics::host_supports_vlm() {
+    // Require at least the lightweight VLM RAM floor (8 GB). The caller's
+    // routing decision already checked this; this guard is a safety net for
+    // direct callers (e.g. tests) that bypass the router.
+    if !crate::telemetry::system_metrics::host_supports_lightweight_vlm() {
         return Err("vlm_blocked_low_ram".to_string());
     }
     let filename = filename.to_string();
@@ -891,34 +935,23 @@ impl MtmdVlmRuntime {
     }
 
     fn load(app_data_dir: &Path) -> Result<Self, String> {
-        // Try SmolVLM 500M first (lightweight); fall back to Qwen3-VL 4B.
+        // Load Qwen3-VL 2B — the single supported MTMD model.
         let (model_path, mmproj, model_family) = {
-            let smolvlm_model = models::resolve_model(Some("smolvlm-500m"), Some(app_data_dir));
-            let smolvlm_mmproj = models::resolve_smolvlm_mmproj(Some(app_data_dir));
-
-            if let (Some(main), Some(mmproj)) = (smolvlm_model, smolvlm_mmproj) {
-                models::validate_smolvlm_main_gguf_file(&main.path)
-                    .map_err(|e| format!("SmolVLM GGUF invalid: {e}"))?;
-                (main.path, mmproj, MtmdModelFamily::SmolVlm500M)
-            } else {
-                tracing::debug!("SmolVLM 500M not fully available; trying Qwen3-VL 4B fallback");
-                // Fall back to Qwen3-VL 4B
-                let qwen_model = models::resolve_model(Some("qwen3-vl-4b"), Some(app_data_dir))
-                    .ok_or_else(|| {
-                        "No MTMD model found: install SmolVLM 500M or Qwen3-VL 4B".to_string()
-                    })?;
-                if let Err(e) = models::validate_qwen3_vl_main_gguf_file(&qwen_model.path) {
-                    return Err(format!("Qwen3-VL main GGUF invalid: {e}"));
-                }
-                let mmproj =
-                    models::resolve_qwen3_vl_mmproj(Some(app_data_dir)).ok_or_else(|| {
-                        format!(
-                            "Qwen3-VL 4B model found but mmproj missing. Download one of: {}",
-                            models::QWEN3_VL_MMPROJ_FILENAMES.join(", ")
-                        )
-                    })?;
-                (qwen_model.path, mmproj, MtmdModelFamily::Qwen3Vl4B)
+            let qwen_model =
+                models::resolve_model(Some("qwen3-vl-2b"), Some(app_data_dir)).ok_or_else(
+                    || "No MTMD model found: install Qwen3-VL-2B".to_string(),
+                )?;
+            if let Err(e) = models::validate_qwen3_vl_2b_main_gguf_file(&qwen_model.path) {
+                return Err(format!("Qwen3-VL-2B main GGUF invalid: {e}"));
             }
+            let mmproj =
+                models::resolve_qwen3_vl_2b_mmproj(Some(app_data_dir)).ok_or_else(|| {
+                    format!(
+                        "Qwen3-VL-2B model found but mmproj missing. Download one of: {}",
+                        models::QWEN3_VL_2B_MMPROJ_FILENAMES.join(", ")
+                    )
+                })?;
+            (qwen_model.path, mmproj, MtmdModelFamily::Qwen3Vl2B)
         };
 
         let backend = get_or_init_backend().map_err(|e| e.to_string())?;
@@ -1151,17 +1184,15 @@ mod tests {
     #[test]
     fn mtmd_model_family_roundtrip() {
         assert_eq!(
-            MtmdModelFamily::from_model_id("smolvlm-500m"),
-            Some(MtmdModelFamily::SmolVlm500M)
-        );
-        assert_eq!(
-            MtmdModelFamily::from_model_id("qwen3-vl-4b"),
-            Some(MtmdModelFamily::Qwen3Vl4B)
+            MtmdModelFamily::from_model_id("qwen3-vl-2b"),
+            Some(MtmdModelFamily::Qwen3Vl2B)
         );
         assert_eq!(MtmdModelFamily::from_model_id("unknown"), None);
-        assert_eq!(MtmdModelFamily::SmolVlm500M.model_id_str(), "smolvlm-500m");
-        assert_eq!(MtmdModelFamily::SmolVlm500M.context_size(), 1024);
-        assert_eq!(MtmdModelFamily::Qwen3Vl4B.context_size(), 1536);
+        assert_eq!(MtmdModelFamily::Qwen3Vl2B.model_id_str(), "qwen3-vl-2b");
+        assert_eq!(
+            MtmdModelFamily::Qwen3Vl2B.context_size(),
+            crate::inference::model_config::QWEN_CONTEXT_SIZE
+        );
     }
 
     #[test]
