@@ -610,7 +610,7 @@ pub struct Config {
     /// Enable VLM for intelligent image understanding
     #[serde(default = "default_use_vlm")]
     pub use_vlm: bool,
-    /// VLM model size: "1B" (Llama, default) or "4B" (Qwen, advanced).
+    /// VLM model size: "1B" (Llama, default), "500M" (SmolVLM), or "4B" (Qwen, advanced).
     #[serde(default = "default_vlm_model_size")]
     pub vlm_model_size: String,
     /// Maximum VLM calls per minute across the capture pipeline.
@@ -1041,9 +1041,16 @@ impl Config {
         self.decay_half_life_days = self.decay_half_life_days.clamp(1, 3650);
         let vlm = self.vlm_model_size.trim().to_string();
         self.vlm_model_size = match vlm.as_str() {
+            "500M" | "500m" => "500M".to_string(),
             "4B" => "4B".to_string(),
             _ => "1B".to_string(),
         };
+        self.vlm_max_calls_per_minute = self.vlm_max_calls_per_minute.min(60);
+        self.vlm_timeout_secs = self.vlm_timeout_secs.min(300);
+        self.vlm_model_id = self
+            .vlm_model_id
+            .map(|id| id.trim().to_string())
+            .filter(|id| matches!(id.as_str(), "smolvlm-500m" | "qwen3-vl-4b"));
         self
     }
 
@@ -1179,5 +1186,25 @@ mod tests {
     fn memory_card_defaults_enable_llm_group_synthesis() {
         let config = Config::default().normalized();
         assert!(config.memory_cards.max_llm_groups > 0);
+    }
+
+    #[test]
+    fn normalized_config_preserves_500m_vlm_tier() {
+        let mut config = Config::default();
+        config.vlm_model_size = "500M".to_string();
+        assert_eq!(config.normalized().vlm_model_size, "500M");
+    }
+
+    #[test]
+    fn normalized_config_clamps_vlm_controls_and_filters_unknown_model_id() {
+        let mut config = Config::default();
+        config.vlm_max_calls_per_minute = 999;
+        config.vlm_timeout_secs = 999;
+        config.vlm_model_id = Some("unknown-model".to_string());
+
+        let config = config.normalized();
+        assert_eq!(config.vlm_max_calls_per_minute, 60);
+        assert_eq!(config.vlm_timeout_secs, 300);
+        assert!(config.vlm_model_id.is_none());
     }
 }

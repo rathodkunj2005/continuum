@@ -33,6 +33,7 @@ use crate::config::{
 };
 use crate::context_runtime;
 use crate::embedding::{embed_imported_image, Embedder, EmbeddingBackend, EMBEDDING_DIM};
+use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
 use crate::inference::{
     compose_import_memory_context, extract_image_semantics, ImageImportSource,
     StructuredMemoryExtraction,
@@ -184,6 +185,36 @@ enum VisualAdmissionOutcome {
     Failed(String),
 }
 
+fn capture_pixel_vlm_route(
+    config: &crate::config::Config,
+    app_data_dir: &std::path::Path,
+    ocr_text_len: usize,
+    ocr_confidence: f32,
+    ocr_block_count: usize,
+    visual_signal: bool,
+    is_duplicate: bool,
+    system_pressure_skip: bool,
+    host_supports_vlm: bool,
+    calls_remaining: u32,
+) -> VlmRouteDecision {
+    let model_id = models::configured_vlm_model_id(config);
+    let vlm_available = models::pixel_vlm_available(model_id.as_deref(), Some(app_data_dir));
+    should_run_vlm(&VlmRouteInput {
+        ocr_text_len,
+        ocr_confidence,
+        ocr_block_count,
+        visual_signal,
+        is_duplicate,
+        system_pressure_skip,
+        host_supports_vlm,
+        vlm_enabled: config.use_vlm,
+        vlm_model_id: model_id.as_deref(),
+        vlm_available,
+        vlm_calls_remaining: calls_remaining,
+        vlm_timeout_secs: config.vlm_timeout_secs,
+    })
+}
+
 /// First half of the visual-narrative path: decode the screen PNG once,
 /// reject undersized frames, compute the CLIP embedding, and ask the
 /// tracker whether this frame is novel enough to admit. CLIP is run in
@@ -255,12 +286,25 @@ async fn compose_visual_capture_record(
         now.timestamp_millis()
     );
 
-    // System-pressure throttle: under high memory or CPU pressure, skip
-    // the VLM and fall back to the OCR-grounded insight built from the
-    // app/window context the capture loop already has. This is how we
-    // stay "light and even" — when Metal is hot we don't pile on.
+    // System-pressure and host-size throttle: under high pressure, or on
+    // machines below the VLM RAM floor, skip MTMD and fall back to the
+    // OCR/window grounded path.
+    let config = state.config.read().clone();
+    let host_supports_vlm = crate::telemetry::system_metrics::host_supports_vlm();
     let (skip_vlm, skip_reason) =
         crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
+    let vlm_route = capture_pixel_vlm_route(
+        &config,
+        state.app_data_dir.as_path(),
+        0,
+        observed_confidence,
+        observed_block_count,
+        true,
+        false,
+        skip_vlm,
+        host_supports_vlm,
+        config.vlm_max_calls_per_minute,
+    );
 
     // Helper: try the LLM-on-OCR fallback when Llama is loaded. Returns
     // None if no engine is available or the structured extraction returns
@@ -278,10 +322,13 @@ async fn compose_visual_capture_record(
             .map(|s| crate::inference::insight_from_structured(&s))
     };
 
-    let insight = if skip_vlm {
+    let insight = if !vlm_route.runs_pixel_vlm() {
+        let reason = vlm_route
+            .fallback_reason()
+            .unwrap_or_else(|| vlm_route.label());
         tracing::info!(
             app = %app_name,
-            "compose_visual_capture_record: skipping VLM under system pressure ({skip_reason}); trying LLM-on-OCR fallback"
+            "compose_visual_capture_record: skipping VLM ({reason}); pressure_reason={skip_reason}; trying LLM-on-OCR fallback"
         );
         if let Some(i) = try_llm_fallback().await {
             i
@@ -394,6 +441,10 @@ async fn compose_visual_capture_record(
         "vision_model_id": insight.model_id,
         "semantic_confidence": insight.confidence,
         "visual_admission_novelty": novelty,
+        "vlm_route": vlm_route.label(),
+        "vlm_block_reason": vlm_route.fallback_reason(),
+        "host_supports_vlm": host_supports_vlm,
+        "pressure_reason": skip_reason,
         "app_name": app_name,
         "window_title": window_title,
         "url": url,
@@ -654,6 +705,354 @@ fn build_structured_from_browser_semantics(
     })
 }
 
+#[derive(Debug, Clone)]
+struct SemanticFusionDraft {
+    extraction: StructuredMemoryExtraction,
+    sources: Vec<&'static str>,
+    reason: &'static str,
+}
+
+fn clean_file_reference(token: &str) -> String {
+    token
+        .trim_matches(|ch: char| {
+            ch.is_whitespace()
+                || matches!(
+                    ch,
+                    ',' | ';' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | '\'' | '`' | '•'
+                )
+        })
+        .trim_end_matches(|ch: char| matches!(ch, ':' | '.' | ')' | ']'))
+        .to_string()
+}
+
+fn looks_like_file_reference(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    const EXTENSIONS: &[&str] = &[
+        ".md", ".rs", ".ts", ".tsx", ".js", ".jsx", ".json", ".toml", ".yaml", ".yml", ".css",
+        ".html", ".py", ".swift", ".sh",
+    ];
+    EXTENSIONS
+        .iter()
+        .any(|ext| lower.ends_with(ext) || lower.contains(&format!("{ext}:")))
+}
+
+fn extract_file_references(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    for raw in text.split_whitespace() {
+        let mut token = clean_file_reference(raw);
+        if let Some((head, _line)) = token.rsplit_once(':') {
+            if looks_like_file_reference(head) {
+                token = clean_file_reference(head);
+            }
+        }
+        if !looks_like_file_reference(&token) {
+            continue;
+        }
+        let key = token.to_ascii_lowercase();
+        if seen.insert(key) {
+            out.push(token);
+            if out.len() >= 12 {
+                break;
+            }
+        }
+    }
+    out
+}
+
+fn merge_unique_strings(existing: &mut Vec<String>, incoming: impl IntoIterator<Item = String>) {
+    let mut seen: HashSet<String> = existing
+        .iter()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .collect();
+    for value in incoming {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_ascii_lowercase()) {
+            existing.push(trimmed.to_string());
+        }
+    }
+}
+
+fn infer_review_activity(clean_text: &str) -> (&'static str, &'static str, &'static str) {
+    let lower = clean_text.to_ascii_lowercase();
+    if lower.contains("error") || lower.contains("failed") || lower.contains("debug") {
+        ("debugging", "debugging", "debugging visible issue context")
+    } else if lower.contains("todo")
+        || lower.contains("planned")
+        || lower.contains("roadmap")
+        || lower.contains("implemented")
+        || lower.contains("docs")
+        || lower.contains("design")
+    {
+        (
+            "reviewing",
+            "reviewing",
+            "reviewing implementation status and supporting context",
+        )
+    } else {
+        ("reviewing", "reviewing", "reviewing visible screen context")
+    }
+}
+
+fn build_low_ram_semantic_fusion(
+    app_name: &str,
+    window_title: &str,
+    url: Option<&str>,
+    clean_text: &str,
+    semantic_page: Option<&macos::BrowserSemanticContent>,
+    capture_quality: &text_cleanup::CaptureQualityStats,
+    source_kind: &str,
+) -> Option<SemanticFusionDraft> {
+    let text = clean_text.trim();
+    if text.len() < 80 && semantic_page.map(|page| !page.has_signal()).unwrap_or(true) {
+        return None;
+    }
+
+    let spans = text_cleanup::rank_salient_spans(text, app_name);
+    let salient = spans
+        .iter()
+        .filter(|span| span.score >= 0.30)
+        .take(3)
+        .map(|span| span.text.clone())
+        .collect::<Vec<_>>();
+    let files = extract_file_references(text);
+
+    let semantic_title = semantic_page
+        .and_then(|page| {
+            [
+                page.h1.as_str(),
+                page.title.as_str(),
+                page.meta_description.as_str(),
+            ]
+            .into_iter()
+            .map(str::trim)
+            .find(|value| !value.is_empty())
+            .map(str::to_string)
+        })
+        .unwrap_or_default();
+
+    let topic = if !semantic_title.trim().is_empty() {
+        semantic_title.chars().take(120).collect::<String>()
+    } else if !files.is_empty() {
+        files
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" and ")
+    } else if let Some(first) = salient.first() {
+        first.chars().take(120).collect::<String>()
+    } else if !window_title.trim().is_empty() {
+        window_title.trim().chars().take(120).collect::<String>()
+    } else {
+        app_name.trim().chars().take(120).collect::<String>()
+    };
+
+    let (activity, workflow, user_intent) = infer_review_activity(text);
+    let subject = if !files.is_empty() {
+        format!(
+            "visible files {}",
+            files.iter().take(4).cloned().collect::<Vec<_>>().join(", ")
+        )
+    } else if !topic.trim().is_empty() {
+        topic.clone()
+    } else {
+        window_title.trim().to_string()
+    };
+
+    let mut sentences = Vec::new();
+    let surface = if !window_title.trim().is_empty() {
+        format!("{} in {}", app_name.trim(), window_title.trim())
+    } else {
+        app_name.trim().to_string()
+    };
+    sentences.push(format!("You were reviewing {subject} on {surface}."));
+    if let Some(domain) = url.and_then(extract_domain) {
+        sentences.push(format!("The visible page was from {domain}."));
+    }
+    if !semantic_title.trim().is_empty() && !sentences.join(" ").contains(&semantic_title) {
+        sentences.push(format!("Browser context: {semantic_title}."));
+    }
+    let lower_text = text.to_ascii_lowercase();
+    if lower_text.contains("planned")
+        || lower_text.contains("implemented")
+        || lower_text.contains("roadmap")
+        || lower_text.contains("design")
+        || lower_text.contains("docs")
+    {
+        sentences.push(
+            "The visible context was about implementation status, docs, or roadmap items."
+                .to_string(),
+        );
+    }
+
+    let keep_ratio = if capture_quality.total_lines == 0 {
+        0.0
+    } else {
+        capture_quality.kept_lines as f32 / capture_quality.total_lines as f32
+    };
+    let avg_span_score = if spans.is_empty() {
+        0.0
+    } else {
+        spans.iter().take(3).map(|span| span.score).sum::<f32>() / spans.len().min(3) as f32
+    };
+    let semantic_score = semantic_page
+        .map(|page| page.content_signal_score)
+        .unwrap_or(0.0);
+    let confidence =
+        (0.58 + avg_span_score * 0.16 + semantic_score * 0.12 + keep_ratio.clamp(0.0, 1.0) * 0.08)
+            .clamp(0.60, 0.86);
+
+    let mut entities = Vec::new();
+    merge_unique_strings(&mut entities, files.iter().cloned());
+    if !semantic_title.trim().is_empty() {
+        merge_unique_strings(&mut entities, [semantic_title.clone()]);
+    }
+    if let Some(domain) = url.and_then(extract_domain) {
+        merge_unique_strings(&mut entities, [domain]);
+    }
+
+    let mut aliases = Vec::new();
+    merge_unique_strings(&mut aliases, files.iter().cloned());
+    merge_unique_strings(&mut aliases, [topic.clone()]);
+
+    let mut sources = vec!["ocr_salient_spans", "app_window"];
+    if !files.is_empty() {
+        sources.push("file_references");
+    }
+    if semantic_page.is_some() {
+        sources.push("browser_semantic");
+    }
+    if source_kind == "browser_semantic" {
+        sources.push("browser_text_source");
+    }
+
+    Some(SemanticFusionDraft {
+        extraction: StructuredMemoryExtraction {
+            activity_type: activity.to_string(),
+            project: String::new(),
+            topic,
+            memory_context: sentences.join(" "),
+            workflow: workflow.to_string(),
+            user_intent: user_intent.to_string(),
+            files_touched: files,
+            entities,
+            search_aliases: aliases,
+            confidence,
+            dedup_fingerprint: String::new(),
+            ..Default::default()
+        },
+        sources,
+        reason: "low_ram_deterministic_semantic_fusion",
+    })
+}
+
+fn semantic_layout_diagnostics(
+    clean_text: &str,
+    capture_quality: &text_cleanup::CaptureQualityStats,
+) -> serde_json::Value {
+    let visible_lines = clean_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    let checkbox_like_lines = visible_lines
+        .iter()
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.starts_with("☐")
+                || lower.starts_with("[ ]")
+                || lower.starts_with("- [ ]")
+                || lower.contains("checkbox")
+        })
+        .count();
+    let heading_like_lines = visible_lines
+        .iter()
+        .filter(|line| {
+            let trimmed = line.trim_start_matches(['#', '*', '-']).trim();
+            !trimmed.is_empty()
+                && trimmed.len() <= 90
+                && trimmed
+                    .chars()
+                    .filter(|ch| ch.is_alphabetic())
+                    .take(1)
+                    .next()
+                    .is_some()
+                && trimmed
+                    .split_whitespace()
+                    .filter(|word| word.chars().next().map(char::is_uppercase).unwrap_or(false))
+                    .count()
+                    >= 2
+        })
+        .count();
+    let file_reference_count = extract_file_references(clean_text).len();
+    let split_pane_likelihood = ((file_reference_count.min(8) as f32 * 0.10)
+        + (checkbox_like_lines.min(8) as f32 * 0.05)
+        + (heading_like_lines.min(8) as f32 * 0.04)
+        + if visible_lines.len() >= 18 { 0.18 } else { 0.0 })
+    .clamp(0.0, 1.0);
+
+    json!({
+        "line_count": visible_lines.len(),
+        "file_reference_count": file_reference_count,
+        "heading_like_lines": heading_like_lines,
+        "checkbox_like_lines": checkbox_like_lines,
+        "split_pane_likelihood": split_pane_likelihood,
+        "line_confidence": {
+            "low_conf_lines": capture_quality.low_conf_lines,
+            "kept_lines": capture_quality.kept_lines,
+            "avg_line_score": capture_quality.avg_line_score,
+        }
+    })
+}
+
+fn apply_semantic_fusion(
+    structured_memory: &mut Option<StructuredMemoryExtraction>,
+    fusion: SemanticFusionDraft,
+    replace_core_fields: bool,
+) -> serde_json::Value {
+    if let Some(existing) = structured_memory.as_mut() {
+        if replace_core_fields || existing.memory_context.trim().is_empty() {
+            existing.memory_context = fusion.extraction.memory_context.clone();
+        }
+        if replace_core_fields || existing.topic.trim().is_empty() || existing.topic == "unknown" {
+            existing.topic = fusion.extraction.topic.clone();
+        }
+        if replace_core_fields || existing.workflow.trim().is_empty() {
+            existing.workflow = fusion.extraction.workflow.clone();
+        }
+        if replace_core_fields || existing.user_intent.trim().is_empty() {
+            existing.user_intent = fusion.extraction.user_intent.clone();
+        }
+        if replace_core_fields || existing.activity_type.trim().is_empty() {
+            existing.activity_type = fusion.extraction.activity_type.clone();
+        }
+        merge_unique_strings(
+            &mut existing.files_touched,
+            fusion.extraction.files_touched.clone(),
+        );
+        merge_unique_strings(&mut existing.entities, fusion.extraction.entities.clone());
+        merge_unique_strings(
+            &mut existing.search_aliases,
+            fusion.extraction.search_aliases.clone(),
+        );
+        existing.confidence = existing.confidence.max(fusion.extraction.confidence);
+    } else {
+        *structured_memory = Some(fusion.extraction.clone());
+    }
+
+    json!({
+        "applied": true,
+        "reason": fusion.reason,
+        "sources": fusion.sources,
+        "topic": structured_memory.as_ref().map(|m| m.topic.clone()).unwrap_or_default(),
+        "confidence": structured_memory.as_ref().map(|m| m.confidence).unwrap_or(0.0),
+    })
+}
+
 fn field_supported_by_evidence(field: &str, evidence_norm: &str) -> bool {
     let normalized_field = normalize_evidence_text(field);
     let terms = normalized_field
@@ -882,8 +1281,8 @@ fn build_continuation_footer(prior_chain: &[crate::storage::SearchResult]) -> St
     lines.join("\n")
 }
 
-/// Pad short contexts with grounded structured fields until at least
-/// `min_chars` are emitted. Pure helper; no I/O.
+/// Pad short contexts with grounded structured fields. Pure helper; no I/O and
+/// no raw OCR tail copying into durable `memory_context`.
 fn pad_with_structured(
     base: &str,
     extraction: Option<&StructuredMemoryExtraction>,
@@ -896,10 +1295,32 @@ fn pad_with_structured(
     }
     let mut out = base.to_string();
     let mut extras: Vec<String> = Vec::new();
+    let base_norm = normalize_text_for_overlap(base);
     if let Some(mem) = extraction {
+        let topic_norm = normalize_text_for_overlap(mem.topic.trim());
+        if !mem.topic.trim().is_empty()
+            && mem.topic.trim().to_ascii_lowercase() != "unknown"
+            && (topic_norm.is_empty() || !base_norm.contains(&topic_norm))
+        {
+            extras.push(format!("Topic: {}", mem.topic.trim()));
+        }
+        if !mem.user_intent.trim().is_empty() {
+            extras.push(format!("Intent: {}", mem.user_intent.trim()));
+        }
         if !mem.workflow.trim().is_empty() && mem.workflow.trim().to_ascii_lowercase() != "unknown"
         {
             extras.push(format!("Workflow: {}", mem.workflow.trim()));
+        }
+        if !mem.files_touched.is_empty() {
+            extras.push(format!(
+                "Files: {}",
+                mem.files_touched
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
         if !mem.entities.is_empty() {
             extras.push(format!(
@@ -912,10 +1333,32 @@ fn pad_with_structured(
                     .join(", ")
             ));
         }
+        if !mem.decisions.is_empty() {
+            extras.push(format!(
+                "Decisions: {}",
+                mem.decisions
+                    .iter()
+                    .take(2)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
         if !mem.results.is_empty() {
             extras.push(format!(
                 "Results: {}",
                 mem.results
+                    .iter()
+                    .take(2)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
+        if !mem.next_steps.is_empty() {
+            extras.push(format!(
+                "Next: {}",
+                mem.next_steps
                     .iter()
                     .take(2)
                     .cloned()
@@ -934,18 +1377,19 @@ fn pad_with_structured(
         }
     }
     if out.chars().count() < min_chars {
-        let evidence = text_cleanup::compress_to_salient_evidence(
-            clean_text,
-            app_name,
-            min_chars.saturating_sub(out.chars().count()).max(60),
-        );
-        if !evidence.trim().is_empty() {
+        let surface = if app_name.trim().is_empty() {
+            String::new()
+        } else {
+            format!("Source app: {}", app_name.trim())
+        };
+        if !surface.trim().is_empty() && !out.contains(&surface) {
             if !out.is_empty() {
                 out.push_str("\n");
             }
-            out.push_str(&evidence);
+            out.push_str(&surface);
         }
     }
+    let _ = clean_text;
     out
 }
 
@@ -1214,6 +1658,39 @@ fn compose_primary_embedding_text(
                     .join("; ")
             ));
         }
+        if !mem.decisions.is_empty() {
+            segments.push(format!(
+                "decisions: {}",
+                mem.decisions
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
+        if !mem.next_steps.is_empty() {
+            segments.push(format!(
+                "next: {}",
+                mem.next_steps
+                    .iter()
+                    .take(4)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
+        if !mem.search_aliases.is_empty() {
+            segments.push(format!(
+                "aliases: {}",
+                mem.search_aliases
+                    .iter()
+                    .take(8)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
     }
     if !display_summary.trim().is_empty() {
         segments.push(format!("summary: {}", display_summary.trim()));
@@ -1223,19 +1700,7 @@ fn compose_primary_embedding_text(
         app_name.trim(),
         window_title.trim()
     ));
-    let evidence_tail = text_cleanup::compress_to_salient_evidence(clean_text, app_name, 320);
-    if !evidence_tail.trim().is_empty() {
-        segments.push(format!("evidence: {}", evidence_tail.trim()));
-    }
-    // Shadow is only useful when surrounding tokens carry meaning; drop it
-    // when salience concentration is too low to avoid amplifying noise.
-    let concentration = text_cleanup::salience_concentration(clean_text, app_name);
-    if concentration >= 0.25 {
-        let shadow = lexical_shadow.chars().take(220).collect::<String>();
-        if !shadow.trim().is_empty() {
-            segments.push(format!("shadow: {}", shadow.trim()));
-        }
-    }
+    let _ = (clean_text, lexical_shadow);
     segments.join("\n")
 }
 
@@ -1365,7 +1830,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 for rec in batch.iter() {
                     state.enqueue_graph_from_flushed_memory(rec);
                 }
-                if let Err(err) = crate::ipc::commands::commit_graph_updates_now(state.clone()).await {
+                if let Err(err) =
+                    crate::ipc::commands::commit_graph_updates_now(state.clone()).await
+                {
                     tracing::debug!("immediate graph commit skipped: {}", err);
                 }
                 purge_capture_artifacts(state.store.frames_dir());
@@ -2011,12 +2478,46 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                     .max((seed.confidence * 0.9).clamp(0.0, 1.0));
             }
         }
-        let (extraction_grounding_confidence, extraction_issues) =
+        let (mut extraction_grounding_confidence, mut extraction_issues) =
             if let Some(memory) = structured_memory.as_mut() {
                 validate_structured_memory_extraction(memory, &app_name, &window_title, &text)
             } else {
                 (0.0, vec!["structured_extraction_unavailable".to_string()])
             };
+        let mut semantic_fusion_diagnostics = json!({
+            "applied": false,
+            "reason": null,
+            "sources": [],
+        });
+        let needs_deterministic_fusion = structured_memory.is_none()
+            || extraction_grounding_confidence < 0.55
+            || extraction_issues
+                .iter()
+                .any(|issue| issue == "structured_fields_weakly_grounded");
+        if needs_deterministic_fusion {
+            if let Some(fusion) = build_low_ram_semantic_fusion(
+                &app_name,
+                &window_title,
+                url.as_deref(),
+                &text,
+                semantic_page.as_ref(),
+                &capture_quality,
+                source_kind,
+            ) {
+                semantic_fusion_diagnostics = apply_semantic_fusion(
+                    &mut structured_memory,
+                    fusion,
+                    extraction_grounding_confidence < 0.55,
+                );
+                let validated = if let Some(memory) = structured_memory.as_mut() {
+                    validate_structured_memory_extraction(memory, &app_name, &window_title, &text)
+                } else {
+                    (0.0, vec!["structured_extraction_unavailable".to_string()])
+                };
+                extraction_grounding_confidence = validated.0.max(extraction_grounding_confidence);
+                extraction_issues = validated.1;
+            }
+        }
         // Count "this memory's structured fields are likely hallucinated"
         // signals. Two or more of these stacked with grounding < 0.5 means
         // the row would land as a Willow/Shottr-style polluted card —
@@ -2398,7 +2899,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         // retrieval can find visually similar screens. The text pipeline above is
         // the source of truth; on any CLIP failure we fall back to a zero vector
         // so retrieval/storage stay healthy.
-        let image_embedding = {
+        let (image_embedding, clip_embedding_status) = {
             let bytes = image_data.clone();
             let models_dir = models_dir.clone();
             let clip_start = Instant::now();
@@ -2415,20 +2916,41 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         clip_ms = clip_start.elapsed().as_millis(),
                         "capture_pipeline:image_embedding_ok"
                     );
-                    vec
+                    (vec, "ok".to_string())
                 }
                 Ok(Err(e)) => {
                     tracing::warn!(
                         "CLIP image embedding skipped for capture: {e}; storing zero vector"
                     );
-                    vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM]
+                    (
+                        vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM],
+                        format!("error:{e}"),
+                    )
                 }
                 Err(e) => {
                     tracing::warn!("CLIP image embedding join failed: {e}; storing zero vector");
-                    vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM]
+                    (
+                        vec![0.0f32; DEFAULT_IMAGE_EMBEDDING_DIM],
+                        format!("join_error:{e}"),
+                    )
                 }
             }
         };
+        let host_supports_vlm = crate::telemetry::system_metrics::host_supports_vlm();
+        let (vlm_pressure_skip, vlm_pressure_reason) =
+            crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
+        let text_capture_vlm_route = capture_pixel_vlm_route(
+            &config,
+            state.app_data_dir.as_path(),
+            text.len(),
+            observed_confidence,
+            observed_block_count,
+            clip_embedding_status == "ok",
+            false,
+            vlm_pressure_skip,
+            host_supports_vlm,
+            config.vlm_max_calls_per_minute,
+        );
 
         // Release the model pipeline lock now that LLM + text-embed + CLIP
         // have all completed for this frame. Downstream Focus Mode / storage
@@ -2529,6 +3051,17 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 "dropped_low_signal_lines": capture_quality.dropped_low_signal_lines,
                 "avg_line_score": capture_quality.avg_line_score,
             },
+            "semantic_layout": semantic_layout_diagnostics(&enriched_clean_text, &capture_quality),
+            "semantic_fusion": semantic_fusion_diagnostics.clone(),
+            "fusion_sources": semantic_fusion_diagnostics
+                .get("sources")
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+            "vlm_route": text_capture_vlm_route.label(),
+            "vlm_block_reason": text_capture_vlm_route.fallback_reason(),
+            "host_supports_vlm": host_supports_vlm,
+            "pressure_reason": vlm_pressure_reason,
+            "clip_embedding_status": clip_embedding_status,
             "extraction_grounding_confidence": extraction_grounding_confidence,
             "extraction_issues": extraction_issues.clone(),
             "primary_embed_input": primary_embed_input.chars().take(900).collect::<String>(),
@@ -4608,6 +5141,110 @@ mod tests {
     }
 
     #[test]
+    fn low_ram_semantic_fusion_builds_codex_docs_memory_without_topic_scaffold() {
+        let raw = r#"
+Push latest changes
+README.md
+DESIGN_DIRECTION.md
+Removed untracked planning/artifact files and folders.
+Still planned but not implemented (from current committed docs):
+1. Optional Qwen3-VL + mmproj photo-import vision path is documented as optional setup, not baseline behavior yet (README.md:202).
+2. Image-aware retrieval is explicitly future (CLIP vector stored now, richer retrieval later) (README.md:129).
+3. Future graph enrichment runtime is noted as future/additive in design direction (DESIGN_DIRECTION.md:106).
+Future Roadmap
+Near Term
+Advanced idle detection
+Medium Term
+Semantic timeline (group by topic, not just time)
+Activity patterns and insights dashboard
+"#;
+        let quality = text_cleanup::CaptureQualityStats {
+            total_lines: 51,
+            kept_lines: 50,
+            low_conf_lines: 51,
+            dropped_noise_lines: 0,
+            dropped_low_signal_lines: 1,
+            avg_line_score: 0.58,
+        };
+
+        let fusion = build_low_ram_semantic_fusion(
+            "Codex",
+            "Push latest changes",
+            None,
+            raw,
+            None,
+            &quality,
+            "ocr",
+        )
+        .expect("fusion should build from OCR, file refs, and app/window context");
+
+        assert!(fusion.extraction.memory_context.contains("README.md"));
+        assert!(fusion
+            .extraction
+            .memory_context
+            .contains("DESIGN_DIRECTION.md"));
+        assert!(fusion
+            .extraction
+            .user_intent
+            .contains("implementation status"));
+        assert!(!fusion.extraction.memory_context.starts_with("Topic:"));
+        assert!(!fusion
+            .extraction
+            .search_aliases
+            .iter()
+            .any(|alias| alias.contains("tspbn")));
+        assert!(fusion
+            .extraction
+            .files_touched
+            .iter()
+            .any(|file| file == "README.md"));
+        assert!(fusion
+            .extraction
+            .files_touched
+            .iter()
+            .any(|file| file == "DESIGN_DIRECTION.md"));
+    }
+
+    #[test]
+    fn fused_primary_embedding_text_excludes_raw_ocr_excerpt() {
+        let quality = text_cleanup::CaptureQualityStats {
+            total_lines: 8,
+            kept_lines: 8,
+            low_conf_lines: 0,
+            dropped_noise_lines: 0,
+            dropped_low_signal_lines: 0,
+            avg_line_score: 0.72,
+        };
+        let raw = "README.md DESIGN_DIRECTION.md Output Truncation: All tool outputs are truncated to prevent context overflow";
+        let fusion = build_low_ram_semantic_fusion(
+            "Codex",
+            "Push latest changes",
+            None,
+            raw,
+            None,
+            &quality,
+            "ocr",
+        )
+        .expect("fusion should build");
+        let text = compose_primary_embedding_text(
+            Some(&fusion.extraction),
+            "Codex",
+            "Push latest changes",
+            &fusion.extraction.memory_context,
+            "Reviewing README and DESIGN_DIRECTION implementation status.",
+            raw,
+            "Output Truncation noisy raw OCR",
+        );
+
+        assert!(text.contains("intent: reviewing implementation status"));
+        assert!(text.contains("files: README.md, DESIGN_DIRECTION.md"));
+        assert!(text.contains("context: "));
+        assert!(!text.contains("Output Truncation"));
+        assert!(!text.contains("evidence:"));
+        assert!(!text.contains("shadow:"));
+    }
+
+    #[test]
     fn lightweight_entities_extracts_named_tokens() {
         let entities = lightweight_entities_from_text(
             "Screenpipe integrates Obsidian, Apple Intelligence, and Toggl reports.",
@@ -4795,8 +5432,8 @@ mod tests {
         assert!(text.contains("intent: Refactor OCR scoring"));
         assert!(text.contains("project: FNDR"));
         assert!(text.contains("files: src-tauri/src/capture/text_cleanup.rs"));
-        assert!(text.contains("evidence: "));
-        assert!(!text.contains(&"evidence ".repeat(80)));
+        assert!(!text.contains("evidence:"));
+        assert!(!text.contains(&"evidence ".repeat(20)));
     }
 
     #[test]

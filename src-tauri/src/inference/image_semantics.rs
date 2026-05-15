@@ -140,6 +140,9 @@ pub async fn extract_image_semantics(
     source: ImageImportSource,
     app_data_dir: PathBuf,
 ) -> Result<ImageSemanticInsight, String> {
+    if !crate::telemetry::system_metrics::host_supports_vlm() {
+        return Err("vlm_blocked_low_ram".to_string());
+    }
     let filename = filename.to_string();
     tracing::debug!(?source, %filename, "extract_image_semantics: scheduling blocking vision run");
     tokio::task::spawn_blocking(move || {

@@ -177,12 +177,18 @@ const STOP_TOKENS: &[&str] = &[
 ];
 
 fn hard_gate_structured_extraction_failed(record: &MemoryRecord) -> bool {
-    if record.evidence_confidence > 0.0 {
+    let has_structured_unavailable = extraction_issues(record)
+        .iter()
+        .any(|issue| issue.eq_ignore_ascii_case("structured_extraction_unavailable"));
+    if !has_structured_unavailable {
         return false;
     }
-    extraction_issues(record)
-        .iter()
-        .any(|issue| issue.eq_ignore_ascii_case("structured_extraction_unavailable"))
+
+    if let Some(grounding) = extraction_grounding_confidence(record) {
+        return grounding <= 0.0;
+    }
+
+    record.evidence_confidence <= 0.0
 }
 
 fn hard_gate_polluted_memory_context(record: &MemoryRecord) -> bool {
@@ -206,6 +212,14 @@ fn extraction_issues(record: &MemoryRecord) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+fn extraction_grounding_confidence(record: &MemoryRecord) -> Option<f32> {
+    serde_json::from_str::<Value>(&record.raw_evidence)
+        .ok()
+        .and_then(|json| json.get("extraction_grounding_confidence").cloned())
+        .and_then(|value| value.as_f64())
+        .map(|value| value as f32)
 }
 
 #[cfg(test)]
@@ -276,6 +290,21 @@ mod tests {
             quality_gate_reason(&record),
             "hard_gate=structured_extraction_unavailable_with_zero_grounding"
         );
+    }
+
+    #[test]
+    fn storage_outcome_quarantines_when_ocr_confidence_is_nonzero_but_grounding_is_zero() {
+        let cfg = default_memory_quality_config();
+        let record = MemoryRecord {
+            evidence_confidence: 0.58,
+            raw_evidence:
+                "{\"extraction_grounding_confidence\":0.0,\"extraction_issues\":[\"structured_extraction_unavailable\"]}"
+                    .to_string(),
+            ..Default::default()
+        };
+
+        let outcome = classify_storage_outcome(&record, &cfg);
+        assert_eq!(outcome, "quarantine_low_grounding");
     }
 
     #[test]

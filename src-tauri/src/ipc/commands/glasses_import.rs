@@ -6,6 +6,7 @@
 use super::common::shared_embedder;
 use crate::config::DEFAULT_IMAGE_EMBEDDING_DIM;
 use crate::embedding::{embed_imported_image, EMBEDDING_DIM};
+use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
 use crate::inference::{
     build_import_raw_evidence, compose_import_memory_context, extract_image_semantics,
     insight_from_ocr_only, insight_from_structured, should_include_import_ocr, ImageImportSource,
@@ -21,13 +22,55 @@ use crate::storage::MemoryRecord;
 use crate::AppState;
 use chrono::Local;
 use image::ImageFormat;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
 use tauri::State;
 
 const APP_LABEL: &str = "Meta glasses import";
+
+fn route_label(decision: &VlmRouteDecision) -> &'static str {
+    match decision {
+        VlmRouteDecision::SkipDuplicate => "skip_duplicate",
+        VlmRouteDecision::SkipGoodOcr => "skip_good_ocr",
+        VlmRouteDecision::SkipLowValue => "skip_low_value",
+        VlmRouteDecision::RunLightweightVlm => "run_lightweight_vlm",
+        VlmRouteDecision::RunHeavyVlmExplicitOnly => "run_heavy_vlm_explicit",
+        VlmRouteDecision::FallbackOcrOnly { .. } => "fallback_ocr_only",
+    }
+}
+
+fn fallback_reason(decision: &VlmRouteDecision) -> Option<&str> {
+    match decision {
+        VlmRouteDecision::FallbackOcrOnly { reason } => Some(reason.as_str()),
+        _ => None,
+    }
+}
+
+fn route_import_pixel_vlm(
+    config: &crate::config::Config,
+    model_id: Option<&str>,
+    host_supports_vlm: bool,
+    pressure_skip: bool,
+    vlm_available: bool,
+    calls_remaining: u32,
+) -> VlmRouteDecision {
+    should_run_vlm(&VlmRouteInput {
+        ocr_text_len: 120,
+        ocr_confidence: 0.50,
+        ocr_block_count: 8,
+        visual_signal: true,
+        is_duplicate: false,
+        system_pressure_skip: pressure_skip,
+        host_supports_vlm,
+        vlm_enabled: config.use_vlm,
+        vlm_model_id: model_id,
+        vlm_available,
+        vlm_calls_remaining: calls_remaining,
+        vlm_timeout_secs: config.vlm_timeout_secs,
+    })
+}
 
 fn allowed_image_extension(path: &Path) -> bool {
     path.extension()
@@ -135,20 +178,30 @@ pub async fn import_meta_glasses_photo(
         Some("noisy_low_signal_text")
     };
 
-    // System-pressure throttle: when the host or this process is in a hot
-    // state (low free RAM, runaway CPU, or 6+ GiB footprint), skip the VLM
-    // altogether and use the OCR-grounded fallback. This prevents the
-    // `mtmd eval chunks: -3` failure cascade the user hit when Metal was
-    // already saturated by the capture loop's text pipeline.
+    let config = state.config.read().clone();
+    let model_id = models::configured_vlm_model_id(&config);
+    let host_supports_vlm = crate::telemetry::system_metrics::host_supports_vlm();
+    let vlm_available =
+        models::pixel_vlm_available(model_id.as_deref(), Some(app_data_dir.as_path()));
+
+    // System-pressure and host-size throttle: when the host cannot safely hold
+    // a pixel VLM, or the current process is hot, skip MTMD entirely and use
+    // OCR-grounded fallback semantics.
     let (skip_vlm, skip_reason) =
         crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
+    let vlm_route = route_import_pixel_vlm(
+        &config,
+        model_id.as_deref(),
+        host_supports_vlm,
+        skip_vlm,
+        vlm_available,
+        config.vlm_max_calls_per_minute,
+    );
 
-    let vision = if skip_vlm {
-        tracing::info!(
-            "glasses_import: skipping VLM under system pressure ({skip_reason}); using OCR-grounded insight"
-        );
-        Err(format!("skipped_under_pressure:{skip_reason}"))
-    } else {
+    let vision = if matches!(
+        vlm_route,
+        VlmRouteDecision::RunLightweightVlm | VlmRouteDecision::RunHeavyVlmExplicitOnly
+    ) {
         extract_image_semantics(
             file_bytes.clone(),
             filename.as_str(),
@@ -156,6 +209,14 @@ pub async fn import_meta_glasses_photo(
             app_data_dir.clone(),
         )
         .await
+    } else {
+        let reason = fallback_reason(&vlm_route)
+            .map(str::to_string)
+            .unwrap_or_else(|| route_label(&vlm_route).to_string());
+        tracing::info!(
+            "glasses_import: skipping VLM ({reason}); pressure_reason={skip_reason}; using OCR-grounded insight"
+        );
+        Err(reason)
     };
 
     let mut extraction_issues: Vec<String> = Vec::new();
@@ -263,7 +324,7 @@ pub async fn import_meta_glasses_photo(
     } else {
         Some(ocr_text.chars().take(400).collect::<String>())
     };
-    let raw_evidence = build_import_raw_evidence(
+    let raw_evidence_base = build_import_raw_evidence(
         ImageImportSource::MetaGlasses.api_label(),
         &filename,
         &insight,
@@ -272,6 +333,19 @@ pub async fn import_meta_glasses_photo(
         ocr_excerpt_owned.as_deref(),
         extraction_failure_reason.as_deref(),
     );
+    let mut raw_evidence_json: Value =
+        serde_json::from_str(&raw_evidence_base).unwrap_or_else(|_| json!({}));
+    raw_evidence_json["vlm_route"] = json!(route_label(&vlm_route));
+    raw_evidence_json["vlm_block_reason"] = json!(fallback_reason(&vlm_route));
+    raw_evidence_json["host_supports_vlm"] = json!(host_supports_vlm);
+    raw_evidence_json["pressure_reason"] = json!(skip_reason);
+    raw_evidence_json["clip_embedding_status"] =
+        json!(if image_embedding.iter().all(|v| *v == 0.0) {
+            "zero_vector"
+        } else {
+            "ok"
+        });
+    let raw_evidence = raw_evidence_json.to_string();
 
     let internal_context = json!({
         "import_pipeline": "visual_semantics_mtmd",
@@ -279,6 +353,10 @@ pub async fn import_meta_glasses_photo(
         "semantic_confidence": insight.confidence,
         "ocr_included": include_ocr,
         "ocr_rejected_reason": ocr_rejected_reason,
+        "vlm_route": route_label(&vlm_route),
+        "vlm_block_reason": fallback_reason(&vlm_route),
+        "host_supports_vlm": host_supports_vlm,
+        "pressure_reason": skip_reason,
     })
     .to_string();
 
@@ -360,4 +438,56 @@ pub async fn import_meta_glasses_photo(
     state.invalidate_memory_derived_caches();
 
     Ok(record.id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn import_pixel_vlm_route_blocks_low_ram_before_model_availability() {
+        let mut config = crate::config::Config::default().normalized();
+        config.use_vlm = true;
+        config.vlm_model_size = "500M".to_string();
+        config.vlm_max_calls_per_minute = 10;
+        config.vlm_timeout_secs = 30;
+
+        let decision = route_import_pixel_vlm(
+            &config,
+            Some("smolvlm-500m"),
+            false,
+            false,
+            true,
+            config.vlm_max_calls_per_minute,
+        );
+
+        assert_eq!(
+            decision,
+            VlmRouteDecision::FallbackOcrOnly {
+                reason: "vlm_blocked_low_ram".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn import_pixel_vlm_route_honors_disabled_config() {
+        let mut config = crate::config::Config::default().normalized();
+        config.use_vlm = false;
+
+        let decision = route_import_pixel_vlm(
+            &config,
+            Some("smolvlm-500m"),
+            true,
+            false,
+            true,
+            config.vlm_max_calls_per_minute,
+        );
+
+        assert_eq!(
+            decision,
+            VlmRouteDecision::FallbackOcrOnly {
+                reason: "vlm_disabled".to_string()
+            }
+        );
+    }
 }

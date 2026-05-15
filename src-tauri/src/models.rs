@@ -133,6 +133,39 @@ pub fn smolvlm_500m_fully_available(app_data_dir: Option<&Path>) -> bool {
         && resolve_smolvlm_mmproj(app_data_dir).is_some()
 }
 
+/// Effective pixel-VLM model id from runtime config.
+///
+/// `None` means no explicit pixel-VLM tier is selected; callers may still
+/// fall back to whichever lightweight/heavy MTMD pair is available when their
+/// route allows it.
+pub fn configured_vlm_model_id(config: &Config) -> Option<String> {
+    config
+        .vlm_model_id
+        .clone()
+        .or_else(|| match config.vlm_model_size.as_str() {
+            "500M" => Some("smolvlm-500m".to_string()),
+            "4B" => Some("qwen3-vl-4b".to_string()),
+            _ => None,
+        })
+}
+
+pub fn qwen3_vl_fully_available(app_data_dir: Option<&Path>) -> bool {
+    is_model_available("qwen3-vl-4b", app_data_dir)
+        && resolve_qwen3_vl_mmproj(app_data_dir).is_some()
+}
+
+/// Whether a pixel MTMD runtime can load for the selected model tier.
+pub fn pixel_vlm_available(model_id: Option<&str>, app_data_dir: Option<&Path>) -> bool {
+    match model_id {
+        Some("smolvlm-500m") => smolvlm_500m_fully_available(app_data_dir),
+        Some("qwen3-vl-4b") => qwen3_vl_fully_available(app_data_dir),
+        Some(_) => false,
+        None => {
+            smolvlm_500m_fully_available(app_data_dir) || qwen3_vl_fully_available(app_data_dir)
+        }
+    }
+}
+
 /// Minimum on-disk size for the catalog `Qwen3VL-4B-Instruct-*.gguf` to be treated as plausible.
 ///
 /// Rejects Git LFS pointer files, empty placeholders, or unrelated GGUFs renamed to the
