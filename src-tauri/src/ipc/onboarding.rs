@@ -661,23 +661,10 @@ pub async fn refresh_ai_models(
     let ai_model_loaded = loaded_ai.inference.is_some();
     let vlm_loaded = loaded_ai.vlm.is_some();
 
-    let vlm_model_id_str = config.vlm_model_id.clone().or_else(|| {
-        if config.vlm_model_size == "4B" {
-            Some("qwen3-vl-4b".to_string())
-        } else if config.vlm_model_size == "500M" {
-            Some("smolvlm-500m".to_string())
-        } else {
-            None
-        }
-    });
-
     let model_mode = if !config.use_vlm {
         "disabled".to_string()
     } else if vlm_loaded {
-        match vlm_model_id_str.as_deref() {
-            Some("qwen3-vl-4b") => "heavy_vlm".to_string(),
-            _ => "lightweight_vlm".to_string(),
-        }
+        "lightweight_vlm".to_string()
     } else {
         "ocr_only".to_string()
     };
@@ -690,7 +677,7 @@ pub async fn refresh_ai_models(
         "fallback".to_string()
     };
 
-    let vlm_model_id = if vlm_loaded { vlm_model_id_str } else { None };
+    let vlm_model_id: Option<String> = None;
 
     state
         .inner()

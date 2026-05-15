@@ -3,10 +3,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub const DEFAULT_TEXT_EMBEDDING_DIM: usize = 1024;
+pub const DEFAULT_TEXT_EMBEDDING_DIM: usize = 256;
 pub const DEFAULT_IMAGE_EMBEDDING_DIM: usize = 512;
-pub const DEFAULT_EMBEDDING_MODEL_NAME: &str = "bge-large-en-v1.5";
-pub const DEFAULT_EMBEDDING_MODEL_FILENAME: &str = "bge-large-en-v1.5-quantized.onnx";
+pub const DEFAULT_EMBEDDING_MODEL_NAME: &str = "google/embeddinggemma-300m";
+pub const DEFAULT_EMBEDDING_MODEL_FILENAME: &str = "embeddinggemma-300m.onnx";
 pub const DEFAULT_EMBEDDING_TOKENIZER_FILENAME: &str = "tokenizer.json";
 pub const DEFAULT_EMBEDDING_MAX_SEQ_LEN: usize = 512;
 pub const DEFAULT_EMBEDDING_CACHE_CAPACITY: usize = 1024;
@@ -610,9 +610,6 @@ pub struct Config {
     /// Enable VLM for intelligent image understanding
     #[serde(default = "default_use_vlm")]
     pub use_vlm: bool,
-    /// VLM model size: "1B" (Llama, default), "500M" (SmolVLM), or "4B" (Qwen, advanced).
-    #[serde(default = "default_vlm_model_size")]
-    pub vlm_model_size: String,
     /// Maximum VLM calls per minute across the capture pipeline.
     /// Default 10 calls/min → one every 6 seconds maximum, safe for 8 GB RAM.
     #[serde(default = "default_vlm_max_calls_per_minute")]
@@ -620,10 +617,6 @@ pub struct Config {
     /// Per-call VLM timeout in seconds. Falls back to OCR-only if the model doesn't respond.
     #[serde(default = "default_vlm_timeout_secs")]
     pub vlm_timeout_secs: u64,
-    /// Explicit VLM model ID override. When set, overrides vlm_model_size.
-    /// Example: "smolvlm-500m" or "qwen3-vl-4b". None = use vlm_model_size tier.
-    #[serde(default)]
-    pub vlm_model_id: Option<String>,
     /// Days to retain screenshot files on disk (records kept; only pixel data deleted). 0 = keep forever.
     #[serde(default = "default_screenshot_retention_days")]
     pub screenshot_retention_days: u32,
@@ -930,10 +923,6 @@ fn default_use_vlm() -> bool {
     true
 }
 
-fn default_vlm_model_size() -> String {
-    "1B".to_string()
-}
-
 fn default_vlm_max_calls_per_minute() -> u32 {
     10
 }
@@ -997,10 +986,8 @@ impl Default for Config {
             redact_mode: false,
             min_text_length: 20,
             use_vlm: true,
-            vlm_model_size: default_vlm_model_size(),
             vlm_max_calls_per_minute: default_vlm_max_calls_per_minute(),
             vlm_timeout_secs: default_vlm_timeout_secs(),
-            vlm_model_id: None,
             screenshot_retention_days: 30,
             proactive_surface_enabled: true,
             decay_half_life_days: 21,
@@ -1039,18 +1026,8 @@ impl Config {
         self.min_text_length = self.min_text_length.clamp(1, 2000);
         self.screenshot_retention_days = self.screenshot_retention_days.min(3650);
         self.decay_half_life_days = self.decay_half_life_days.clamp(1, 3650);
-        let vlm = self.vlm_model_size.trim().to_string();
-        self.vlm_model_size = match vlm.as_str() {
-            "500M" | "500m" => "500M".to_string(),
-            "4B" => "4B".to_string(),
-            _ => "1B".to_string(),
-        };
         self.vlm_max_calls_per_minute = self.vlm_max_calls_per_minute.min(60);
         self.vlm_timeout_secs = self.vlm_timeout_secs.min(300);
-        self.vlm_model_id = self
-            .vlm_model_id
-            .map(|id| id.trim().to_string())
-            .filter(|id| matches!(id.as_str(), "smolvlm-500m" | "qwen3-vl-4b"));
         self
     }
 
@@ -1164,7 +1141,7 @@ mod tests {
             .validate()
             .expect_err("wrong embedding dimension must fail at startup");
 
-        assert!(err.contains("1024-dimensional text embeddings"));
+        assert!(err.contains("256-dimensional text embeddings"));
     }
 
     #[test]
@@ -1189,22 +1166,13 @@ mod tests {
     }
 
     #[test]
-    fn normalized_config_preserves_500m_vlm_tier() {
-        let mut config = Config::default();
-        config.vlm_model_size = "500M".to_string();
-        assert_eq!(config.normalized().vlm_model_size, "500M");
-    }
-
-    #[test]
-    fn normalized_config_clamps_vlm_controls_and_filters_unknown_model_id() {
+    fn normalized_config_clamps_vlm_controls() {
         let mut config = Config::default();
         config.vlm_max_calls_per_minute = 999;
         config.vlm_timeout_secs = 999;
-        config.vlm_model_id = Some("unknown-model".to_string());
 
         let config = config.normalized();
         assert_eq!(config.vlm_max_calls_per_minute, 60);
         assert_eq!(config.vlm_timeout_secs, 300);
-        assert!(config.vlm_model_id.is_none());
     }
 }

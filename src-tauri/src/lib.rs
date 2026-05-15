@@ -546,10 +546,7 @@ pub async fn load_ai_engines(app_data_dir: &Path, config: &Config) -> LoadedAiEn
             }
         };
 
-    tracing::info!(
-        "Skipping eager VLM warm-up; VLM loads on demand (Settings tier: {}).",
-        config.vlm_model_size
-    );
+    tracing::info!("Skipping eager VLM warm-up; VLM loads on demand.");
     let vlm = None;
 
     LoadedAiEngines { inference, vlm }
