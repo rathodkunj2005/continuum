@@ -72,4 +72,22 @@ describe("applyFilters", () => {
         expect(out.edges).toEqual([]);
         expect(out.nodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
     });
+
+    it("filters by topic metadata", () => {
+        const view: GraphView = {
+            ...sample,
+            nodes: [
+                {
+                    ...sample.nodes[0],
+                    raw: { metadata: { topic: "color" } } as never,
+                },
+                {
+                    ...sample.nodes[1],
+                    raw: { metadata: { topic: "archive" } } as never,
+                },
+            ],
+        };
+        const out = applyFilters(view, { ...EMPTY_FILTERS, topics: new Set(["archive"]) });
+        expect(out.nodes.map((n) => n.id)).toEqual(["b"]);
+    });
 });

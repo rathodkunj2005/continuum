@@ -3,6 +3,7 @@ import type { GraphView } from "./types";
 export interface GraphFilterState {
     nodeTypes: ReadonlySet<string> | null;
     projects: ReadonlySet<string> | null;
+    topics: ReadonlySet<string> | null;
     minConfidence: number;
     edgeKinds: ReadonlySet<string> | null;
 }
@@ -10,6 +11,7 @@ export interface GraphFilterState {
 export const EMPTY_FILTERS: GraphFilterState = {
     nodeTypes: null,
     projects: null,
+    topics: null,
     minConfidence: 0,
     edgeKinds: null,
 };
@@ -19,18 +21,24 @@ export function applyFilters(view: GraphView, filters: GraphFilterState): GraphV
     const noActiveFilters =
         filters.nodeTypes === null &&
         filters.projects === null &&
+        filters.topics === null &&
         filters.edgeKinds === null &&
         filters.minConfidence <= 0;
     if (noActiveFilters) return view;
 
     const nodes = view.nodes.filter((n) => {
         if (filters.nodeTypes && !filters.nodeTypes.has(n.nodeType)) return false;
+        const md =
+            n.raw.metadata && typeof n.raw.metadata === "object"
+                ? (n.raw.metadata as Record<string, unknown>)
+                : null;
         if (filters.projects) {
-            const project =
-                n.raw.metadata && typeof n.raw.metadata === "object"
-                    ? (n.raw.metadata as Record<string, unknown>).project
-                    : undefined;
+            const project = md?.project;
             if (typeof project !== "string" || !filters.projects.has(project)) return false;
+        }
+        if (filters.topics) {
+            const topic = md?.topic;
+            if (typeof topic !== "string" || !filters.topics.has(topic)) return false;
         }
         return true;
     });

@@ -10,7 +10,7 @@ export interface KnowledgeGraphTopBarProps {
     edgeCount: number;
 }
 
-type MenuKey = "nodeTypes" | "projects" | "edgeKinds";
+type MenuKey = "nodeTypes" | "projects" | "topics" | "edgeKinds";
 
 function toggle<T>(set: ReadonlySet<T> | null, value: T): ReadonlySet<T> | null {
     if (!set) return new Set([value]);
@@ -73,10 +73,17 @@ export function KnowledgeGraphTopBar({
     const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
 
     const reset = () =>
-        onChange({ nodeTypes: null, projects: null, edgeKinds: null, minConfidence: 0 });
+        onChange({
+            nodeTypes: null,
+            projects: null,
+            topics: null,
+            edgeKinds: null,
+            minConfidence: 0,
+        });
     const activeCount =
         (filters.nodeTypes?.size ?? 0) +
         (filters.projects?.size ?? 0) +
+        (filters.topics?.size ?? 0) +
         (filters.edgeKinds?.size ?? 0) +
         (filters.minConfidence > 0 ? 1 : 0);
 
@@ -112,6 +119,18 @@ export function KnowledgeGraphTopBar({
                         active={filters.projects}
                         onToggle={(v) =>
                             onChange({ ...filters, projects: toggle(filters.projects, v) })
+                        }
+                    />
+                )}
+                {options.topics.length > 0 && (
+                    <FilterMenu
+                        label="topic"
+                        open={openMenu === "topics"}
+                        onOpen={open("topics")}
+                        options={options.topics}
+                        active={filters.topics}
+                        onToggle={(v) =>
+                            onChange({ ...filters, topics: toggle(filters.topics, v) })
                         }
                     />
                 )}
