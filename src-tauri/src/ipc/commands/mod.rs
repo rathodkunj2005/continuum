@@ -47,7 +47,7 @@ mod glasses_import;
 pub use glasses_import::*;
 
 pub mod debug;
-pub use debug::inspect_memory_pipeline;
+pub use debug::{get_memory_timeline_thread, inspect_memory_pipeline};
 
 #[cfg(test)]
 mod daily_summary_tests {

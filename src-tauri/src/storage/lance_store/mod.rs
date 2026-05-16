@@ -1946,6 +1946,64 @@ impl Store {
         Ok(results)
     }
 
+    /// Walk the parent_id chain backward from `memory_id` up to `max_depth`
+    /// ancestors. Useful for rendering a memory's full timeline thread.
+    pub async fn get_ancestor_chain(
+        &self,
+        memory_id: &str,
+        max_depth: usize,
+    ) -> Result<Vec<MemoryRecord>, Box<dyn std::error::Error>> {
+        let mut out = Vec::new();
+        let mut current_id = memory_id.to_string();
+        let mut seen = std::collections::HashSet::new();
+        seen.insert(current_id.clone());
+
+        for _ in 0..max_depth {
+            let Some(record) = self.get_memory_by_id(&current_id).await? else {
+                break;
+            };
+            let Some(parent_id) = record.parent_id.clone() else {
+                break;
+            };
+            if parent_id.trim().is_empty() || !seen.insert(parent_id.clone()) {
+                break;
+            }
+            let Some(parent) = self.get_memory_by_id(&parent_id).await? else {
+                break;
+            };
+            out.push(parent);
+            current_id = parent_id;
+        }
+        Ok(out)
+    }
+
+    /// Direct children of `memory_id` (records whose parent_id == memory_id).
+    pub async fn get_children(
+        &self,
+        memory_id: &str,
+        limit: usize,
+    ) -> Result<Vec<MemoryRecord>, Box<dyn std::error::Error>> {
+        if memory_id.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = format!("parent_id = '{}'", sql_escape(memory_id));
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .only_if(filter)
+            .limit(limit.max(1))
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut records = Vec::new();
+        for batch in &batches {
+            records.extend(batch_to_memory_records(batch));
+        }
+        records.sort_by_key(|r| r.timestamp);
+        Ok(records)
+    }
+
     /// List newest memories as raw search-style rows (optionally filtered by app).
     pub async fn list_recent_results(
         &self,

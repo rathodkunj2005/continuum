@@ -2825,6 +2825,18 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             .take(3)
             .collect::<Vec<_>>();
 
+        // Hierarchical linking: set parent_id to the most recent prior memory
+        // in the chain. `prior_chain` was already fetched by session OR project,
+        // so any first() match implies a real session/project relationship.
+        // Additional 1-hour recency gate avoids forced linking across stale chains.
+        let parent_id_from_chain: Option<String> = prior_chain
+            .first()
+            .filter(|prior| {
+                let gap_ms = (now.timestamp_millis() - prior.timestamp).max(0);
+                gap_ms < 60 * 60 * 1000
+            })
+            .map(|prior| prior.id.clone());
+
         // --- Proactive Privacy Check ---
         if Blocklist::is_sensitive_context(url.as_deref(), Some(&window_title)) {
             let alert_key = Blocklist::context_key(url.as_deref(), Some(&window_title))
@@ -3308,7 +3320,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             raw_screenshot_stored: false,
             is_consolidated: false,
             is_soft_deleted: false,
-            parent_id: None,
+            parent_id: parent_id_from_chain,
             related_ids: Vec::new(),
             consolidated_from: Vec::new(),
             synthesis_branch: structured_memory

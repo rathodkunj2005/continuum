@@ -1773,3 +1773,26 @@ export async function inspectMemoryPipeline(
 ): Promise<MemoryPipelineInspection> {
     return invoke("inspect_memory_pipeline", { memoryId });
 }
+
+export interface TimelineThreadEntry {
+    memory_id: string;
+    timestamp: number;
+    app_name: string;
+    window_title: string;
+    insight_what_happened: string;
+    project: string;
+    topic_categories: string[];
+}
+
+export interface MemoryTimelineThread {
+    memory_id: string;
+    ancestors: TimelineThreadEntry[];
+    focus: TimelineThreadEntry;
+    descendants: TimelineThreadEntry[];
+}
+
+export async function getMemoryTimelineThread(
+    memoryId: string,
+): Promise<MemoryTimelineThread> {
+    return invoke("get_memory_timeline_thread", { memoryId });
+}

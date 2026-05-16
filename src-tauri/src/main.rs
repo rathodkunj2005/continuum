@@ -611,6 +611,7 @@ fn main() {
             ipc::commands::get_memory_repair_progress,
             ipc::commands::get_memory_debug_inspector,
             ipc::commands::debug::inspect_memory_pipeline,
+            ipc::commands::debug::get_memory_timeline_thread,
             ipc::commands::evaluate_recent_memory_quality,
             ipc::commands::rebuild_memory_context_for_range,
             ipc::commands::backfill_insight_layers_for_range,

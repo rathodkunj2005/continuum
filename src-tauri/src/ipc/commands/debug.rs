@@ -7,6 +7,7 @@ use crate::memory::distill::distill_memory_from_record;
 use crate::memory::embed_doc::build_embedding_document;
 use crate::memory::types::{CleanedEvidence, MemoryDecision, QualityDecision, QualityScores};
 use crate::memory::validate::decide_memory;
+use crate::storage::MemoryRecord;
 use crate::AppState;
 
 use serde::Serialize;
@@ -98,5 +99,67 @@ pub async fn inspect_memory_pipeline(
         has_image_embedding: !record.image_embedding.is_empty(),
         insight_spans_json: record.insight_spans_json.clone(),
         lexical_shadow: record.lexical_shadow.clone(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+pub struct TimelineThreadEntry {
+    pub memory_id: String,
+    pub timestamp: i64,
+    pub app_name: String,
+    pub window_title: String,
+    pub insight_what_happened: String,
+    pub project: String,
+    pub topic_categories: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemoryTimelineThread {
+    pub memory_id: String,
+    pub ancestors: Vec<TimelineThreadEntry>,
+    pub focus: TimelineThreadEntry,
+    pub descendants: Vec<TimelineThreadEntry>,
+}
+
+fn to_entry(r: &MemoryRecord) -> TimelineThreadEntry {
+    TimelineThreadEntry {
+        memory_id: r.id.clone(),
+        timestamp: r.timestamp,
+        app_name: r.app_name.clone(),
+        window_title: r.window_title.clone(),
+        insight_what_happened: r.insight_what_happened.clone(),
+        project: r.project.clone(),
+        topic_categories: r.topic_categories.clone(),
+    }
+}
+
+#[tauri::command]
+pub async fn get_memory_timeline_thread(
+    state: State<'_, Arc<AppState>>,
+    memory_id: String,
+) -> Result<MemoryTimelineThread, String> {
+    let focus = state
+        .store
+        .get_memory_by_id(&memory_id)
+        .await
+        .map_err(|e| format!("store lookup failed: {e}"))?
+        .ok_or_else(|| format!("memory not found: {memory_id}"))?;
+
+    let ancestors = state
+        .store
+        .get_ancestor_chain(&memory_id, 10)
+        .await
+        .map_err(|e| format!("ancestor chain failed: {e}"))?;
+    let descendants = state
+        .store
+        .get_children(&memory_id, 20)
+        .await
+        .map_err(|e| format!("children lookup failed: {e}"))?;
+
+    Ok(MemoryTimelineThread {
+        memory_id: focus.id.clone(),
+        focus: to_entry(&focus),
+        ancestors: ancestors.iter().map(to_entry).collect(),
+        descendants: descendants.iter().map(to_entry).collect(),
     })
 }
