@@ -38,6 +38,10 @@ export interface KnowledgeGraphProps {
     showLegend?: boolean;
     /** When true, mount the bottom-right zoom controls. Default: true. */
     showZoomControls?: boolean;
+    /** When true, render the loading scrim above the canvas. */
+    loading?: boolean;
+    /** When set, render the error scrim with this message. */
+    errorMessage?: string | null;
 }
 
 export function KnowledgeGraph({
@@ -54,6 +58,8 @@ export function KnowledgeGraph({
     showFilters = true,
     showLegend = true,
     showZoomControls = true,
+    loading = false,
+    errorMessage = null,
 }: KnowledgeGraphProps) {
     const fullView = useMemo(
         () =>
@@ -192,6 +198,23 @@ export function KnowledgeGraph({
                     onSelect={handleSelect}
                 />
                 {showZoomControls && <KnowledgeGraphZoomControls handle={canvasRef} />}
+                {loading && (
+                    <div
+                        className="kg-state-scrim kg-state-loading"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <span className="kg-state-line" />
+                        <span className="kg-state-line" />
+                        <span className="kg-state-line" />
+                        <p className="kg-state-text">developing…</p>
+                    </div>
+                )}
+                {errorMessage && !loading && (
+                    <div className="kg-state-scrim kg-state-error" role="alert">
+                        <p className="kg-state-text">{errorMessage}</p>
+                    </div>
+                )}
             </div>
             {showSidePanel && (
                 <KnowledgeGraphSidePanel
