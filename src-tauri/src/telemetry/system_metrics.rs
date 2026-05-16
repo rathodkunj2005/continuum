@@ -197,12 +197,13 @@ pub fn compute_pressure_label(
     }
 }
 
-/// Hard safety floor: on systems with less RAM than this, the VLM (Qwen3-VL
-/// 4B at ~2.6 GB working set) cannot coexist with the LLM + everything else
-/// without thrashing. Used by the capture path to refuse to load the VLM at
-/// all on memory-constrained machines, independent of the runtime pressure
-/// gate (which only sees the moment, not the structural shortage).
+/// Hard safety floor for Qwen3-VL 4B (~2.6 GB working set): cannot coexist
+/// with the LLM + BGE + FNDR without thrashing below this.
 pub const VLM_SAFE_MIN_HOST_RAM_BYTES: u64 = 12 * 1024 * 1024 * 1024;
+
+/// Safety floor for SmolVLM 500M (~1.2 GB working set): lighter model can
+/// coexist with everything else on 8 GB machines under low pressure.
+pub const VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT: u64 = 8 * 1024 * 1024 * 1024;
 
 /// Returns total host physical memory in bytes. Reads once and caches.
 pub fn host_total_ram_bytes() -> u64 {
@@ -235,10 +236,16 @@ pub fn host_total_ram_bytes() -> u64 {
     })
 }
 
-/// Returns true if this host has enough RAM to safely run the VLM alongside
-/// the LLM and the rest of FNDR.
+/// Returns true if this host has enough RAM to safely run Qwen3-VL 4B
+/// alongside the LLM and the rest of FNDR (requires ≥ 12 GB).
 pub fn host_supports_vlm() -> bool {
     host_total_ram_bytes() >= VLM_SAFE_MIN_HOST_RAM_BYTES
+}
+
+/// Returns true if this host has enough RAM to safely run SmolVLM 500M
+/// alongside the LLM and the rest of FNDR (requires ≥ 8 GB).
+pub fn host_supports_lightweight_vlm() -> bool {
+    host_total_ram_bytes() >= VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT
 }
 
 /// Refresh the snapshot once. Intended for the background sampler task; also
@@ -300,7 +307,7 @@ pub fn model_memory_entries(state: &crate::AppState) -> Vec<ModelMemoryEntry> {
 
     // VLM (Qwen3-VL).
     let vlm_loaded = state.vlm.read().is_some();
-    if let Some(def) = crate::models::model_by_id("qwen3-vl-4b") {
+    if let Some(def) = crate::models::model_by_id("qwen3-vl-2b") {
         out.push(ModelMemoryEntry {
             id: def.id.to_string(),
             kind: "vlm".to_string(),
@@ -1006,6 +1013,19 @@ mod tests {
     }
 
     #[test]
+    fn vlm_safe_min_lightweight_is_eight_gib() {
+        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT, 8 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn lightweight_threshold_is_below_heavy_threshold() {
+        assert!(
+            VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT < VLM_SAFE_MIN_HOST_RAM_BYTES,
+            "lightweight gate must be lower than heavy gate"
+        );
+    }
+
+    #[test]
     #[serial]
     fn host_supports_vlm_matches_threshold() {
         let supports = host_supports_vlm();
@@ -1013,6 +1033,17 @@ mod tests {
             assert!(!supports, "must refuse VLM on small-RAM hosts");
         } else {
             assert!(supports, "must allow VLM on large-RAM hosts");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn host_supports_lightweight_vlm_matches_threshold() {
+        let supports = host_supports_lightweight_vlm();
+        if host_total_ram_bytes() < VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT {
+            assert!(!supports, "must refuse lightweight VLM on very small-RAM hosts");
+        } else {
+            assert!(supports, "must allow lightweight VLM on 8+ GB hosts");
         }
     }
 }
