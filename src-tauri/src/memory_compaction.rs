@@ -275,6 +275,20 @@ pub fn build_lexical_shadow(
     clean_text: &str,
     url: Option<&str>,
 ) -> String {
+    build_lexical_shadow_with_aliases::<&str>(window_title, snippet, clean_text, url, &[])
+}
+
+/// Like `build_lexical_shadow` but also folds in `extras` (search aliases,
+/// topic categories) at the front so they're guaranteed within the char
+/// budget. Use this when synthesis has produced semantic concept terms that
+/// must be lexically searchable even when the raw OCR text doesn't contain them.
+pub fn build_lexical_shadow_with_aliases<S: AsRef<str>>(
+    window_title: &str,
+    snippet: &str,
+    clean_text: &str,
+    url: Option<&str>,
+    extras: &[S],
+) -> String {
     let mut parts = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -282,6 +296,16 @@ pub fn build_lexical_shadow(
         let normalized = normalize_memory_text(url);
         for token in normalized.split_whitespace() {
             push_shadow_token(&mut parts, &mut seen, token);
+            if parts.join(" ").chars().count() >= LEXICAL_SHADOW_CHARS {
+                return compact_lexical_shadow(&parts.join(" "));
+            }
+        }
+    }
+
+    // Concept aliases first — never let raw text overflow them out.
+    for extra in extras {
+        for token in shadow_candidates(extra.as_ref()) {
+            push_shadow_token(&mut parts, &mut seen, &token);
             if parts.join(" ").chars().count() >= LEXICAL_SHADOW_CHARS {
                 return compact_lexical_shadow(&parts.join(" "));
             }

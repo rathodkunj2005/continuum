@@ -116,6 +116,7 @@ pub struct ImportMemoryText {
     pub user_intent: String,
     pub insight_what_happened: String,
     pub insight_why_mattered: String,
+    pub topic_categories: Vec<String>,
 }
 
 /// Minimal OCR quality inputs for import gating (decoupled from IPC types).
@@ -389,6 +390,20 @@ pub fn compose_import_memory_context_with_title(
         intent.clone()
     };
 
+    // Derive topic_categories from insight.topics (broader semantic labels).
+    // Lowercased, trimmed, deduped, no fluff terms.
+    let topic_categories: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        insight
+            .topics
+            .iter()
+            .map(|t| t.trim().to_lowercase())
+            .filter(|t| !t.is_empty() && t.len() <= 40)
+            .filter(|t| seen.insert(t.clone()))
+            .take(6)
+            .collect()
+    };
+
     ImportMemoryText {
         memory_context,
         embedding_text,
@@ -398,6 +413,7 @@ pub fn compose_import_memory_context_with_title(
         user_intent: intent,
         insight_what_happened,
         insight_why_mattered,
+        topic_categories,
     }
 }
 
@@ -1624,6 +1640,10 @@ mod tests {
             search_aliases: vec!["fix phys_footprint".to_string()],
             confidence: 0.7,
             dedup_fingerprint: String::new(),
+            topic_categories: vec![],
+            insight_what_happened: String::new(),
+            insight_why_mattered: String::new(),
+            synthesis_branch: String::new(),
         };
         let i = insight_from_structured(&structured);
         assert_eq!(i.model_id, "llm_ocr_grounded");

@@ -130,6 +130,10 @@ pub struct DistilledMemory {
     pub user_intent: String,
     pub confidence: f32,
     pub quality_flags: Vec<String>,
+    #[serde(default)]
+    pub topic_categories: Vec<String>,
+    #[serde(default)]
+    pub search_aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -149,6 +153,8 @@ pub struct ValidatedMemory {
     pub evidence_quality: f32,
     pub contamination_score: f32,
     pub quality_flags: Vec<String>,
+    pub topic_categories: Vec<String>,
+    pub search_aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

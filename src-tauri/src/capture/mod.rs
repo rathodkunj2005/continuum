@@ -40,8 +40,8 @@ use crate::inference::{
 };
 use crate::memory::reopen::build_reopen_target;
 use crate::memory_compaction::{
-    build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
-    support_embedding_texts,
+    build_lexical_shadow, build_lexical_shadow_with_aliases, compact_summary_embedding_text,
+    mean_pool_embeddings, support_embedding_texts,
 };
 use crate::memory_quality::{deterministic_dedup_fingerprint, is_supported_dedup_fingerprint};
 use crate::models;
@@ -398,8 +398,20 @@ async fn compose_visual_capture_record(
             .collect::<String>()
     };
 
-    let lexical_shadow =
-        build_lexical_shadow(app_name, &display_summary, &composed.memory_context, url);
+    // Fold synthesis-derived concept terms (search_aliases + topic_categories)
+    // into the lexical shadow so keyword search can hit them even when raw OCR
+    // doesn't contain those terms. E.g. "sport" finds cricket captures.
+    let mut shadow_extras: Vec<&str> = Vec::new();
+    for v in composed.search_aliases.iter().chain(composed.topic_categories.iter()) {
+        shadow_extras.push(v.as_str());
+    }
+    let lexical_shadow = build_lexical_shadow_with_aliases(
+        app_name,
+        &display_summary,
+        &composed.memory_context,
+        url,
+        &shadow_extras,
+    );
     let compact_summary = compact_summary_embedding_text(
         "visual_capture",
         &display_summary,
@@ -514,6 +526,8 @@ async fn compose_visual_capture_record(
         embedding_dim: EMBEDDING_DIM as u32,
         evidence_confidence: insight.confidence,
         extraction_confidence: insight.confidence,
+        synthesis_branch: "vlm".to_string(),
+        topic_categories: composed.topic_categories.clone(),
         insight_what_happened: composed.insight_what_happened.clone(),
         insight_why_mattered: composed.insight_why_mattered.clone(),
         insight_card_confidence: insight.confidence,
@@ -703,6 +717,7 @@ fn build_structured_from_browser_semantics(
         search_aliases: Vec::new(),
         confidence: semantic.content_signal_score.clamp(0.35, 0.90),
         dedup_fingerprint: String::new(),
+        synthesis_branch: "browser_semantic".to_string(),
         ..Default::default()
     })
 }
@@ -945,6 +960,7 @@ fn build_low_ram_semantic_fusion(
             search_aliases: aliases,
             confidence,
             dedup_fingerprint: String::new(),
+            synthesis_branch: "fallback".to_string(),
             ..Default::default()
         },
         sources,
@@ -2021,6 +2037,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 embedding_text: format!("url: {} | title: {}", domain, snippet),
                 embedding_model: "bge-large-en-v1.5".to_string(),
                 embedding_dim: EMBEDDING_DIM as u32,
+                synthesis_branch: "url_only".to_string(),
                 ..Default::default()
             };
             record.dedup_fingerprint =
@@ -2459,9 +2476,15 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         let _pipeline_guard = state.model_pipeline_lock.lock().await;
 
         let mut structured_memory = if let Some(engine) = engine.as_ref() {
-            engine
+            let mut s = engine
                 .extract_structured_memory(&app_name, &window_title, &qwen_cleaned_text)
-                .await
+                .await;
+            if let Some(ref mut extraction) = s {
+                if extraction.synthesis_branch.is_empty() {
+                    extraction.synthesis_branch = "llm".to_string();
+                }
+            }
+            s
         } else {
             None
         };
@@ -3288,8 +3311,24 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             parent_id: None,
             related_ids: Vec::new(),
             consolidated_from: Vec::new(),
-            insight_what_happened: String::new(),
-            insight_why_mattered: String::new(),
+            synthesis_branch: structured_memory
+                .as_ref()
+                .map(|m| m.synthesis_branch.clone())
+                .unwrap_or_else(|| "fallback".to_string()),
+            topic_categories: structured_memory
+                .as_ref()
+                .map(|m| m.topic_categories.clone())
+                .unwrap_or_default(),
+            insight_what_happened: structured_memory
+                .as_ref()
+                .filter(|m| !m.insight_what_happened.is_empty())
+                .map(|m| m.insight_what_happened.clone())
+                .unwrap_or_default(),
+            insight_why_mattered: structured_memory
+                .as_ref()
+                .filter(|m| !m.insight_why_mattered.is_empty())
+                .map(|m| m.insight_why_mattered.clone())
+                .unwrap_or_default(),
             insight_what_changed: String::new(),
             insight_context_thread: String::new(),
             insight_spans_json: String::new(),
@@ -4029,6 +4068,8 @@ pub(crate) async fn merge_memory_records_with_policy(
     let related_ids = merge_string_lists(&existing.related_ids, &incoming.related_ids);
     let consolidated_from =
         merge_string_lists(&existing.consolidated_from, &incoming.consolidated_from);
+    let synthesis_branch = prefer_non_empty(&incoming.synthesis_branch, &existing.synthesis_branch);
+    let topic_categories = merge_string_lists(&existing.topic_categories, &incoming.topic_categories);
     let insight_what_happened = prefer_non_empty(
         &incoming.insight_what_happened,
         &existing.insight_what_happened,
@@ -4238,6 +4279,8 @@ pub(crate) async fn merge_memory_records_with_policy(
         parent_id,
         related_ids,
         consolidated_from,
+        synthesis_branch,
+        topic_categories,
         insight_what_happened,
         insight_why_mattered,
         insight_what_changed,

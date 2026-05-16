@@ -68,5 +68,7 @@ pub fn distill_memory_from_record(
             .max(record.evidence_confidence)
             .clamp(0.0, 1.0),
         quality_flags,
+        topic_categories: record.topic_categories.clone(),
+        search_aliases: record.search_aliases.clone(),
     }
 }

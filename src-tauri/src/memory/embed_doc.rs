@@ -49,16 +49,97 @@ pub fn build_embedding_document(memory: &ValidatedMemory) -> EmbeddingDocument {
     if !memory.actions.is_empty() {
         lines.push(format!("actions: {}", memory.actions.join("; ")));
     }
+    // Broader semantic categories — enables cross-domain concept search.
+    // E.g., a cricket capture's categories = ["sport", "entertainment"], so
+    // a query for "sport" can semantically reach it.
+    if !memory.topic_categories.is_empty() {
+        let cats: Vec<String> = memory
+            .topic_categories
+            .iter()
+            .map(|c| c.trim().to_lowercase())
+            .filter(|c| !c.is_empty() && c.len() <= 40)
+            .collect();
+        if !cats.is_empty() {
+            lines.push(format!("categories: {}", cats.join(", ")));
+        }
+    }
+    // Search aliases: synonyms, abbreviations, alternate phrasings supplied
+    // by synthesis. Both included in the embedding text AND surfaced in the
+    // returned `aliases` list (for the keyword index).
+    let clean_aliases: Vec<String> = memory
+        .search_aliases
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !looks_like_bad_alias(s))
+        .collect();
+    if !clean_aliases.is_empty() {
+        lines.push(format!("aliases: {}", clean_aliases.join(", ")));
+    }
 
-    let aliases = memory
+    // Aliases for keyword retrieval combine entities + search_aliases, all
+    // lowercased and deduped, filtered through the bad-alias guard.
+    let mut seen = std::collections::HashSet::new();
+    let aliases: Vec<String> = memory
         .entities
         .iter()
+        .chain(memory.search_aliases.iter())
         .map(|v| v.trim().to_ascii_lowercase())
-        .filter(|v| !looks_like_bad_alias(v))
-        .collect::<Vec<_>>();
+        .filter(|v| !looks_like_bad_alias(v) && v.len() >= 2)
+        .filter(|v| seen.insert(v.clone()))
+        .collect();
 
     EmbeddingDocument {
         text: lines.join("\n"),
         aliases,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base() -> ValidatedMemory {
+        ValidatedMemory {
+            title: "T".to_string(),
+            topic: "x".to_string(),
+            ..ValidatedMemory::default()
+        }
+    }
+
+    #[test]
+    fn embedding_doc_includes_topic_categories() {
+        let mut m = base();
+        m.topic_categories = vec!["sport".into(), "entertainment".into()];
+        let doc = build_embedding_document(&m);
+        assert!(doc.text.contains("categories: sport, entertainment"));
+    }
+
+    #[test]
+    fn embedding_doc_includes_search_aliases_in_text_and_alias_list() {
+        let mut m = base();
+        m.search_aliases = vec!["KKR".into(), "IPL".into()];
+        let doc = build_embedding_document(&m);
+        assert!(doc.text.contains("aliases: KKR, IPL"));
+        assert!(doc.aliases.contains(&"kkr".to_string()));
+        assert!(doc.aliases.contains(&"ipl".to_string()));
+    }
+
+    #[test]
+    fn embedding_doc_dedupes_overlap_between_entities_and_aliases() {
+        let mut m = base();
+        m.entities = vec!["GitHub".into()];
+        m.search_aliases = vec!["github".into()];
+        let doc = build_embedding_document(&m);
+        let count = doc.aliases.iter().filter(|a| *a == "github").count();
+        assert_eq!(count, 1, "expected dedup, got {:?}", doc.aliases);
+    }
+
+    #[test]
+    fn embedding_doc_filters_bad_aliases() {
+        let mut m = base();
+        m.search_aliases = vec!["https://example.com/reopen?find similar".into(), "valid".into()];
+        let doc = build_embedding_document(&m);
+        assert!(!doc.text.contains("https://"));
+        assert!(doc.text.contains("valid"));
     }
 }

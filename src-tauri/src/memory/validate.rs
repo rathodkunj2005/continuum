@@ -114,6 +114,8 @@ pub fn decide_memory(distilled: DistilledMemory, quality: &QualityDecision) -> M
             evidence_quality: quality.scores.evidence_quality,
             contamination_score: quality.scores.contamination_score,
             quality_flags: distilled.quality_flags,
+            topic_categories: distilled.topic_categories,
+            search_aliases: distilled.search_aliases,
         });
     }
 
