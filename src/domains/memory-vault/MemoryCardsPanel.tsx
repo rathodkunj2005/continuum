@@ -944,6 +944,9 @@ export function MemoryCardsPanel({
                             height={220}
                             maxSimulationTicks={220}
                             showSidePanel={false}
+                            showFilters={false}
+                            showLegend={false}
+                            showZoomControls={false}
                             nodes={fullVizGraphNodes}
                             edges={fullGraphEdges}
                             louvainByNodeId={louvainByNodeId}
@@ -1217,7 +1220,6 @@ export function MemoryCardsPanel({
                                 <KnowledgeGraph
                                     height={420}
                                     maxSimulationTicks={GRAPH_SIM_MAX_TICKS}
-                                    showSidePanel={false}
                                     nodes={vizGraphNodes}
                                     edges={filteredGraphEdges}
                                     louvainByNodeId={louvainByNodeId}
