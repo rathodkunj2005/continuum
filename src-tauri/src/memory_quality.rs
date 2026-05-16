@@ -26,6 +26,9 @@ pub fn classify_storage_outcome(record: &MemoryRecord, config: &MemoryQualityCon
     if hard_gate_polluted_memory_context(record) {
         return "quarantine_polluted_context".to_string();
     }
+    if hard_gate_fluff_insight(record) {
+        return "quarantine_fluff_insight".to_string();
+    }
 
     let primary = record.specificity_score >= config.primary_memory_specificity_min
         && record.intent_score >= config.primary_memory_intent_min
@@ -57,6 +60,9 @@ pub fn quality_gate_reason(record: &MemoryRecord) -> String {
     }
     if hard_gate_polluted_memory_context(record) {
         return "hard_gate=machine_marker_in_memory_context".to_string();
+    }
+    if hard_gate_fluff_insight(record) {
+        return "hard_gate=fluff_or_template_insight".to_string();
     }
 
     format!(
@@ -199,6 +205,41 @@ fn hard_gate_polluted_memory_context(record: &MemoryRecord) -> bool {
     })
 }
 
+/// Block records whose insight text is pure fluff/template — filename patterns,
+/// "Captured recent activity", or 0-information-density strings. These would
+/// otherwise pollute search results with non-actionable rows.
+fn hard_gate_fluff_insight(record: &MemoryRecord) -> bool {
+    let what = record.insight_what_happened.trim();
+    if what.is_empty() {
+        return false; // empty is handled by other gates
+    }
+    let lower = what.to_ascii_lowercase();
+
+    // Filename with embedded timestamp: ".png" + 6+ digits
+    if lower.contains(".png") && lower.chars().filter(|c| c.is_ascii_digit()).count() >= 6 {
+        return true;
+    }
+    // Template strings
+    if lower.starts_with("screen capture (visual)")
+        || lower.starts_with("captured recent activity")
+        || lower.starts_with("url-only surface capture")
+    {
+        return true;
+    }
+    // Tautologies: "AppName: AppName" or just AppName repeated
+    let app_lower = record.app_name.trim().to_ascii_lowercase();
+    if !app_lower.is_empty() && what.split_whitespace().count() <= 4 {
+        let app_count = lower.matches(&app_lower).count();
+        // 2+ mentions of the app in a <=4-word insight is content-free
+        if app_count >= 2 {
+            return true;
+        }
+        // "You used <App>." alone (with no specifics) is the minimum tolerable —
+        // allow it for now, but tag as low-quality elsewhere.
+    }
+    false
+}
+
 fn extraction_issues(record: &MemoryRecord) -> Vec<String> {
     let parsed = serde_json::from_str::<Value>(&record.raw_evidence).ok();
     parsed
@@ -321,5 +362,57 @@ mod tests {
             quality_gate_reason(&record),
             "hard_gate=machine_marker_in_memory_context"
         );
+    }
+
+    #[test]
+    fn fluff_gate_blocks_timestamped_filename_insight() {
+        let cfg = default_memory_quality_config();
+        let record = MemoryRecord {
+            insight_what_happened:
+                "Screen capture (visual): Claude_1778938598807.png. Claude".to_string(),
+            app_name: "Claude".to_string(),
+            ..Default::default()
+        };
+        assert!(hard_gate_fluff_insight(&record));
+        assert_eq!(
+            classify_storage_outcome(&record, &cfg),
+            "quarantine_fluff_insight"
+        );
+    }
+
+    #[test]
+    fn fluff_gate_blocks_app_name_tautology() {
+        let cfg = default_memory_quality_config();
+        let record = MemoryRecord {
+            insight_what_happened: "Claude: Claude".to_string(),
+            app_name: "Claude".to_string(),
+            ..Default::default()
+        };
+        assert!(hard_gate_fluff_insight(&record));
+        assert_eq!(
+            classify_storage_outcome(&record, &cfg),
+            "quarantine_fluff_insight"
+        );
+    }
+
+    #[test]
+    fn fluff_gate_allows_specific_insight() {
+        let record = MemoryRecord {
+            insight_what_happened:
+                "You debugged a Rust borrow checker error in the embedding pipeline.".to_string(),
+            app_name: "Cursor".to_string(),
+            ..Default::default()
+        };
+        assert!(!hard_gate_fluff_insight(&record));
+    }
+
+    #[test]
+    fn fluff_gate_allows_empty_insight_for_other_gates() {
+        // Empty insight is handled by other gates (e.g., structured_extraction_unavailable)
+        let record = MemoryRecord {
+            insight_what_happened: String::new(),
+            ..Default::default()
+        };
+        assert!(!hard_gate_fluff_insight(&record));
     }
 }
