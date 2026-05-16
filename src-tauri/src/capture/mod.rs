@@ -3268,6 +3268,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             embedding_text: primary_embed_input,
             embedding_model: "bge-large-en-v1.5".to_string(), // Default assumption, actual model set in pipeline
             embedding_dim: EMBEDDING_DIM as u32,
+            enrichment_status: String::new(),
+            fallback_reason: None,
+            raw_screenshot_stored: false,
             is_consolidated: false,
             is_soft_deleted: false,
             parent_id: None,
@@ -4212,6 +4215,12 @@ pub(crate) async fn merge_memory_records_with_policy(
         embedding_text,
         embedding_model,
         embedding_dim,
+        enrichment_status: prefer_non_empty(&incoming.enrichment_status, &existing.enrichment_status),
+        fallback_reason: incoming
+            .fallback_reason
+            .clone()
+            .or_else(|| existing.fallback_reason.clone()),
+        raw_screenshot_stored: existing.raw_screenshot_stored || incoming.raw_screenshot_stored,
         is_consolidated: existing.is_consolidated || incoming.is_consolidated,
         is_soft_deleted: existing.is_soft_deleted || incoming.is_soft_deleted,
         parent_id,

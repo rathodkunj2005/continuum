@@ -346,6 +346,12 @@ pub struct MemoryRecord {
     #[serde(default)]
     pub embedding_dim: u32,
     #[serde(default)]
+    pub enrichment_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    #[serde(default)]
+    pub raw_screenshot_stored: bool,
+    #[serde(default)]
     pub is_consolidated: bool,
     #[serde(default)]
     pub is_soft_deleted: bool,
@@ -476,6 +482,9 @@ impl Default for MemoryRecord {
             embedding_text: String::new(),
             embedding_model: crate::config::DEFAULT_EMBEDDING_MODEL_NAME.to_string(),
             embedding_dim: DEFAULT_TEXT_EMBEDDING_DIM as u32,
+            enrichment_status: String::new(),
+            fallback_reason: None,
+            raw_screenshot_stored: false,
             is_consolidated: false,
             is_soft_deleted: false,
             parent_id: None,
