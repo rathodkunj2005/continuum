@@ -401,46 +401,93 @@ pub fn compose_import_memory_context_with_title(
     }
 }
 
+/// Extract action verb from activity_type deterministically.
+/// Maps activity type to specific, past-tense action verbs.
+/// Returns (verb, confidence) tuple.
+fn extract_action_verb(activity_type: Option<&str>) -> (&'static str, f32) {
+    match activity_type.map(|a| a.trim().to_lowercase()).as_deref() {
+        Some("debugging") => ("debugged", 0.8),
+        Some("coding") | Some("programming") => ("implemented", 0.8),
+        Some("researching") | Some("research") => ("researched", 0.8),
+        Some("planning") => ("planned", 0.8),
+        Some("presentation") | Some("presenting") => ("presented", 0.85),
+        Some("communication") | Some("communicating") => ("discussed", 0.8),
+        Some("designing") | Some("design") => ("designed", 0.8),
+        Some("reading") | Some("reviewing") | Some("review") => ("reviewed", 0.8),
+        Some("writing") | Some("documenting") => ("documented", 0.8),
+        Some("testing") => ("tested", 0.8),
+        Some("refactoring") => ("refactored", 0.8),
+        Some("meeting") => ("met", 0.85),
+        _ => ("captured", 0.6), // Generic fallback
+    }
+}
+
+/// Build summary from entities first (Phase 4).
+/// Format: "[Entity1 + Entity2]: [action_verb] [context]"
+/// Returns shortened summary suitable for display_summary field.
+fn build_summary_from_entities(
+    insight: &ImageSemanticInsight,
+    window_title: Option<&str>,
+) -> String {
+    let (action_verb, _conf) = extract_action_verb(insight.activity_type.as_deref());
+
+    if !insight.entities.is_empty() {
+        // Lead with top 2 entities
+        let entity_preview = insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(" & ");
+        if let Some(wt) = window_title {
+            let wt_snippet = wt.chars().take(50).collect::<String>();
+            format!("{}: {} — {}", entity_preview, action_verb, wt_snippet)
+        } else {
+            format!("{}: {}", entity_preview, action_verb)
+        }
+    } else if let Some(wt) = window_title {
+        // Fallback to window_title if no entities
+        let wt_clean = wt.trim().chars().take(60).collect::<String>();
+        if !wt_clean.is_empty() {
+            wt_clean
+        } else {
+            insight.scene_type.chars().take(60).collect()
+        }
+    } else {
+        // Final fallback: use scene_type
+        insight.scene_type.chars().take(60).collect()
+    }
+}
+
 /// Build semantic narrative from data signals instead of templates.
-/// Priority order: window_title → entities → activity type → summary.
+/// Priority order: window_title → entities → activity type → summary (Phase 2-3).
 /// Returns narrative body string for memory_context.
 fn build_semantic_narrative(
     insight: &ImageSemanticInsight,
     window_title: Option<&str>,
     _source: ImageImportSource,
 ) -> String {
-    // Body: entity-first narrative, confidence-weighted
-    let model_tier = match insight.model_id.as_str() {
-        "qwen3-vl-2b" => 1, // VLM: highest tier (confidence >= 0.55)
-        "llm_ocr_grounded" => 2, // LLM-on-OCR: middle tier (0.40-0.54)
-        "ocr_only" => 3, // OCR-only: lowest tier (< 0.40)
-        _ => 2,
-    };
-
+    // Phase 3: Prioritize window_title as primary signal when available
     if let Some(wt) = window_title {
         let wt_clean = wt.trim();
         if !wt_clean.is_empty() && wt_clean.len() <= 100 {
-            // Use window_title as primary signal when available and reasonable length
+            // Window_title is the primary signal; extract entities from it and add summary
             if !insight.entities.is_empty() {
                 let entity_preview = insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
                 format!("{}. Involves: {}", wt_clean, entity_preview)
             } else {
+                // Just window_title, no extracted entities
                 wt_clean.to_string()
             }
         } else {
-            // Fallback to entity-first + activity narrative
-            build_entity_first_narrative(insight, model_tier)
+            // Window_title too long or empty; fallback to entity-first
+            build_entity_first_narrative(insight)
         }
     } else {
-        // No window_title: use entity-first + activity narrative
-        build_entity_first_narrative(insight, model_tier)
+        // No window_title; use entity-first narrative
+        build_entity_first_narrative(insight)
     }
 }
 
-/// Build entity-first narrative when window_title unavailable or unusable.
-/// Format: "[Entity1/Entity2] [activity/context]: [scene/summary]"
-/// When no clear model tier (empty model_id), prefer summary_detailed for compatibility.
-fn build_entity_first_narrative(insight: &ImageSemanticInsight, _model_tier: u8) -> String {
+/// Build entity-first narrative when window_title unavailable or unusable (Phase 2-3).
+/// Format: "[Entity1 + Entity2]: [action_verb] — [context]"
+/// Uses action verb extraction for richer, more semantic narratives.
+fn build_entity_first_narrative(insight: &ImageSemanticInsight) -> String {
     let entities_display = if !insight.entities.is_empty() {
         insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(" + ")
     } else if !insight.people_roles.is_empty() {
@@ -449,12 +496,8 @@ fn build_entity_first_narrative(insight: &ImageSemanticInsight, _model_tier: u8)
         "Activity".to_string()
     };
 
-    let activity = insight
-        .activity_type
-        .as_ref()
-        .map(|a| a.trim())
-        .filter(|a| !a.is_empty())
-        .unwrap_or("captured");
+    // Phase 5: Use action verb extraction for semantic narratives
+    let (action_verb, _conf) = extract_action_verb(insight.activity_type.as_deref());
 
     // Prefer detailed summary (original behavior for backward compat),
     // fall back to short, then scene_type
@@ -467,9 +510,9 @@ fn build_entity_first_narrative(insight: &ImageSemanticInsight, _model_tier: u8)
     };
 
     if context_str.is_empty() {
-        format!("{}: {}", entities_display, activity)
+        format!("{}: {}", entities_display, action_verb)
     } else {
-        format!("{}: {} — {}", entities_display, activity, context_str)
+        format!("{}: {} — {}", entities_display, action_verb, context_str)
     }
 }
 
