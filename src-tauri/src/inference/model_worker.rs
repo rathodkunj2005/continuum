@@ -115,9 +115,21 @@ pub(crate) async fn run_synthesis_blocking(
                         errors: Vec::new(),
                         next_steps: Vec::new(),
                         search_aliases: insight.search_aliases.clone(),
-                        insight_what_happened: String::new(),
-                        insight_why_mattered: String::new(),
-                        topic_categories: Vec::new(),
+                        insight_what_happened: if !insight.summary_short.is_empty() {
+                            insight.summary_short.clone()
+                        } else {
+                            String::new()
+                        },
+                        insight_why_mattered: if !insight.summary_detailed.is_empty() {
+                            insight.summary_detailed.clone()
+                        } else {
+                            String::new()
+                        },
+                        topic_categories: insight.topics.iter()
+                            .map(|t| t.trim().to_lowercase())
+                            .filter(|s| !s.is_empty() && s.len() <= 40)
+                            .take(6)
+                            .collect(),
                         confidence_score: insight.confidence,
                         importance_score: insight.confidence * 0.8,
                     }),

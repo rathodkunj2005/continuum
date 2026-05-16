@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::memory::distill::{is_prompt_scaffold, sanitize_field};
+
 #[derive(Debug, Clone, Serialize)]
 pub enum MemorySourceType {
     Screen,
@@ -262,23 +264,6 @@ fn sanitize_list(mut v: Vec<String>, max_items: usize, max_each: usize) -> Vec<S
     v.retain(|s| !s.trim().is_empty());
     v.truncate(max_items);
     v.into_iter().map(|s| clamp(s, max_each)).collect()
-}
-
-pub(crate) fn is_prompt_scaffold(value: &str) -> bool {
-    let lower = value.trim().to_ascii_lowercase();
-    lower.starts_with("here is")
-        || lower.contains("best memory snippet")
-        || lower.contains("```json")
-        || lower.contains("topic:")
-}
-
-fn sanitize_field(value: &str) -> String {
-    let trimmed = value.trim();
-    if is_prompt_scaffold(trimmed) {
-        String::new()
-    } else {
-        trimmed.to_string()
-    }
 }
 
 #[cfg(test)]

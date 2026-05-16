@@ -1,7 +1,7 @@
 use crate::memory::types::{ActivityType, CleanedEvidence, DistilledMemory};
 use crate::storage::MemoryRecord;
 
-fn is_prompt_scaffold(value: &str) -> bool {
+pub(crate) fn is_prompt_scaffold(value: &str) -> bool {
     let lower = value.trim().to_ascii_lowercase();
     lower.starts_with("here is")
         || lower.contains("best memory snippet")
@@ -9,7 +9,7 @@ fn is_prompt_scaffold(value: &str) -> bool {
         || lower.contains("topic:")
 }
 
-fn sanitize_field(value: &str) -> String {
+pub(crate) fn sanitize_field(value: &str) -> String {
     let trimmed = value.trim();
     if is_prompt_scaffold(trimmed) {
         String::new()
