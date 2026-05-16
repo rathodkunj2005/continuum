@@ -40,10 +40,17 @@ pub(super) async fn run_search_query(
         config.search.clone()
     };
 
+    // When an InferenceEngine is loaded, route through the expansion variant
+    // so abstract concept queries ("sport", "design") can semantically reach
+    // domain-specific captures that don't contain the literal query term.
+    let engine_arc = state.inference_engine();
+    let engine_ref = engine_arc.as_deref();
+
     let results = match shared_embedder() {
-        Ok(embedder) => match HybridSearcher::search_hybrid_memories(
+        Ok(embedder) => match HybridSearcher::search_with_expansion(
             &state.store,
             embedder,
+            engine_ref,
             query,
             limit,
             time_filter,

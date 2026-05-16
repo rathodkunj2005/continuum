@@ -539,6 +539,71 @@ pub struct StructuredMemoryExtraction {
     pub confidence: f32,
     #[serde(default)]
     pub dedup_fingerprint: String,
+    #[serde(default)]
+    pub topic_categories: Vec<String>,
+    #[serde(default)]
+    pub insight_what_happened: String,
+    #[serde(default)]
+    pub insight_why_mattered: String,
+    /// Which pipeline branch produced this: "vlm" | "llm" | "browser_semantic" | "fallback"
+    #[serde(default)]
+    pub synthesis_branch: String,
+}
+
+// ============================================================================
+// Query expansion helpers (free functions for testability)
+// ============================================================================
+
+/// Parse the LLM's expansion output into a deduplicated lowercase term list.
+/// Tolerates: JSON array, comma-separated, newline-separated, with assorted
+/// quoting and bracket noise. Drops empty/too-long terms.
+pub fn parse_expansion_terms(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    // Try strict JSON first
+    if let Ok(serde_json::Value::Array(arr)) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        let mut seen = std::collections::HashSet::new();
+        return arr
+            .into_iter()
+            .filter_map(|v| v.as_str().map(|s| s.trim().to_ascii_lowercase()))
+            .filter(|s| !s.is_empty() && s.len() <= 50)
+            .filter(|s| seen.insert(s.clone()))
+            .collect();
+    }
+
+    // Salvage JSON-like substring if present
+    if let (Some(start), Some(end)) = (trimmed.find('['), trimmed.rfind(']')) {
+        if start < end {
+            let inner = &trimmed[start..=end];
+            if let Ok(serde_json::Value::Array(arr)) =
+                serde_json::from_str::<serde_json::Value>(inner)
+            {
+                let mut seen = std::collections::HashSet::new();
+                return arr
+                    .into_iter()
+                    .filter_map(|v| v.as_str().map(|s| s.trim().to_ascii_lowercase()))
+                    .filter(|s| !s.is_empty() && s.len() <= 50)
+                    .filter(|s| seen.insert(s.clone()))
+                    .collect();
+            }
+        }
+    }
+
+    // Fallback: split on commas + newlines, strip quoting/brackets
+    let mut seen = std::collections::HashSet::new();
+    trimmed
+        .split([',', '\n'])
+        .map(|s| {
+            s.trim()
+                .trim_matches(|c: char| matches!(c, '"' | '\'' | '[' | ']' | '`'))
+                .to_ascii_lowercase()
+        })
+        .filter(|s| !s.is_empty() && s.len() <= 50)
+        .filter(|s| seen.insert(s.clone()))
+        .collect()
 }
 
 // ============================================================================
@@ -771,6 +836,38 @@ impl InferenceEngine {
         };
 
         self.complete(&prompt, 150).await
+    }
+
+    /// Expand a short search query into related conceptual terms using the LLM.
+    /// Returns the original query plus 4-8 expanded terms, or just the original
+    /// if the engine returns nothing useful. Used to bridge concept gaps —
+    /// e.g. "sport" expands to ["sport", "sports", "athletics", "match", ...]
+    /// so it can semantically reach stored cricket/football content.
+    ///
+    /// Budget: ~80 tokens, deterministic-ish (small model).
+    pub async fn expand_search_query(&self, query: &str) -> Vec<String> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Vec::new();
+        }
+        let prompt = match self.build_prompt(
+            "You expand short search queries into related concepts. Output only a JSON array of 5-8 lowercase terms (synonyms, broader categories, subfields). No prose, no markdown, no explanation.",
+            &format!(
+                "Query: \"{q}\"\n\nReturn JSON array only. Example for 'sport': [\"sport\",\"sports\",\"athletics\",\"match\",\"game\",\"competition\"]"
+            ),
+        ) {
+            Ok(p) => p,
+            Err(_) => return vec![q.to_ascii_lowercase()],
+        };
+
+        let raw = self.complete(&prompt, 80).await;
+        let mut terms = parse_expansion_terms(&raw);
+        let q_lower = q.to_ascii_lowercase();
+        if !terms.iter().any(|t| t == &q_lower) {
+            terms.insert(0, q_lower);
+        }
+        terms.truncate(10);
+        terms
     }
 
     /// Provide a detailed summary of a memory, extracting key information
@@ -1603,5 +1700,45 @@ mod tests {
     fn normalize_returns_input_unchanged_for_invalid_json() {
         let raw = "not json at all";
         assert_eq!(normalize_structured_memory_json(raw), raw);
+    }
+
+    #[test]
+    fn parse_expansion_terms_from_json_array() {
+        let terms = parse_expansion_terms(r#"["sport","sports","athletics","game"]"#);
+        assert_eq!(terms, vec!["sport", "sports", "athletics", "game"]);
+    }
+
+    #[test]
+    fn parse_expansion_terms_from_comma_separated() {
+        let terms = parse_expansion_terms("sport, sports, athletics, game");
+        assert!(terms.contains(&"sport".to_string()));
+        assert!(terms.contains(&"athletics".to_string()));
+    }
+
+    #[test]
+    fn parse_expansion_terms_dedupes_case_insensitive() {
+        let terms = parse_expansion_terms("Sport, SPORT, sport, sports");
+        let count = terms.iter().filter(|t| *t == "sport").count();
+        assert_eq!(count, 1, "expected one 'sport': {:?}", terms);
+    }
+
+    #[test]
+    fn parse_expansion_terms_salvages_json_from_prose() {
+        let raw = "Here are the related terms: [\"sport\", \"game\", \"match\"] — hope this helps!";
+        let terms = parse_expansion_terms(raw);
+        assert_eq!(terms, vec!["sport", "game", "match"]);
+    }
+
+    #[test]
+    fn parse_expansion_terms_filters_long_garbage() {
+        let raw = r#"["sport", "this is a very long sentence that clearly is not a search term at all and should be dropped"]"#;
+        let terms = parse_expansion_terms(raw);
+        assert_eq!(terms, vec!["sport"]);
+    }
+
+    #[test]
+    fn parse_expansion_terms_empty_input_returns_empty() {
+        assert_eq!(parse_expansion_terms(""), Vec::<String>::new());
+        assert_eq!(parse_expansion_terms("   "), Vec::<String>::new());
     }
 }

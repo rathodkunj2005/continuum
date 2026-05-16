@@ -179,6 +179,12 @@ impl QueryProfile {
     }
 
     fn embedding_query(&self) -> String {
+        self.embedding_query_with_extras(&[])
+    }
+
+    /// Build the embedding query, optionally augmented with extra concept
+    /// terms (e.g., LLM-expanded synonyms for the original query).
+    fn embedding_query_with_extras(&self, extras: &[String]) -> String {
         let mut parts = Vec::new();
 
         if !self.raw.trim().is_empty() {
@@ -206,6 +212,19 @@ impl QueryProfile {
             parts.push(with_numbers);
         }
 
+        // Append expanded concept terms — these widen semantic coverage
+        // (e.g., adding "sports, athletics, match" when the original query
+        // is "sport") without polluting the keyword branch.
+        let extras_join = extras
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        if !extras_join.is_empty() {
+            parts.push(extras_join);
+        }
+
         let joined = parts.join(" ").trim().to_string();
         if joined.is_empty() {
             String::new()
@@ -219,6 +238,20 @@ impl QueryProfile {
 
     fn is_short_intent_query(&self) -> bool {
         self.primary_terms.len() <= 2 && self.intent == QueryIntent::General
+    }
+
+    /// True when the raw query is an abstract concept (lowercase, no
+    /// capitalised proper-noun heuristics, 1-3 tokens). Abstract concept
+    /// queries need MORE semantic weight, not less.
+    fn is_abstract_concept_query(&self) -> bool {
+        if !self.is_short_intent_query() {
+            return false;
+        }
+        let first = self.raw.trim().chars().next().unwrap_or(' ');
+        // Lowercase first char + no numbers + no path/symbol chars → likely an abstract concept
+        first.is_lowercase()
+            && self.number_terms.is_empty()
+            && !self.raw.chars().any(|c| c == '/' || c == '\\' || c == '_')
     }
 }
 
@@ -241,6 +274,63 @@ impl HybridSearcher {
             time_filter,
             app_filter,
             search_config,
+        )
+        .await
+    }
+
+    /// Like `search_hybrid_memories` but with an optional InferenceEngine
+    /// used for LLM-driven query expansion on short abstract queries
+    /// (e.g., "sport" → ["sport", "sports", "athletics", "game", "match"]).
+    /// When the engine is `None`, behaves identically to the standard variant.
+    pub async fn search_with_expansion(
+        store: &Store,
+        embedder: &Embedder,
+        engine: Option<&crate::inference::InferenceEngine>,
+        query: &str,
+        limit: usize,
+        time_filter: Option<&str>,
+        app_filter: Option<&str>,
+        search_config: &SearchConfig,
+    ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+        // Pre-compute expansion terms; pass them down through a thread-local-free
+        // mechanism by stashing on the search config or via an explicit param.
+        let expansion: Vec<String> = if let Some(engine) = engine {
+            let profile = QueryProfile::from_query(query);
+            if profile.is_abstract_concept_query() {
+                // Race the LLM expansion against a tight timeout. If we don't
+                // get a response in 600ms, proceed without expansion.
+                match timeout(Duration::from_millis(600), engine.expand_search_query(query))
+                    .await
+                {
+                    Ok(terms) => {
+                        tracing::info!(
+                            query = %query,
+                            expanded = ?terms,
+                            "hybrid_search:llm_expansion"
+                        );
+                        terms
+                    }
+                    Err(_) => {
+                        tracing::warn!(query = %query, "hybrid_search:expansion_timeout");
+                        Vec::new()
+                    }
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        Self::search_with_config_and_expansion(
+            store,
+            embedder,
+            query,
+            limit,
+            time_filter,
+            app_filter,
+            search_config,
+            &expansion,
         )
         .await
     }
@@ -277,6 +367,32 @@ impl HybridSearcher {
         app_filter: Option<&str>,
         search_config: &SearchConfig,
     ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+        Self::search_with_config_and_expansion(
+            store,
+            embedder,
+            query,
+            limit,
+            time_filter,
+            app_filter,
+            search_config,
+            &[],
+        )
+        .await
+    }
+
+    /// Like `search_with_config`, but accepts a precomputed list of expansion
+    /// terms that will be appended to the embedding query for richer semantic
+    /// recall. Empty `expansion` slice is equivalent to `search_with_config`.
+    pub async fn search_with_config_and_expansion(
+        store: &Store,
+        embedder: &Embedder,
+        query: &str,
+        limit: usize,
+        time_filter: Option<&str>,
+        app_filter: Option<&str>,
+        search_config: &SearchConfig,
+        expansion: &[String],
+    ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
         let started = Instant::now();
         let profile = QueryProfile::from_query(query);
         if profile.is_empty() {
@@ -305,7 +421,7 @@ impl HybridSearcher {
             .max(base_limit);
         let semantic_enabled = matches!(embedder.backend(), EmbeddingBackend::Real);
         let query_embedding = if semantic_enabled {
-            let embedding_query = profile.embedding_query();
+            let embedding_query = profile.embedding_query_with_extras(expansion);
             let t_embed = Instant::now();
             let out = match embedder.embed_batch(&[embedding_query]) {
                 Ok(vectors) => Some(vectors.into_iter().next().unwrap_or_default()),
@@ -1518,8 +1634,15 @@ fn fusion_weights(
     }
 
     if profile.is_short_intent_query() {
-        // For short noun-like queries, lexical evidence should dominate.
-        (0.24, 0.14, 0.62)
+        // Two flavours of short query need opposite weights:
+        //   - "Rust" / "Sarah" (proper-noun lookup)  →  lexical-heavy
+        //   - "sport" / "design" (abstract concept)  →  semantic-heavy
+        // is_abstract_concept_query distinguishes them via case + numerics.
+        if profile.is_abstract_concept_query() {
+            (0.58, 0.15, 0.27)
+        } else {
+            (0.24, 0.14, 0.62)
+        }
     } else {
         (
             search_config.vector_weight,
@@ -2362,5 +2485,62 @@ mod tests {
         let ranked =
             HybridSearcher::rerank("the last time i watched cricket", vec![irrelevant], 10);
         assert!(ranked.is_empty());
+    }
+
+    #[test]
+    fn abstract_concept_query_gets_semantic_dominant_weights() {
+        // "sport" → abstract concept → semantic must lead
+        let profile = QueryProfile::from_query("sport");
+        let config = SearchConfig::default();
+        let (sem, _snip, kw) = fusion_weights(&profile, true, &config);
+        assert!(
+            sem >= 0.50,
+            "abstract concept query should get semantic >= 0.50, got {sem}"
+        );
+        assert!(
+            kw <= 0.40,
+            "keyword should not dominate abstract concept query, got {kw}"
+        );
+    }
+
+    #[test]
+    fn proper_noun_short_query_keeps_keyword_dominant() {
+        // "Rust" (capitalised) → likely proper-noun lookup → keyword can help
+        let profile = QueryProfile::from_query("Rust");
+        let config = SearchConfig::default();
+        let (sem, _snip, kw) = fusion_weights(&profile, true, &config);
+        assert!(
+            kw > sem,
+            "proper-noun lookup should favour keyword (kw={kw}, sem={sem})"
+        );
+    }
+
+    #[test]
+    fn is_abstract_concept_query_recognises_lowercase_single_term() {
+        assert!(QueryProfile::from_query("sport").is_abstract_concept_query());
+        assert!(QueryProfile::from_query("design").is_abstract_concept_query());
+        assert!(QueryProfile::from_query("programming").is_abstract_concept_query());
+    }
+
+    #[test]
+    fn is_abstract_concept_query_rejects_proper_nouns_and_paths() {
+        assert!(!QueryProfile::from_query("Rust").is_abstract_concept_query());
+        assert!(!QueryProfile::from_query("Claude").is_abstract_concept_query());
+        assert!(!QueryProfile::from_query("src/main.rs").is_abstract_concept_query());
+    }
+
+    #[test]
+    fn embedding_query_appends_extras() {
+        let profile = QueryProfile::from_query("sport");
+        let with_extras = profile.embedding_query_with_extras(&[
+            "sports".to_string(),
+            "athletics".to_string(),
+        ]);
+        assert!(with_extras.contains("sport"));
+        assert!(with_extras.contains("sports"));
+        assert!(with_extras.contains("athletics"));
+        // No extras → still produces a valid embedding query
+        let plain = profile.embedding_query_with_extras(&[]);
+        assert!(plain.contains("sport"));
     }
 }
