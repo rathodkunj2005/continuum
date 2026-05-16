@@ -83,6 +83,15 @@ pub struct MemoryCard {
     /// Count of insight `graph_nodes` rows citing this memory id in `source_memory_ids`.
     #[serde(default)]
     pub insight_kg_node_count: u32,
+    /// Which pipeline branch produced this record: "vlm" | "llm" | "browser_semantic" | "fallback" | "url_only"
+    #[serde(default)]
+    pub synthesis_branch: String,
+    /// Broad semantic category labels for cross-domain concept search.
+    #[serde(default)]
+    pub topic_categories: Vec<String>,
+    /// Synonym/alias terms surfaced by synthesis.
+    #[serde(default)]
+    pub search_aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -295,6 +304,9 @@ impl MemoryCardSynthesizer {
                     .to_string(),
                 project: anchor.project.clone(),
                 insight_kg_node_count: 0,
+                synthesis_branch: anchor.synthesis_branch.clone(),
+                topic_categories: anchor.topic_categories.clone(),
+                search_aliases: anchor.search_aliases.clone(),
             });
         }
 
@@ -798,6 +810,9 @@ fn fallback_card_for_result(query: &str, result: &SearchResult) -> MemoryCard {
             .to_string(),
         project: result.project.clone(),
         insight_kg_node_count: 0,
+        synthesis_branch: result.synthesis_branch.clone(),
+        topic_categories: result.topic_categories.clone(),
+        search_aliases: result.search_aliases.clone(),
     }
 }
 

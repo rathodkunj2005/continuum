@@ -63,6 +63,12 @@ export interface MemoryCard {
     project?: string;
     /** Count of insight graph nodes citing this memory id. */
     insight_kg_node_count?: number;
+    /** Which pipeline branch synthesized this record: vlm|llm|browser_semantic|fallback|url_only */
+    synthesis_branch?: string;
+    /** Broad semantic category labels e.g. ["sport","entertainment"] */
+    topic_categories?: string[];
+    /** Semantic search aliases / synonyms */
+    search_aliases?: string[];
 }
 
 export interface MemoryScoreBreakdown {
@@ -408,6 +414,203 @@ export interface ContextRuntimeStatus {
     last_error?: string | null;
     latest_pack_summary?: string | null;
     latest_pack_tokens_used: number;
+}
+
+export type AgentMode = "ask" | "plan" | "act" | "learn";
+export type AgentRiskLevel = "low" | "medium" | "high" | "blocked";
+
+export interface AgentContextRequest {
+    user_goal: string;
+    mode?: AgentMode;
+    project?: string | null;
+    app?: string | null;
+    domain?: string | null;
+    window_minutes?: number | null;
+    selected_memory_ids?: string[];
+    include_raw_evidence?: boolean;
+    budget_tokens?: number;
+}
+
+export interface ToolPolicy {
+    tool: string;
+    scope: string;
+    risk: AgentRiskLevel;
+    allowed: boolean;
+    requires_approval: boolean;
+    reason: string;
+}
+
+export interface AgentMemoryCard {
+    memory_id: string;
+    title: string;
+    summary: string;
+    timestamp: number;
+    app_name: string;
+    window_title: string;
+    url?: string | null;
+    confidence: number;
+    match_reason: string;
+    evidence: EvidenceRef[];
+}
+
+export interface AgentContextPack {
+    task_id: string;
+    user_goal: string;
+    mode: AgentMode;
+    relevant_memories: AgentMemoryCard[];
+    current_project?: unknown | null;
+    recent_workflow_trace: Array<{
+        timestamp: number;
+        title: string;
+        app_name: string;
+        summary: string;
+        source_memory_id: string;
+    }>;
+    entities: EntityRef[];
+    files: Array<{ path: string; reason: string }>;
+    urls: Array<{ url: string; source_memory_id: string; reason: string }>;
+    commands: Array<{ command: string; source_memory_id: string; timestamp: number }>;
+    errors: Array<{ summary: string; error: string; related_files: string[]; source_memory_ids: string[] }>;
+    decisions: Array<{ title: string; summary: string; source_memory_ids: string[] }>;
+    todos: Array<{ title: string; status: string; source: string }>;
+    privacy_scope: {
+        local_only: boolean;
+        read_only: boolean;
+        include_raw_evidence: boolean;
+        include_sensitive_context: boolean;
+        exclude_private_apps: boolean;
+        excluded_apps_or_domains: string[];
+        project?: string | null;
+        window_minutes?: number | null;
+        incognito_active: boolean;
+    };
+    allowed_tools: ToolPolicy[];
+    disallowed_context: Array<{ id: string; reason: string }>;
+    token_budget: { requested: number; max: number; used: number; dropped_items: number };
+    confidence: number;
+    evidence_summary: string;
+    source_context_pack_id: string;
+}
+
+export interface AgentRunResponse {
+    run_id: string;
+    mode: AgentMode;
+    answer: string;
+    context_pack: AgentContextPack;
+    proposed_actions: Array<{
+        label: string;
+        scope: string;
+        risk: AgentRiskLevel;
+        requires_approval: boolean;
+    }>;
+    blocked_actions: ToolPolicy[];
+    audit_warning?: string | null;
+}
+
+export type AgentRunStatus = "success" | "partial" | "blocked" | "failed";
+export type RetrievalFeedbackRating = "useful" | "irrelevant" | "wrong" | "stale" | "missing_context";
+
+export interface RedactionNote {
+    id: string;
+    reason: string;
+}
+
+export interface MemoryRetrievalExplanation {
+    memory_id: string;
+    title: string;
+    matched_reason: string;
+    app_name: string;
+    url?: string | null;
+    timestamp: number;
+    confidence: number;
+    semantic_relevance: string;
+    keyword_match: string;
+    recency: string;
+    project_match: string;
+    app_domain_match: string;
+    workflow_continuity: string;
+}
+
+export interface AgentRetrievalFeedback {
+    feedback_id: string;
+    run_id: string;
+    memory_id?: string | null;
+    rating: RetrievalFeedbackRating;
+    note?: string | null;
+    created_at: number;
+}
+
+export interface AgentAuditRecord {
+    run_id: string;
+    created_at: number;
+    user_goal: string;
+    mode: AgentMode;
+    context_pack_id?: string | null;
+    memories_used: string[];
+    tools_requested: string[];
+    tools_allowed: ToolPolicy[];
+    tools_blocked: ToolPolicy[];
+    approvals_required: ToolPolicy[];
+    redactions_applied: RedactionNote[];
+    dropped_context: RedactionNote[];
+    confidence: number;
+    output_summary: string;
+    result_status: AgentRunStatus;
+    error_message?: string | null;
+    selected_memories: MemoryRetrievalExplanation[];
+    feedback: AgentRetrievalFeedback[];
+}
+
+export interface RetrievalExplanation {
+    run_id?: string | null;
+    context_pack_id?: string | null;
+    selected_memories: MemoryRetrievalExplanation[];
+    dropped_context: RedactionNote[];
+    redacted_context: RedactionNote[];
+    privacy_policy_reasons: string[];
+    limitations: string[];
+}
+
+export interface RateResultRequest {
+    run_id: string;
+    memory_id?: string | null;
+    rating: RetrievalFeedbackRating;
+    note?: string | null;
+}
+
+export interface AgentSkillCandidate {
+    draft_id: string;
+    name: string;
+    category: string;
+    source: string;
+    created_from_memories: string[];
+    risk_level: AgentRiskLevel;
+    requires_approval: boolean;
+    last_verified?: number | null;
+    when_to_use: string;
+    required_context: string[];
+    procedure: string[];
+    verification: string[];
+    failure_cases: string[];
+    privacy_notes: string[];
+}
+
+export interface AgentEvalCase {
+    eval_id: string;
+    workflow_name: string;
+    input_context_pack_id: string;
+    expected_outcome: string;
+    forbidden_actions: string[];
+    required_evidence: string[];
+    grading_rules: string[];
+    privacy_scope: AgentContextPack["privacy_scope"];
+}
+
+export interface AgentPrompt {
+    name: string;
+    title: string;
+    description: string;
+    template: string;
 }
 
 export interface AppMergeCount {
@@ -894,6 +1097,67 @@ export async function getContextRuntimeStatus(): Promise<ContextRuntimeStatus> {
 
 export async function listRecentContextPacks(limit = 8): Promise<ContextPack[]> {
     return invoke<ContextPack[]>("list_recent_context_packs", { limit });
+}
+
+export async function buildAgentContextPack(
+    request: AgentContextRequest
+): Promise<AgentContextPack> {
+    return invoke<AgentContextPack>("build_agent_context_pack", { request });
+}
+
+export async function runAgentRequest(
+    request: AgentContextRequest
+): Promise<AgentRunResponse> {
+    return invoke<AgentRunResponse>("run_agent_request", { request });
+}
+
+export async function listAgentAuditRuns(
+    limit = 20,
+    mode?: AgentMode | null,
+    status?: AgentRunStatus | null
+): Promise<AgentAuditRecord[]> {
+    return invoke<AgentAuditRecord[]>("list_agent_audit_runs", { limit, mode: mode ?? null, status: status ?? null });
+}
+
+export async function getAgentAuditRun(runId: string): Promise<AgentAuditRecord | null> {
+    return invoke<AgentAuditRecord | null>("get_agent_audit_run", { runId });
+}
+
+export async function explainAgentRetrieval(request: {
+    run_id?: string | null;
+    context_pack_id?: string | null;
+    query?: string | null;
+    project?: string | null;
+}): Promise<RetrievalExplanation> {
+    return invoke<RetrievalExplanation>("explain_agent_retrieval", { request });
+}
+
+export async function rateAgentResult(request: RateResultRequest): Promise<AgentRetrievalFeedback> {
+    return invoke<AgentRetrievalFeedback>("rate_agent_result", { request });
+}
+
+export async function proposeSkillFromRun(runId: string): Promise<AgentSkillCandidate> {
+    return invoke<AgentSkillCandidate>("propose_skill_from_run", { runId });
+}
+
+export async function listAgentSkillDrafts(limit = 20): Promise<AgentSkillCandidate[]> {
+    return invoke<AgentSkillCandidate[]>("list_agent_skill_drafts", { limit });
+}
+
+export async function proposeEvalFromRun(runId: string): Promise<AgentEvalCase> {
+    return invoke<AgentEvalCase>("propose_eval_from_run", { runId });
+}
+
+export async function listAgentEvalDrafts(limit = 20): Promise<AgentEvalCase[]> {
+    return invoke<AgentEvalCase[]>("list_agent_eval_drafts", { limit });
+}
+
+export async function listAgentPrompts(): Promise<AgentPrompt[]> {
+    return invoke<AgentPrompt[]>("list_agent_prompts");
+}
+
+export async function getAgentPrompt(name: string): Promise<AgentPrompt | null> {
+    return invoke<AgentPrompt | null>("get_agent_prompt", { name });
 }
 
 export async function fndrSubscribe(sessionId: string): Promise<boolean> {
@@ -1475,4 +1739,37 @@ export async function setAutofillOverlayReady(
 
 export async function takePendingAutofillPayload(): Promise<AutofillOverlayPayload | null> {
     return invoke("take_pending_autofill_payload");
+}
+
+// ----- Debug / inspection -----
+
+export interface MemoryPipelineInspection {
+    memory_id: string;
+    synthesis_branch: string;
+    app_name: string;
+    window_title: string;
+    topic: string;
+    topic_categories: string[];
+    entities: string[];
+    search_aliases: string[];
+    display_summary: string;
+    memory_context: string;
+    insight_what_happened: string;
+    insight_why_mattered: string;
+    insight_what_changed: string;
+    insight_card_confidence: number;
+    ocr_confidence: number;
+    ocr_noise_score: number;
+    embedding_document_text: string;
+    embedding_aliases: string[];
+    embedding_dim: number;
+    has_image_embedding: boolean;
+    insight_spans_json: string;
+    lexical_shadow: string;
+}
+
+export async function inspectMemoryPipeline(
+    memoryId: string,
+): Promise<MemoryPipelineInspection> {
+    return invoke("inspect_memory_pipeline", { memoryId });
 }

@@ -4,6 +4,13 @@ import { usePolling } from "@/shared/hooks/usePolling";
 import { createClientId } from "@/shared/utils/id";
 import {
     type AgentStatus,
+    type AgentMode,
+    type AgentRunResponse,
+    type AgentAuditRecord,
+    type AgentEvalCase,
+    type AgentSkillCandidate,
+    type RetrievalExplanation,
+    type RetrievalFeedbackRating,
     type ContextPack,
     type ContextRuntimeStatus,
     type HermesBridgeStatus,
@@ -11,8 +18,15 @@ import {
     getContextRuntimeStatus,
     getHermesBridgeStatus,
     installHermesBridge,
+    explainAgentRetrieval,
+    getAgentAuditRun,
     listRecentContextPacks,
+    listAgentAuditRuns,
+    proposeEvalFromRun,
+    proposeSkillFromRun,
     quickSetupOllama,
+    rateAgentResult,
+    runAgentRequest,
     saveHermesSetup,
     sendDirectChat,
     sendHermesMessage,
@@ -136,6 +150,16 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
     const [apiKey, setApiKey] = useState("");
     const [baseUrl, setBaseUrl] = useState("");
     const [messages, setMessages] = useState<HermesUiMessage[]>([]);
+    const [agentGoal, setAgentGoal] = useState("");
+    const [agentMode, setAgentMode] = useState<AgentMode>("ask");
+    const [agentRun, setAgentRun] = useState<AgentRunResponse | null>(null);
+    const [agentRunError, setAgentRunError] = useState<string | null>(null);
+    const [auditRuns, setAuditRuns] = useState<AgentAuditRecord[]>([]);
+    const [selectedAudit, setSelectedAudit] = useState<AgentAuditRecord | null>(null);
+    const [retrievalExplanation, setRetrievalExplanation] = useState<RetrievalExplanation | null>(null);
+    const [agentDraftSkill, setAgentDraftSkill] = useState<AgentSkillCandidate | null>(null);
+    const [agentDraftEval, setAgentDraftEval] = useState<AgentEvalCase | null>(null);
+    const [agentInspectError, setAgentInspectError] = useState<string | null>(null);
     const [draft, setDraft] = useState("");
     const [conversationId, setConversationId] = useState(() => nextConversationId());
     const [hasSeededForm, setHasSeededForm] = useState(false);
@@ -146,17 +170,19 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
 
     const loadAgentWorkspace = useCallback(async (isMounted: () => boolean) => {
         try {
-            const [agentStatus, hermesStatus, runtime, packs] = await Promise.all([
+            const [agentStatus, hermesStatus, runtime, packs, runs] = await Promise.all([
                 getAgentStatus(),
                 getHermesBridgeStatus(),
                 getContextRuntimeStatus(),
                 listRecentContextPacks(2),
+                listAgentAuditRuns(8),
             ]);
             if (isMounted()) {
                 setStatus(agentStatus);
                 setHermes(hermesStatus);
                 setRuntimeStatus(runtime);
                 setRecentPacks(packs);
+                setAuditRuns(runs);
             }
         } catch (err) {
             console.error("Failed to load agent workspace:", err);
@@ -226,6 +252,11 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
             setApiKey("");
             setHasSeededForm(false);
             setSetupExpanded(false);
+            setSelectedAudit(null);
+            setRetrievalExplanation(null);
+            setAgentDraftSkill(null);
+            setAgentDraftEval(null);
+            setAgentInspectError(null);
         }
     }, [isVisible]);
 
@@ -322,6 +353,103 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
         }
     };
 
+    const handleRunAgentMode = async () => {
+        const userGoal = agentGoal.trim();
+        if (!userGoal || busyAction === "agent-run") return;
+
+        setBusyAction("agent-run");
+        setAgentRunError(null);
+        try {
+            const response = await runAgentRequest({
+                user_goal: userGoal,
+                mode: agentMode,
+                window_minutes: 30,
+                include_raw_evidence: false,
+                budget_tokens: agentMode === "ask" ? 900 : 1400,
+            });
+            setAgentRun(response);
+            const [runs, detail, explanation] = await Promise.all([
+                listAgentAuditRuns(8),
+                getAgentAuditRun(response.run_id),
+                explainAgentRetrieval({ run_id: response.run_id }),
+            ]);
+            setAuditRuns(runs);
+            setSelectedAudit(detail);
+            setRetrievalExplanation(explanation);
+            setAgentDraftSkill(null);
+            setAgentDraftEval(null);
+        } catch (err) {
+            setAgentRunError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyAction(null);
+        }
+    };
+
+    const handleSelectAuditRun = async (runId: string) => {
+        setBusyAction("audit-detail");
+        setAgentInspectError(null);
+        try {
+            const [detail, explanation] = await Promise.all([
+                getAgentAuditRun(runId),
+                explainAgentRetrieval({ run_id: runId }),
+            ]);
+            setSelectedAudit(detail);
+            setRetrievalExplanation(explanation);
+            setAgentDraftSkill(null);
+            setAgentDraftEval(null);
+        } catch (err) {
+            setAgentInspectError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyAction(null);
+        }
+    };
+
+    const handleRateResult = async (
+        runId: string,
+        rating: RetrievalFeedbackRating,
+        memoryId?: string
+    ) => {
+        setBusyAction("feedback");
+        setAgentInspectError(null);
+        try {
+            await rateAgentResult({ run_id: runId, memory_id: memoryId ?? null, rating });
+            const [runs, detail] = await Promise.all([
+                listAgentAuditRuns(8),
+                getAgentAuditRun(runId),
+            ]);
+            setAuditRuns(runs);
+            setSelectedAudit(detail);
+        } catch (err) {
+            setAgentInspectError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyAction(null);
+        }
+    };
+
+    const handleProposeSkill = async (runId: string) => {
+        setBusyAction("skill");
+        setAgentInspectError(null);
+        try {
+            setAgentDraftSkill(await proposeSkillFromRun(runId));
+        } catch (err) {
+            setAgentInspectError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyAction(null);
+        }
+    };
+
+    const handleProposeEval = async (runId: string) => {
+        setBusyAction("eval");
+        setAgentInspectError(null);
+        try {
+            setAgentDraftEval(await proposeEvalFromRun(runId));
+        } catch (err) {
+            setAgentInspectError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyAction(null);
+        }
+    };
+
     const readinessStep = getReadinessStep(hermes);
     const currentProviderLabel =
         isProviderKind(hermes?.provider_kind) ? hermes.provider_kind.toUpperCase() : providerKind.toUpperCase();
@@ -409,6 +537,25 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
                             latestPack={recentPacks[0] ?? null}
                             lastDelta={lastDelta}
                             readinessStep={readinessStep}
+                            agentGoal={agentGoal}
+                            agentMode={agentMode}
+                            agentRun={agentRun}
+                            agentRunError={agentRunError}
+                            auditRuns={auditRuns}
+                            selectedAudit={selectedAudit}
+                            retrievalExplanation={retrievalExplanation}
+                            agentDraftSkill={agentDraftSkill}
+                            agentDraftEval={agentDraftEval}
+                            agentInspectError={agentInspectError}
+                            agentBusy={busyAction === "agent-run"}
+                            inspectBusy={busyAction === "audit-detail" || busyAction === "feedback" || busyAction === "skill" || busyAction === "eval"}
+                            onAgentGoalChange={setAgentGoal}
+                            onAgentModeChange={setAgentMode}
+                            onRunAgentMode={handleRunAgentMode}
+                            onSelectAuditRun={handleSelectAuditRun}
+                            onRateResult={handleRateResult}
+                            onProposeSkill={handleProposeSkill}
+                            onProposeEval={handleProposeEval}
                             onStop={() => stopAgent().then(setStatus).catch(console.error)}
                             onOpenHermes={() => setActiveView("hermes")}
                         />
@@ -469,11 +616,58 @@ interface OverviewViewProps {
     latestPack: ContextPack | null;
     lastDelta: ContextDelta | null;
     readinessStep: number;
+    agentGoal: string;
+    agentMode: AgentMode;
+    agentRun: AgentRunResponse | null;
+    agentRunError: string | null;
+    auditRuns: AgentAuditRecord[];
+    selectedAudit: AgentAuditRecord | null;
+    retrievalExplanation: RetrievalExplanation | null;
+    agentDraftSkill: AgentSkillCandidate | null;
+    agentDraftEval: AgentEvalCase | null;
+    agentInspectError: string | null;
+    agentBusy: boolean;
+    inspectBusy: boolean;
+    onAgentGoalChange: (value: string) => void;
+    onAgentModeChange: (value: AgentMode) => void;
+    onRunAgentMode: () => void;
+    onSelectAuditRun: (runId: string) => void;
+    onRateResult: (runId: string, rating: RetrievalFeedbackRating, memoryId?: string) => void;
+    onProposeSkill: (runId: string) => void;
+    onProposeEval: (runId: string) => void;
     onStop: () => void;
     onOpenHermes: () => void;
 }
 
-function OverviewView({ status, hermes, runtimeStatus, latestPack, lastDelta, readinessStep, onStop, onOpenHermes }: OverviewViewProps) {
+function OverviewView({
+    status,
+    hermes,
+    runtimeStatus,
+    latestPack,
+    lastDelta,
+    readinessStep,
+    agentGoal,
+    agentMode,
+    agentRun,
+    agentRunError,
+    auditRuns,
+    selectedAudit,
+    retrievalExplanation,
+    agentDraftSkill,
+    agentDraftEval,
+    agentInspectError,
+    agentBusy,
+    inspectBusy,
+    onAgentGoalChange,
+    onAgentModeChange,
+    onRunAgentMode,
+    onSelectAuditRun,
+    onRateResult,
+    onProposeSkill,
+    onProposeEval,
+    onStop,
+    onOpenHermes,
+}: OverviewViewProps) {
     const isRunning = status?.status === "running";
     const fullAgentReady = !!hermes?.api_server_ready;
     const localFallbackReady = !hermes?.installed && !!hermes?.direct_ollama_ready;
@@ -496,6 +690,201 @@ function OverviewView({ status, hermes, runtimeStatus, latestPack, lastDelta, re
 
     return (
         <div className="ap-section-stack">
+            <div className="ap-card ap-chat-card">
+                <div className="ap-chat-header">
+                    <div>
+                        <div className="ap-card-title">Agent command</div>
+                        <div className="ap-card-subtitle">Local memory context · read-only by default</div>
+                    </div>
+                    <select
+                        className="ap-mode-select"
+                        value={agentMode}
+                        onChange={(event) => onAgentModeChange(event.target.value as AgentMode)}
+                    >
+                        <option value="ask">Ask only</option>
+                        <option value="plan">Plan</option>
+                        <option value="act">Act with approval</option>
+                        <option value="learn">Learn from workflow</option>
+                    </select>
+                </div>
+                <div className="ap-agent-command-row">
+                    <textarea
+                        className="ap-chat-textarea"
+                        value={agentGoal}
+                        onChange={(event) => onAgentGoalChange(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                                onRunAgentMode();
+                            }
+                        }}
+                        placeholder="What do you want FNDR Agent to help with?"
+                    />
+                    <button
+                        className="ap-btn ap-btn-primary"
+                        disabled={agentBusy || !agentGoal.trim()}
+                        onClick={onRunAgentMode}
+                    >
+                        {agentBusy ? "Building..." : agentMode === "ask" ? "Ask" : "Build"}
+                    </button>
+                </div>
+                {(agentRun || agentRunError) && (
+                    <div className="ap-agent-result">
+                        {agentRunError ? (
+                            <div className="ap-error-box">{agentRunError}</div>
+                        ) : agentRun ? (
+                            <>
+                                <div className="ap-agent-answer">{agentRun.answer}</div>
+                                <div className="ap-agent-evidence-grid">
+                                    <MetricCard
+                                        label="Memories used"
+                                        value={String(agentRun.context_pack.relevant_memories.length)}
+                                        detail={agentRun.context_pack.source_context_pack_id}
+                                        dotClass={agentRun.context_pack.relevant_memories.length > 0 ? "ap-dot-ready" : "ap-dot-starting"}
+                                    />
+                                    <MetricCard
+                                        label="Confidence"
+                                        value={agentRun.context_pack.confidence.toFixed(2)}
+                                        detail={`${agentRun.context_pack.token_budget.used} tokens`}
+                                        dotClass={agentRun.context_pack.confidence > 0.5 ? "ap-dot-ready" : "ap-dot-starting"}
+                                    />
+                                    <MetricCard
+                                        label="Policy"
+                                        value={agentRun.context_pack.privacy_scope.read_only ? "Read-only" : "Approval gated"}
+                                        detail={`${agentRun.blocked_actions.length} blocked`}
+                                        dotClass="ap-dot-ready"
+                                    />
+                                </div>
+                                {agentRun.context_pack.relevant_memories.length > 0 && (
+                                    <div className="ap-evidence-list">
+                                        {agentRun.context_pack.relevant_memories.slice(0, 4).map((memory) => (
+                                            <div className="ap-evidence-item" key={memory.memory_id}>
+                                                <div className="ap-evidence-title">{memory.title}</div>
+                                                <div className="ap-evidence-meta">
+                                                    {memory.app_name} · {new Date(memory.timestamp).toLocaleString()}
+                                                </div>
+                                                <div className="ap-evidence-summary">{memory.match_reason}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {agentRun.context_pack.disallowed_context.length > 0 && (
+                                    <div className="ap-redaction-line">
+                                        {agentRun.context_pack.disallowed_context.length} context item(s) were dropped or redacted before reaching the agent.
+                                    </div>
+                                )}
+                            </>
+                        ) : null}
+                    </div>
+                )}
+            </div>
+
+            <div className="ap-card">
+                <div className="ap-card-title">Recent agent runs</div>
+                {auditRuns.length === 0 ? (
+                    <p className="ap-card-body">No agent audit runs recorded yet.</p>
+                ) : (
+                    <div className="ap-run-list">
+                        {auditRuns.map((run) => (
+                            <button
+                                key={run.run_id}
+                                className={`ap-run-row ${selectedAudit?.run_id === run.run_id ? "active" : ""}`}
+                                disabled={inspectBusy}
+                                onClick={() => onSelectAuditRun(run.run_id)}
+                            >
+                                <span>{run.user_goal || "Untitled run"}</span>
+                                <small>{run.mode} · {run.result_status} · {new Date(run.created_at).toLocaleString()}</small>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {(selectedAudit || retrievalExplanation || agentInspectError) && (
+                <div className="ap-card">
+                    <div className="ap-card-title">Run detail</div>
+                    {agentInspectError && <div className="ap-error-box">{agentInspectError}</div>}
+                    {selectedAudit && (
+                        <>
+                            <div className="ap-agent-evidence-grid">
+                                <MetricCard
+                                    label="Mode"
+                                    value={selectedAudit.mode}
+                                    detail={selectedAudit.result_status}
+                                    dotClass={selectedAudit.result_status === "failed" ? "ap-dot-off" : "ap-dot-ready"}
+                                />
+                                <MetricCard
+                                    label="Approvals"
+                                    value={selectedAudit.approvals_required.length > 0 ? "Required" : "None"}
+                                    detail={`${selectedAudit.tools_blocked.length} blocked`}
+                                    dotClass={selectedAudit.approvals_required.length > 0 ? "ap-dot-starting" : "ap-dot-ready"}
+                                />
+                                <MetricCard
+                                    label="Feedback"
+                                    value={String(selectedAudit.feedback.length)}
+                                    detail={selectedAudit.context_pack_id ?? "no context pack"}
+                                    dotClass="ap-dot-ready"
+                                />
+                            </div>
+                            <div className="ap-inline-actions">
+                                {(["useful", "irrelevant", "wrong", "stale", "missing_context"] as RetrievalFeedbackRating[]).map((rating) => (
+                                    <button
+                                        key={rating}
+                                        className="ap-btn"
+                                        disabled={inspectBusy}
+                                        onClick={() => onRateResult(selectedAudit.run_id, rating)}
+                                    >
+                                        {rating.replace("_", " ")}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="ap-inline-actions">
+                                <button className="ap-btn" disabled={inspectBusy} onClick={() => onProposeSkill(selectedAudit.run_id)}>
+                                    Propose skill from this run
+                                </button>
+                                <button className="ap-btn" disabled={inspectBusy} onClick={() => onProposeEval(selectedAudit.run_id)}>
+                                    Propose eval from this run
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    {retrievalExplanation && (
+                        <div className="ap-inspect-section">
+                            <div className="ap-card-subtitle">Why this context?</div>
+                            {retrievalExplanation.selected_memories.slice(0, 6).map((memory) => (
+                                <div className="ap-evidence-item" key={memory.memory_id}>
+                                    <div className="ap-evidence-title">{memory.title}</div>
+                                    <div className="ap-evidence-meta">{memory.memory_id} · confidence {memory.confidence.toFixed(2)}</div>
+                                    <div className="ap-evidence-summary">{memory.matched_reason}</div>
+                                    <div className="ap-evidence-summary">{memory.keyword_match}</div>
+                                </div>
+                            ))}
+                            {(retrievalExplanation.dropped_context.length > 0 || retrievalExplanation.redacted_context.length > 0) && (
+                                <div className="ap-redaction-line">
+                                    Dropped {retrievalExplanation.dropped_context.length}; redacted {retrievalExplanation.redacted_context.length}.
+                                </div>
+                            )}
+                            <div className="ap-card-body">
+                                {retrievalExplanation.limitations.join(" ")}
+                            </div>
+                        </div>
+                    )}
+                    {agentDraftSkill && (
+                        <div className="ap-draft-box">
+                            <div className="ap-card-subtitle">Skill draft</div>
+                            <strong>{agentDraftSkill.name}</strong>
+                            <p>{agentDraftSkill.when_to_use}</p>
+                        </div>
+                    )}
+                    {agentDraftEval && (
+                        <div className="ap-draft-box">
+                            <div className="ap-card-subtitle">Eval draft</div>
+                            <strong>{agentDraftEval.workflow_name}</strong>
+                            <p>{agentDraftEval.expected_outcome}</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Status node */}
             <div className="ap-overview-hero">
                 <div className="ap-overview-node-ring">

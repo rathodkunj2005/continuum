@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod approvals;
 pub mod audit;
 pub mod context;
 pub mod evals;
@@ -11,8 +12,11 @@ pub use actions::{
     policy_for_action, ActionPolicyDecision, ActionResult, AgentAction, AgentActionKind,
     AgentActionStatus,
 };
-pub use execution::{validate_command, execute_safe_command, execute_action};
-pub use audit::AgentAuditRecord;
+pub use approvals::is_action_approved;
+pub use audit::{
+    append_agent_action, get_agent_action_by_id, list_actions_for_run, update_action_status,
+    AgentAuditRecord,
+};
 pub use context::{
     build_agent_context_pack, AgentContextPack, AgentContextRequest, AgentRunResponse,
 };

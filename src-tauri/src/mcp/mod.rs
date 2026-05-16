@@ -13,6 +13,11 @@
 pub mod tls;
 pub mod token;
 
+use crate::agent::audit::{
+    append_feedback, explanation_from_audit, get_agent_audit_run, ExplainRetrievalRequest,
+    RateResultRequest,
+};
+use crate::agent::{get_agent_prompt, list_agent_prompts, AgentContextRequest};
 use crate::context_runtime::{self, CodeContextRequest, ContextRequest, DecisionProposal};
 use crate::embedding::Embedder;
 use crate::meeting;
@@ -1192,6 +1197,10 @@ async fn handle_single_request(raw: Value, app_state: Arc<AppState>) -> Option<V
         "ping" => Ok(json!({})),
         "tools/list" | "tools.list" => Ok(tools_list_result()),
         "tools/call" | "tools.call" => call_tool(req.params, app_state).await,
+        "resources/list" | "resources.list" => Ok(resources_list_result()),
+        "resources/read" | "resources.read" => read_resource(req.params, app_state).await,
+        "prompts/list" | "prompts.list" => Ok(prompts_list_result()),
+        "prompts/get" | "prompts.get" => get_prompt(req.params),
         _ => Err(JsonRpcError {
             code: -32601,
             message: format!("Method not found: {}", req.method),
@@ -1222,7 +1231,9 @@ fn initialize_result(params: Option<Value>) -> Value {
     json!({
         "protocolVersion": protocol_version,
         "capabilities": {
-            "tools": { "listChanged": false }
+            "tools": { "listChanged": false },
+            "resources": { "listChanged": false },
+            "prompts": { "listChanged": false }
         },
         "serverInfo": {
             "name": "FNDR",
@@ -1230,6 +1241,140 @@ fn initialize_result(params: Option<Value>) -> Value {
         },
         "instructions": "FNDR exposes private local memory search and Q&A tools. All data lives on your machine."
     })
+}
+
+fn resources_list_result() -> Value {
+    json!({
+        "resources": [
+            {
+                "uri": "fndr://privacy/settings",
+                "name": "FNDR privacy settings",
+                "mimeType": "application/json",
+                "description": "Agent-safe privacy posture and redaction defaults."
+            },
+            {
+                "uri": "fndr://todo/open",
+                "name": "Open FNDR todos",
+                "mimeType": "application/json",
+                "description": "Open, non-dismissed local FNDR tasks."
+            },
+            {
+                "uri": "fndr://decision/recent",
+                "name": "Recent FNDR decisions",
+                "mimeType": "application/json",
+                "description": "Recent local decision ledger entries."
+            }
+        ]
+    })
+}
+
+fn prompts_list_result() -> Value {
+    json!({
+        "prompts": list_agent_prompts()
+            .into_iter()
+            .map(|prompt| json!({
+                "name": prompt.name,
+                "description": prompt.description,
+                "arguments": [
+                    {
+                        "name": "goal",
+                        "description": "The user's current goal or task.",
+                        "required": false
+                    }
+                ]
+            }))
+            .collect::<Vec<_>>()
+    })
+}
+
+fn get_prompt(params: Option<Value>) -> Result<Value, JsonRpcError> {
+    let name = params
+        .as_ref()
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| JsonRpcError {
+            code: -32602,
+            message: "prompts/get requires name".to_string(),
+        })?;
+    let prompt = get_agent_prompt(name).ok_or_else(|| JsonRpcError {
+        code: -32004,
+        message: format!("Unknown FNDR prompt: {name}"),
+    })?;
+    Ok(json!({
+        "description": prompt.description,
+        "messages": [
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": prompt.template
+                }
+            }
+        ]
+    }))
+}
+
+async fn read_resource(
+    params: Option<Value>,
+    app_state: Arc<AppState>,
+) -> Result<Value, JsonRpcError> {
+    let uri = params
+        .as_ref()
+        .and_then(|value| value.get("uri"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| JsonRpcError {
+            code: -32602,
+            message: "resources/read requires uri".to_string(),
+        })?;
+    let body = match uri {
+        "fndr://privacy/settings" => {
+            let config = app_state.config.read().clone();
+            json!({
+                "local_first": true,
+                "read_only_default": true,
+                "raw_evidence_default": false,
+                "redaction_enabled": config.redact_mode,
+                "excluded_app_or_domain_count": config.blocklist.len(),
+                "screenshot_retention_days": config.screenshot_retention_days,
+                "dangerous_actions": "approval_required_or_blocked"
+            })
+        }
+        "fndr://todo/open" => {
+            let tasks = app_state
+                .store
+                .list_tasks()
+                .await
+                .map_err(internal_tool_error)?
+                .into_iter()
+                .filter(|task| !task.is_completed && !task.is_dismissed)
+                .take(50)
+                .collect::<Vec<_>>();
+            json!({ "todos": tasks })
+        }
+        "fndr://decision/recent" => {
+            let decisions = app_state
+                .store
+                .list_decision_ledger_entries(20, None)
+                .await
+                .map_err(internal_tool_error)?;
+            json!({ "decisions": decisions })
+        }
+        _ => {
+            return Err(JsonRpcError {
+                code: -32004,
+                message: format!("Unknown FNDR resource: {uri}"),
+            });
+        }
+    };
+    Ok(json!({
+        "contents": [
+            {
+                "uri": uri,
+                "mimeType": "application/json",
+                "text": serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_string())
+            }
+        ]
+    }))
 }
 
 fn tools_list_result() -> Value {
@@ -1298,6 +1443,94 @@ fn tools_list_result() -> Value {
                         "include_raw_evidence": { "type": "boolean" }
                     },
                     "required": ["topic"]
+                }
+            },
+            {
+                "name": "agent.build_context_pack",
+                "description": "Build FNDR's typed AgentContextPack for Ask, Plan, Act, or Learn mode. Read-only by default; raw evidence is excluded unless requested.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "user_goal": { "type": "string" },
+                        "mode": { "type": "string", "enum": ["ask", "plan", "act", "learn"] },
+                        "project": { "type": "string" },
+                        "app": { "type": "string" },
+                        "domain": { "type": "string" },
+                        "window_minutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
+                        "selected_memory_ids": { "type": "array", "items": { "type": "string" } },
+                        "include_raw_evidence": { "type": "boolean" },
+                        "budget_tokens": { "type": "integer", "minimum": 300, "maximum": 4000 }
+                    },
+                    "required": ["user_goal"]
+                }
+            },
+            {
+                "name": "agent.run",
+                "description": "Run FNDR Agent in deterministic local Ask/Plan/Act/Learn scaffolding. It builds a context pack and returns policy-gated output without executing dangerous actions.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "user_goal": { "type": "string" },
+                        "mode": { "type": "string", "enum": ["ask", "plan", "act", "learn"] },
+                        "project": { "type": "string" },
+                        "window_minutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
+                        "budget_tokens": { "type": "integer", "minimum": 300, "maximum": 4000 }
+                    },
+                    "required": ["user_goal"]
+                }
+            },
+            {
+                "name": "agent.privacy_status",
+                "description": "Return FNDR Agent/MCP privacy posture: local-only defaults, read-only default mode, redaction defaults, and blocked app/domain counts.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "agent.explain_retrieval",
+                "description": "Explain why FNDR Agent selected memories and dropped/redacted context for a run, context pack, or query.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "run_id": { "type": "string" },
+                        "context_pack_id": { "type": "string" },
+                        "query": { "type": "string" },
+                        "project": { "type": "string" }
+                    }
+                }
+            },
+            {
+                "name": "agent.rate_result",
+                "description": "Log retrieval feedback for a run/memory without mutating ranking automatically.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "run_id": { "type": "string" },
+                        "memory_id": { "type": "string" },
+                        "rating": { "type": "string", "enum": ["useful", "irrelevant", "wrong", "stale", "missing_context"] },
+                        "note": { "type": "string" }
+                    },
+                    "required": ["run_id", "rating"]
+                }
+            },
+            {
+                "name": "agent.list_prompts",
+                "description": "List FNDR-specific agent prompt templates.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "agent.get_prompt",
+                "description": "Return one FNDR-specific agent prompt template by name.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" }
+                    },
+                    "required": ["name"]
                 }
             },
             {
@@ -1748,6 +1981,52 @@ async fn call_tool(params: Option<Value>, app_state: Arc<AppState>) -> Result<Va
                     message: format!("Invalid memory.agent_brief args: {err}"),
                 })?;
             run_memory_agent_brief(app_state, args).await
+        }
+        "agent.build_context_pack" => {
+            let args: AgentContextRequest =
+                serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid agent.build_context_pack args: {err}"),
+                })?;
+            run_agent_build_context_pack(app_state, args).await
+        }
+        "agent.run" => {
+            let args: AgentContextRequest =
+                serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid agent.run args: {err}"),
+                })?;
+            run_agent_run(app_state, args).await
+        }
+        "agent.privacy_status" => run_agent_privacy_status(app_state).await,
+        "agent.explain_retrieval" => {
+            let args: ExplainRetrievalRequest =
+                serde_json::from_value(params.arguments).unwrap_or_default();
+            run_agent_explain_retrieval(app_state, args).await
+        }
+        "agent.rate_result" => {
+            let args: RateResultRequest =
+                serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
+                    code: -32602,
+                    message: format!("Invalid agent.rate_result args: {err}"),
+                })?;
+            run_agent_rate_result(app_state, args).await
+        }
+        "agent.list_prompts" => Ok(tool_success(json!({
+            "prompts": list_agent_prompts()
+        }))),
+        "agent.get_prompt" => {
+            let name = params
+                .arguments
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| JsonRpcError {
+                    code: -32602,
+                    message: "agent.get_prompt requires name".to_string(),
+                })?;
+            Ok(tool_success(json!({
+                "prompt": get_agent_prompt(name)
+            })))
         }
         "memory.timeline" => {
             let args: TimelineArgs =
@@ -2583,6 +2862,109 @@ async fn run_memory_agent_brief(
         "supporting_snippets": support,
         "next_actions": likely_next_actions,
         "llm_payload": llm_payload
+    })))
+}
+
+async fn run_agent_build_context_pack(
+    app_state: Arc<AppState>,
+    args: AgentContextRequest,
+) -> Result<Value, JsonRpcError> {
+    let pack = crate::agent::build_agent_context_pack(&app_state, args)
+        .await
+        .map_err(internal_tool_error)?;
+    Ok(tool_success(json!({ "agent_context_pack": pack })))
+}
+
+async fn run_agent_run(
+    app_state: Arc<AppState>,
+    args: AgentContextRequest,
+) -> Result<Value, JsonRpcError> {
+    let response = crate::agent::context::run_agent_request(&app_state, args)
+        .await
+        .map_err(internal_tool_error)?;
+    Ok(tool_success(json!({ "agent_run": response })))
+}
+
+async fn run_agent_privacy_status(app_state: Arc<AppState>) -> Result<Value, JsonRpcError> {
+    let config = app_state.config.read().clone();
+    let mcp = status();
+    Ok(tool_success(json!({
+        "local_first": true,
+        "mcp_mode": mcp.mode,
+        "mcp_endpoint": mcp.endpoint,
+        "remote_public_endpoint": mcp.public_endpoint,
+        "read_only_default": true,
+        "raw_evidence_default": false,
+        "sensitive_context_default": "redacted_or_excluded",
+        "requires_auth": mcp.require_auth,
+        "auth_mode": mcp.auth_mode,
+        "capture_paused_or_incognito": app_state.is_incognito.load(std::sync::atomic::Ordering::SeqCst),
+        "excluded_app_or_domain_count": config.blocklist.len(),
+        "redaction_enabled": config.redact_mode,
+        "screenshot_retention_days": config.screenshot_retention_days,
+        "dangerous_actions": {
+            "write_files": "approval_required",
+            "mutating_shell": "approval_required",
+            "external_messages": "approval_required",
+            "credential_access": "blocked"
+        }
+    })))
+}
+
+async fn run_agent_explain_retrieval(
+    app_state: Arc<AppState>,
+    args: ExplainRetrievalRequest,
+) -> Result<Value, JsonRpcError> {
+    if let Some(run_id) = args.run_id.as_deref() {
+        let record = get_agent_audit_run(app_state.app_data_dir.as_path(), run_id)
+            .map_err(internal_tool_error)?
+            .ok_or_else(|| JsonRpcError {
+                code: -32004,
+                message: format!("No agent audit run found for {run_id}"),
+            })?;
+        return Ok(tool_success(json!({
+            "retrieval_explanation": explanation_from_audit(&record)
+        })));
+    }
+
+    let query = args
+        .query
+        .clone()
+        .or(args.context_pack_id.clone())
+        .unwrap_or_else(|| "recent agent context".to_string());
+    let response = crate::agent::context::run_agent_request(
+        &app_state,
+        AgentContextRequest {
+            user_goal: query,
+            mode: crate::agent::AgentMode::Ask,
+            project: args.project,
+            budget_tokens: 900,
+            ..Default::default()
+        },
+    )
+    .await
+    .map_err(internal_tool_error)?;
+    let record = get_agent_audit_run(app_state.app_data_dir.as_path(), &response.run_id)
+        .map_err(internal_tool_error)?
+        .ok_or_else(|| JsonRpcError {
+            code: -32004,
+            message: "Agent run was created but audit detail was unavailable".to_string(),
+        })?;
+    Ok(tool_success(json!({
+        "retrieval_explanation": explanation_from_audit(&record)
+    })))
+}
+
+async fn run_agent_rate_result(
+    app_state: Arc<AppState>,
+    args: RateResultRequest,
+) -> Result<Value, JsonRpcError> {
+    let feedback = append_feedback(app_state.app_data_dir.as_path(), args)
+        .map_err(internal_tool_error)?;
+    Ok(tool_success(json!({
+        "feedback": feedback,
+        "ranking_mutated": false,
+        "note": "Feedback is logged for future ranking work; it does not mutate retrieval yet."
     })))
 }
 
@@ -3957,6 +4339,8 @@ fn memory_to_search_result(memory: &crate::storage::MemoryRecord) -> crate::stor
         insight_context_thread: memory.insight_context_thread.clone(),
         insight_spans_json: memory.insight_spans_json.clone(),
         insight_card_confidence: memory.insight_card_confidence,
+        synthesis_branch: memory.synthesis_branch.clone(),
+        topic_categories: memory.topic_categories.clone(),
     }
 }
 

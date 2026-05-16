@@ -229,6 +229,12 @@ pub fn memory_schema() -> Schema {
             DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
             false,
         ),
+        Field::new("synthesis_branch", DataType::Utf8, false),
+        Field::new(
+            "topic_categories",
+            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+            false,
+        ),
         Field::new("insight_what_happened", DataType::Utf8, false),
         Field::new("insight_why_mattered", DataType::Utf8, false),
         Field::new("insight_what_changed", DataType::Utf8, false),

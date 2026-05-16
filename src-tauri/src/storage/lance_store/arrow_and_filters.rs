@@ -275,6 +275,12 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
     let related_project_ids_array = build_str_list(&|r| &r.related_project_ids);
     let related_ids_array = build_str_list(&|r| &r.related_ids);
     let consolidated_from_array = build_str_list(&|r| &r.consolidated_from);
+    let topic_categories_array = build_str_list(&|r| &r.topic_categories);
+
+    let synthesis_branches: Vec<&str> = records
+        .iter()
+        .map(|r| r.synthesis_branch.as_str())
+        .collect();
 
     let insight_what: Vec<&str> = records
         .iter()
@@ -401,6 +407,8 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
             Arc::new(StringArray::from(parent_ids)),
             Arc::new(related_ids_array),
             Arc::new(consolidated_from_array),
+            Arc::new(StringArray::from(synthesis_branches)),
+            Arc::new(topic_categories_array),
             Arc::new(StringArray::from(insight_what)),
             Arc::new(StringArray::from(insight_why)),
             Arc::new(StringArray::from(insight_changed)),
@@ -524,6 +532,8 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
     let parent_ids = str_col(batch, "parent_id");
     let related_ids = list_str_col(batch, "related_ids");
     let consolidated_from = list_str_col(batch, "consolidated_from");
+    let synthesis_branches = str_col(batch, "synthesis_branch");
+    let topic_categories = list_str_col(batch, "topic_categories");
     let insight_what = str_col(batch, "insight_what_happened");
     let insight_why = str_col(batch, "insight_why_mattered");
     let insight_changed = str_col(batch, "insight_what_changed");
@@ -682,6 +692,8 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 parent_id: get_opt_str(&parent_ids, i),
                 related_ids: extract_str_list(&related_ids, i),
                 consolidated_from: extract_str_list(&consolidated_from, i),
+                synthesis_branch: get_str(&synthesis_branches, i),
+                topic_categories: extract_str_list(&topic_categories, i),
                 insight_what_happened: get_str(&insight_what, i),
                 insight_why_mattered: get_str(&insight_why, i),
                 insight_what_changed: get_str(&insight_changed, i),
@@ -765,6 +777,8 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
     let insight_thread = str_col(batch, "insight_context_thread");
     let insight_spans = str_col(batch, "insight_spans_json");
     let insight_conf = f32_col(batch, "insight_card_confidence");
+    let search_synthesis_branches = str_col(batch, "synthesis_branch");
+    let search_topic_categories = list_str_col(batch, "topic_categories");
 
     (0..n)
         .map(|i| {
@@ -870,6 +884,8 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
                 insight_context_thread: get_str(&insight_thread, i),
                 insight_spans_json: get_str(&insight_spans, i),
                 insight_card_confidence: get_f32(&insight_conf, i),
+                synthesis_branch: get_str(&search_synthesis_branches, i),
+                topic_categories: extract_str_list(&search_topic_categories, i),
             }
         })
         .collect()

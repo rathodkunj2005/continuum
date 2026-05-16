@@ -362,6 +362,12 @@ pub struct MemoryRecord {
     #[serde(default)]
     pub consolidated_from: Vec<String>,
 
+    /// Which pipeline branch synthesized this: "vlm" | "llm" | "browser_semantic" | "fallback"
+    #[serde(default)]
+    pub synthesis_branch: String,
+    #[serde(default)]
+    pub topic_categories: Vec<String>,
+
     // --- Insight-first card (ADR 007): persisted at write time ---
     #[serde(default)]
     pub insight_what_happened: String,
@@ -490,6 +496,8 @@ impl Default for MemoryRecord {
             parent_id: None,
             related_ids: Vec::new(),
             consolidated_from: Vec::new(),
+            synthesis_branch: String::new(),
+            topic_categories: Vec::new(),
             insight_what_happened: String::new(),
             insight_why_mattered: String::new(),
             insight_what_changed: String::new(),
@@ -630,6 +638,12 @@ pub struct SearchResult {
     pub insight_spans_json: String,
     #[serde(default)]
     pub insight_card_confidence: f32,
+    /// Which pipeline branch produced this record.
+    #[serde(default)]
+    pub synthesis_branch: String,
+    /// Broad semantic category labels.
+    #[serde(default)]
+    pub topic_categories: Vec<String>,
 }
 
 impl Default for SearchResult {
@@ -699,6 +713,8 @@ impl Default for SearchResult {
             insight_context_thread: String::new(),
             insight_spans_json: String::new(),
             insight_card_confidence: 0.0,
+            synthesis_branch: String::new(),
+            topic_categories: Vec::new(),
         }
     }
 }

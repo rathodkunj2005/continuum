@@ -308,6 +308,9 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
             .to_string(),
         project: result.project.clone(),
         insight_kg_node_count: 0,
+        synthesis_branch: result.synthesis_branch.clone(),
+        topic_categories: result.topic_categories.clone(),
+        search_aliases: result.search_aliases.clone(),
     }
 }
 

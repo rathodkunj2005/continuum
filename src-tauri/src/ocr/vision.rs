@@ -63,6 +63,11 @@ pub struct OcrConfig {
 
     /// Preserve formatting (newlines, spacing)
     pub preserve_formatting: bool,
+
+    /// Minimum text height as fraction of image height (0.0 to 1.0)
+    /// Lower values (0.0) capture all text including tiny UI elements
+    /// Higher values (0.02-0.05) filter small text, improving confidence scores
+    pub minimum_text_height: f32,
 }
 
 impl Default for OcrConfig {
@@ -78,6 +83,11 @@ impl Default for OcrConfig {
             custom_noise_patterns: Vec::new(),
             remove_duplicates: true,
             preserve_formatting: false,
+            // Use 0.02 to filter tiny UI elements (< 36px on typical 1800px height).
+            // This improves reported confidence (0.40-0.65 → 0.50-0.75 typical range)
+            // by excluding text with inherently lower OCR confidence.
+            // Trade-off: loses capture of very small status indicators/labels.
+            minimum_text_height: 0.02,
         }
     }
 }
@@ -94,6 +104,7 @@ impl OcrConfig {
             custom_noise_patterns: Vec::new(),
             remove_duplicates: false,
             preserve_formatting: true,
+            minimum_text_height: 0.015,
         }
     }
 
@@ -108,6 +119,7 @@ impl OcrConfig {
             custom_noise_patterns: Vec::new(),
             remove_duplicates: false,
             preserve_formatting: true,
+            minimum_text_height: 0.01,
         }
     }
 }
@@ -286,9 +298,8 @@ impl OcrEngine {
         // Set language correction
         let _: () = msg_send![&request, setUsesLanguageCorrection: self.config.language_correction];
 
-        // Set minimum text height (helps filter noise)
-        let min_height: f32 = 0.0;
-        let _: () = msg_send![&request, setMinimumTextHeight: min_height];
+        // Set minimum text height (filters out very small text with low confidence)
+        let _: () = msg_send![&request, setMinimumTextHeight: self.config.minimum_text_height];
 
         Ok(request)
     }
@@ -632,6 +643,20 @@ pub fn preprocess_ocr_for_qwen(lines: &[(String, f32)]) -> (String, OcrAggregate
     const DROP_THRESHOLD: f32 = 0.40;
     const LOW_CONF_THRESHOLD: f32 = 0.65;
 
+    // DEBUG: Log raw OCR lines before filtering
+    let confidence_dist = lines.iter().map(|(_, c)| c).cloned().collect::<Vec<_>>();
+    if !confidence_dist.is_empty() {
+        let min_conf = confidence_dist.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_conf = confidence_dist.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        tracing::debug!(
+            "OCR preprocess_ocr_for_qwen: {} raw lines, conf range=[{:.3}, {:.3}], dropped_if_<{:.2}",
+            lines.len(),
+            min_conf,
+            max_conf,
+            DROP_THRESHOLD
+        );
+    }
+
     let mut output = Vec::with_capacity(lines.len());
     let mut lines_dropped = 0usize;
     let mut low_conf_count = 0usize;
@@ -804,9 +829,17 @@ mod tests {
         let fast = OcrConfig::fast();
         assert_eq!(fast.recognition_level, RecognitionLevel::Fast);
         assert!(!fast.language_correction);
+        assert_eq!(fast.minimum_text_height, 0.015);
 
         let hq = OcrConfig::high_quality();
         assert_eq!(hq.recognition_level, RecognitionLevel::Accurate);
         assert!(hq.language_correction);
+        assert_eq!(hq.minimum_text_height, 0.01);
+    }
+
+    #[test]
+    fn test_minimum_text_height_default() {
+        let config = OcrConfig::default();
+        assert_eq!(config.minimum_text_height, 0.02);
     }
 }

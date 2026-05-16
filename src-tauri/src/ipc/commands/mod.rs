@@ -37,11 +37,17 @@ pub use maintenance::*;
 mod hermes_agent;
 pub use hermes_agent::*;
 
+mod agent;
+pub use agent::*;
+
 mod graph;
 pub use graph::*;
 
 mod glasses_import;
 pub use glasses_import::*;
+
+mod debug;
+pub use debug::inspect_memory_pipeline;
 
 #[cfg(test)]
 mod daily_summary_tests {
