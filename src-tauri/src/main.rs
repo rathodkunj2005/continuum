@@ -636,6 +636,18 @@ fn main() {
             ipc::commands::start_agent_task,
             ipc::commands::get_agent_status,
             ipc::commands::stop_agent,
+            ipc::commands::build_agent_context_pack,
+            ipc::commands::run_agent_request,
+            ipc::commands::list_agent_audit_runs,
+            ipc::commands::get_agent_audit_run,
+            ipc::commands::explain_agent_retrieval,
+            ipc::commands::rate_agent_result,
+            ipc::commands::propose_skill_from_run,
+            ipc::commands::list_agent_skill_drafts,
+            ipc::commands::propose_eval_from_run,
+            ipc::commands::list_agent_eval_drafts,
+            ipc::commands::list_agent_prompts,
+            ipc::commands::get_agent_prompt,
             ipc::commands::get_hermes_bridge_status,
             ipc::commands::install_hermes_bridge,
             ipc::commands::save_hermes_setup,
@@ -673,6 +685,8 @@ fn main() {
             ipc::onboarding::delete_ai_model,
             ipc::onboarding::set_preferred_inference_model,
             ipc::commands::import_meta_glasses_photo,
+            ipc::commands::models_cleanup_dry_run,
+            ipc::commands::models_cleanup_confirm,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

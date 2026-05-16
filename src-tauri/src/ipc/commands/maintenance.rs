@@ -1480,3 +1480,95 @@ pub async fn run_idle_wiki_knowledge_compile(
     state.inner().store.upsert_knowledge_pages(&pages).await?;
     Ok(IdleWikiCompileSummary { pages_upserted: n })
 }
+
+use crate::inference::model_config::CLEANUP_OLD_MODEL_DIRS;
+
+#[tauri::command]
+pub async fn models_cleanup_dry_run(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+    use tauri::Manager;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let models_dir = app_data_dir.join("models");
+    if !models_dir.exists() {
+        return Ok(vec!["models/ directory does not exist".to_string()]);
+    }
+    let mut found = Vec::new();
+    for name in CLEANUP_OLD_MODEL_DIRS {
+        let dir = models_dir.join(name);
+        if dir.exists() {
+            let size = dir_size_bytes_cleanup(&dir).unwrap_or(0);
+            found.push(format!("{} ({:.1} MB)", name, size as f64 / 1_000_000.0));
+        }
+    }
+    for flat in &[
+        "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+        "SmolVLM-500M-Instruct-Q4_K_M.gguf",
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        "bge-large-en-v1.5-quantized.onnx",
+    ] {
+        let path = models_dir.join(flat);
+        if path.exists() {
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            found.push(format!("{} ({:.1} MB)", flat, size as f64 / 1_000_000.0));
+        }
+    }
+    if found.is_empty() {
+        found.push("No old model files found.".to_string());
+    }
+    Ok(found)
+}
+
+#[tauri::command]
+pub async fn models_cleanup_confirm(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+    use tauri::Manager;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let models_dir = app_data_dir.join("models");
+    if !models_dir.exists() {
+        return Ok(vec!["models/ directory does not exist".to_string()]);
+    }
+    let mut removed = Vec::new();
+    for name in CLEANUP_OLD_MODEL_DIRS {
+        let dir = models_dir.join(name);
+        if dir.is_dir() {
+            std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+            removed.push(format!("Removed directory: {}", dir.display()));
+        }
+    }
+    for flat in &[
+        "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+        "SmolVLM-500M-Instruct-Q4_K_M.gguf",
+        "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        "bge-large-en-v1.5-quantized.onnx",
+    ] {
+        let path = models_dir.join(flat);
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            removed.push(format!("Removed file: {}", path.display()));
+        }
+    }
+    if removed.is_empty() {
+        removed.push("Nothing to remove.".to_string());
+    }
+    Ok(removed)
+}
+
+fn dir_size_bytes_cleanup(dir: &std::path::Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let meta = entry.metadata()?;
+        if meta.is_file() {
+            total += meta.len();
+        }
+    }
+    Ok(total)
+}
