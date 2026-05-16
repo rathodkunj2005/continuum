@@ -4,10 +4,12 @@
 #![recursion_limit = "512"]
 
 pub mod accessibility;
+pub mod agent;
 pub mod capture;
 pub mod config;
 pub mod context_runtime;
 pub mod downloads;
+pub mod embed;
 pub mod embedding;
 pub mod http_util;
 pub mod inference;
