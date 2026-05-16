@@ -46,7 +46,7 @@ pub use graph::*;
 mod glasses_import;
 pub use glasses_import::*;
 
-mod debug;
+pub mod debug;
 pub use debug::inspect_memory_pipeline;
 
 #[cfg(test)]

@@ -1634,15 +1634,12 @@ fn fusion_weights(
     }
 
     if profile.is_short_intent_query() {
-        // Two flavours of short query need opposite weights:
-        //   - "Rust" / "Sarah" (proper-noun lookup)  →  lexical-heavy
-        //   - "sport" / "design" (abstract concept)  →  semantic-heavy
-        // is_abstract_concept_query distinguishes them via case + numerics.
-        if profile.is_abstract_concept_query() {
-            (0.58, 0.15, 0.27)
-        } else {
-            (0.24, 0.14, 0.62)
-        }
+        // Short queries: lexical evidence dominates. For abstract concept queries,
+        // semantic recall is improved instead by enriching the embedding query
+        // with LLM-expanded terms (see `embedding_query_with_extras`) — keeping
+        // the fusion weights conservative so we don't regress precision on
+        // single-token exact-match cases like "cricket", "canva", "rust".
+        (0.24, 0.14, 0.62)
     } else {
         (
             search_config.vector_weight,
@@ -2485,34 +2482,6 @@ mod tests {
         let ranked =
             HybridSearcher::rerank("the last time i watched cricket", vec![irrelevant], 10);
         assert!(ranked.is_empty());
-    }
-
-    #[test]
-    fn abstract_concept_query_gets_semantic_dominant_weights() {
-        // "sport" → abstract concept → semantic must lead
-        let profile = QueryProfile::from_query("sport");
-        let config = SearchConfig::default();
-        let (sem, _snip, kw) = fusion_weights(&profile, true, &config);
-        assert!(
-            sem >= 0.50,
-            "abstract concept query should get semantic >= 0.50, got {sem}"
-        );
-        assert!(
-            kw <= 0.40,
-            "keyword should not dominate abstract concept query, got {kw}"
-        );
-    }
-
-    #[test]
-    fn proper_noun_short_query_keeps_keyword_dominant() {
-        // "Rust" (capitalised) → likely proper-noun lookup → keyword can help
-        let profile = QueryProfile::from_query("Rust");
-        let config = SearchConfig::default();
-        let (sem, _snip, kw) = fusion_weights(&profile, true, &config);
-        assert!(
-            kw > sem,
-            "proper-noun lookup should favour keyword (kw={kw}, sem={sem})"
-        );
     }
 
     #[test]

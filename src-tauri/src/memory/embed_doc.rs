@@ -78,6 +78,7 @@ pub fn build_embedding_document(memory: &ValidatedMemory) -> EmbeddingDocument {
 
     // Aliases for keyword retrieval combine entities + search_aliases, all
     // lowercased and deduped, filtered through the bad-alias guard.
+    // Length >= 2 prevents single-char tokens from polluting the keyword index.
     let mut seen = std::collections::HashSet::new();
     let aliases: Vec<String> = memory
         .entities
