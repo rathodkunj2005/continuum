@@ -1,9 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { InsightGraphEdge, InsightGraphNode } from "@/shared/ipc/tauri";
 import { buildGraphView } from "./graph/graphDataBuilder";
+import { buildLegend } from "./graph/graphLegendBuilder";
+import {
+    EMPTY_FILTERS,
+    applyFilters,
+    type GraphFilterState,
+} from "./graph/graphFilters";
+import { deriveFilterOptions } from "./graph/graphFilterOptions";
 import type { GraphNodeView } from "./graph/types";
-import { KnowledgeGraphCanvas } from "./KnowledgeGraphCanvas";
+import { KnowledgeGraphCanvas, type KnowledgeGraphCanvasHandle } from "./KnowledgeGraphCanvas";
 import { KnowledgeGraphSidePanel } from "./KnowledgeGraphSidePanel";
+import { KnowledgeGraphLegend } from "./KnowledgeGraphLegend";
+import { KnowledgeGraphTopBar } from "./KnowledgeGraphTopBar";
+import { KnowledgeGraphZoomControls } from "./KnowledgeGraphZoomControls";
 import { GRAPH_SIM_MAX_TICKS } from "./useGraph";
 import "./KnowledgeGraph.css";
 
@@ -22,6 +32,12 @@ export interface KnowledgeGraphProps {
     layoutMode?: "hierarchical" | "force";
     /** When true, mount the vertical right-side memory card. Default: true. */
     showSidePanel?: boolean;
+    /** When true, mount the top filter bar. Default: true. */
+    showFilters?: boolean;
+    /** When true, mount the right-side legend. Default: true. */
+    showLegend?: boolean;
+    /** When true, mount the bottom-right zoom controls. Default: true. */
+    showZoomControls?: boolean;
 }
 
 export function KnowledgeGraph({
@@ -35,8 +51,11 @@ export function KnowledgeGraph({
     louvainByNodeId = null,
     maxSimulationTicks = GRAPH_SIM_MAX_TICKS,
     showSidePanel = true,
+    showFilters = true,
+    showLegend = true,
+    showZoomControls = true,
 }: KnowledgeGraphProps) {
-    const view = useMemo(
+    const fullView = useMemo(
         () =>
             buildGraphView({
                 nodes,
@@ -46,13 +65,19 @@ export function KnowledgeGraph({
         [nodes, edges, louvainByNodeId],
     );
 
+    const filterOptions = useMemo(() => deriveFilterOptions(fullView), [fullView]);
+    const [filterState, setFilterState] = useState<GraphFilterState>(EMPTY_FILTERS);
+
+    const view = useMemo(() => applyFilters(fullView, filterState), [fullView, filterState]);
+
     const nodeIndex = useMemo(() => new Map(view.nodes.map((n) => [n.id, n])), [view.nodes]);
+    const legendRows = useMemo(() => buildLegend(view), [view]);
 
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
     const effectiveSelectedId = selectedNodeId ?? internalSelectedId;
 
-    // Drop internal selection when an external selection change wipes it.
+    // Drop internal selection when an external selection change replaces it.
     useEffect(() => {
         if (selectedNodeId !== undefined && selectedNodeId !== null) {
             setInternalSelectedId(null);
@@ -86,14 +111,74 @@ export function KnowledgeGraph({
         onNodeClick?.(n.raw);
     };
 
+    const canvasRef = useRef<KnowledgeGraphCanvasHandle | null>(null);
+    const shellRef = useRef<HTMLDivElement | null>(null);
+    const [legendCollapsed, setLegendCollapsed] = useState(false);
+
+    // Keyboard shortcuts, scoped to the graph shell so they don't collide with global hotkeys.
+    useEffect(() => {
+        const el = shellRef.current;
+        if (!el) return;
+        const handler = (ev: KeyboardEvent) => {
+            const target = ev.target as HTMLElement | null;
+            const tag = target?.tagName ?? "";
+            if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+            switch (ev.key) {
+                case "+":
+                case "=":
+                    canvasRef.current?.zoomIn();
+                    ev.preventDefault();
+                    break;
+                case "-":
+                case "_":
+                    canvasRef.current?.zoomOut();
+                    ev.preventDefault();
+                    break;
+                case "0":
+                    canvasRef.current?.reset();
+                    ev.preventDefault();
+                    break;
+                case "f":
+                case "F":
+                    canvasRef.current?.fit();
+                    ev.preventDefault();
+                    break;
+                case "Escape":
+                    setInternalSelectedId(null);
+                    break;
+            }
+        };
+        el.addEventListener("keydown", handler);
+        return () => el.removeEventListener("keydown", handler);
+    }, []);
+
     return (
         <div
+            ref={shellRef}
             className={`knowledge-graph-shell${showSidePanel ? "" : " knowledge-graph-shell-bare"}`}
             data-empty={view.nodes.length === 0 ? "true" : undefined}
             style={{ height }}
+            tabIndex={0}
         >
             <div className="knowledge-graph-canvas-wrap film-grain">
+                {showFilters && (
+                    <KnowledgeGraphTopBar
+                        options={filterOptions}
+                        filters={filterState}
+                        onChange={setFilterState}
+                        nodeCount={view.nodes.length}
+                        edgeCount={view.edges.length}
+                    />
+                )}
+                {showLegend && (
+                    <KnowledgeGraphLegend
+                        rows={legendRows}
+                        collapsed={legendCollapsed}
+                        onToggle={() => setLegendCollapsed((v) => !v)}
+                    />
+                )}
                 <KnowledgeGraphCanvas
+                    ref={canvasRef}
                     view={view}
                     width={0}
                     height={height}
@@ -106,6 +191,7 @@ export function KnowledgeGraph({
                     onHover={setHoveredId}
                     onSelect={handleSelect}
                 />
+                {showZoomControls && <KnowledgeGraphZoomControls handle={canvasRef} />}
             </div>
             {showSidePanel && (
                 <KnowledgeGraphSidePanel
