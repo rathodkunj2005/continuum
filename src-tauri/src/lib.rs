@@ -11,6 +11,7 @@ pub mod context_runtime;
 pub mod downloads;
 pub mod embed;
 pub mod embedding;
+pub mod evals;
 pub mod http_util;
 pub mod inference;
 pub mod ipc;

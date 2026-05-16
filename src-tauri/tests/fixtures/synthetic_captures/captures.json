@@ -1,0 +1,86 @@
+[
+  {
+    "id": "code_debug_rust",
+    "app_name": "Cursor",
+    "window_title": "heap_allocator.rs - fndr",
+    "ocr_text": "error[E0502]: cannot borrow `self.buffer` as mutable because it is also borrowed as immutable\n  --> src/allocator.rs:47:9\n   |\n45 |         let view = self.buffer.as_slice();\n46 |         println!(\"{:?}\", view);\n47 |         self.buffer.push(new_item);\n   |         ^^^^^^^^^^^ mutable borrow occurs here",
+    "domain_hint": "programming"
+  },
+  {
+    "id": "live_sports_stream",
+    "app_name": "Google Chrome",
+    "window_title": "Live Match Stream - Willow TV",
+    "ocr_text": "LIVE | KKR 187/4 (18.2 OV) | GT 143/6 (15 OV)\nKolkata Knight Riders vs Gujarat Titans | IPL 2026\nVenkatesh Iyer 67* (42) | Rashid Khan 2/31\nCommentary: Iyer pulls one over square leg for a boundary",
+    "domain_hint": "sport"
+  },
+  {
+    "id": "email_thread",
+    "app_name": "Mail",
+    "window_title": "Re: Q3 Budget Review",
+    "ocr_text": "From: Sarah Chen <sarah@acme.com>\nTo: Finance Team\nSubject: Re: Q3 Budget Review\nDate: 2026-05-14 09:32\n\nHi all,\nCan we move the review to Thursday? I have conflicts on Wednesday afternoon. The preliminary numbers look good - we're 12% under on infrastructure but slightly over on tooling.\n\nThanks,\nSarah",
+    "domain_hint": "communication"
+  },
+  {
+    "id": "design_components",
+    "app_name": "Figma",
+    "window_title": "Component Library v3 - Design System",
+    "ocr_text": "Button / Primary / Default\nButton / Primary / Hover\nButton / Primary / Disabled\nTypography / Heading 1 / 32px / Inter 700\nTypography / Body / 16px / Inter 400\nSpacing / 4pt grid\nColor / Primary / #0066FF",
+    "domain_hint": "design"
+  },
+  {
+    "id": "team_chat",
+    "app_name": "Slack",
+    "window_title": "#eng-backend",
+    "ocr_text": "Alice: the deployment pipeline is stuck on step 3 again\nBob: I see it. It's the linting step - prettier config mismatch on the new monorepo\nAlice: can you push a hotfix?\nBob: On it. Will merge in 5 minutes\nAlice: thanks!",
+    "domain_hint": "communication"
+  },
+  {
+    "id": "news_article_ai",
+    "app_name": "Safari",
+    "window_title": "OpenAI releases GPT-5 with real-time reasoning - TechCrunch",
+    "ocr_text": "OpenAI today announced GPT-5, its most powerful language model to date, featuring real-time reasoning capabilities and a 1M token context window. The model achieves new state-of-the-art benchmarks on math, coding, and scientific reasoning tasks.\n\nThe release will be available to ChatGPT Plus subscribers starting next week.",
+    "domain_hint": "news"
+  },
+  {
+    "id": "terminal_build",
+    "app_name": "Terminal",
+    "window_title": "Terminal - bash - 80x24",
+    "ocr_text": "$ cargo build --release\n   Compiling fndr v0.1.0 (/Users/anurup/projects/fndr)\n   Finished release [optimized] target(s) in 47.3s\n$ ./target/release/fndr --help\nfndr 0.1.0 - local memory engine\n$ ",
+    "domain_hint": "programming"
+  },
+  {
+    "id": "empty_finder",
+    "app_name": "Finder",
+    "window_title": "Finder",
+    "ocr_text": "",
+    "domain_hint": "fallback"
+  },
+  {
+    "id": "youtube_video",
+    "app_name": "Google Chrome",
+    "window_title": "How to build a faster compiler - YouTube",
+    "ocr_text": "How to build a faster compiler\nNo Boilerplate\n2.3M views * 8 months ago\nLearn the techniques and tradeoffs of writing performant compilers\nLikes: 142K\nSubscribe",
+    "domain_hint": "video"
+  },
+  {
+    "id": "github_pr",
+    "app_name": "Google Chrome",
+    "window_title": "Refactor auth middleware (#247) - fndr/fndr - GitHub",
+    "ocr_text": "Refactor auth middleware #247\nOpen anurup wants to merge 5 commits into main from refactor/auth\n\nThis PR rewrites the session token validation to use the new compliance-approved approach. Closes #241.\n\nReviews: @sarah requested changes, @bob approved\nChecks: 12 passed, 1 failing (lint)",
+    "domain_hint": "code review"
+  },
+  {
+    "id": "calendar_event",
+    "app_name": "Calendar",
+    "window_title": "Quarterly Planning - Tomorrow 10:00 AM",
+    "ocr_text": "Quarterly Planning\nTomorrow, May 17 * 10:00 AM - 12:00 PM\nLocation: Conference Room B / Zoom\n\nAttendees: 8 people\nAgenda: Q3 roadmap review, headcount planning, deal review",
+    "domain_hint": "communication"
+  },
+  {
+    "id": "stock_chart",
+    "app_name": "Safari",
+    "window_title": "TSLA - Tesla Inc Stock Quote - Yahoo Finance",
+    "ocr_text": "TSLA Tesla Inc\n$248.50 +$3.20 (+1.30%)\nMarket Cap: 790.2B\nP/E (TTM): 65.4\nVolume: 89.3M\n52-week range: $138.80 - $299.29",
+    "domain_hint": "finance"
+  }
+]
