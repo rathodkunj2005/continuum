@@ -252,6 +252,281 @@
     cursor: not-allowed;
 }
 
+/* =========================================================
+   Top filter bar
+   ========================================================= */
+.kg-topbar {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    right: 18px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    pointer-events: none;
+}
+.kg-topbar > * {
+    pointer-events: auto;
+}
+.kg-topbar-left {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+}
+.kg-topbar-title {
+    font: 500 22px/1 var(--film-font-display);
+    color: var(--cp-text-primary);
+}
+.kg-topbar-meta {
+    font: 500 10px/1 var(--film-font-mono);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    color: var(--cp-text-secondary);
+}
+.kg-topbar-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.kg-topbar-menu {
+    position: relative;
+}
+.kg-topbar-pill {
+    font: 500 10px/1 var(--film-font-mono);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border-radius: var(--film-radius-pill);
+    border: 1px solid var(--cp-border-strong);
+    background: color-mix(in srgb, var(--cp-bg) 60%, transparent);
+    color: var(--cp-text-secondary);
+    cursor: pointer;
+    transition: background var(--film-dur-hover) var(--film-ease-shutter),
+        border-color var(--film-dur-hover) var(--film-ease-shutter),
+        color var(--film-dur-hover) var(--film-ease-shutter);
+}
+.kg-topbar-pill:hover {
+    background: var(--cp-surface);
+    color: var(--cp-text-primary);
+}
+.kg-topbar-pill-active {
+    border-color: var(--cp-accent);
+    color: var(--cp-accent);
+    box-shadow: var(--film-halation-soft);
+}
+.kg-topbar-menu-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    max-width: 280px;
+    max-height: 280px;
+    overflow: auto;
+    background: color-mix(in srgb, var(--cp-bg) 92%, transparent);
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    border: 1px solid var(--cp-border);
+    border-radius: var(--film-radius-md);
+    box-shadow: var(--shadow-window, 0 12px 32px rgba(0, 0, 0, 0.35));
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    z-index: 4;
+}
+.kg-topbar-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--film-radius-sm);
+    cursor: pointer;
+    font: 400 13px/1.2 var(--film-font-body);
+    color: var(--cp-text-primary);
+}
+.kg-topbar-menu-item:hover {
+    background: var(--cp-surface);
+}
+.kg-topbar-menu-item input {
+    accent-color: var(--cp-accent);
+}
+.kg-topbar-confidence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 500 10px/1 var(--film-font-mono);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    color: var(--cp-text-secondary);
+    padding: 0 8px;
+}
+.kg-topbar-confidence input[type="range"] {
+    width: 96px;
+    accent-color: var(--cp-accent);
+}
+.kg-topbar-confidence-value {
+    font-variant-numeric: tabular-nums;
+}
+.kg-topbar-reset {
+    font: 500 10px/1 var(--film-font-mono);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border-radius: var(--film-radius-pill);
+    border: 1px solid var(--cp-accent);
+    background: transparent;
+    color: var(--cp-accent);
+    cursor: pointer;
+    transition: background var(--film-dur-hover) var(--film-ease-shutter);
+}
+.kg-topbar-reset:hover {
+    background: color-mix(in srgb, var(--cp-accent) 12%, transparent);
+}
+
+/* =========================================================
+   Right-side legend
+   ========================================================= */
+.kg-legend {
+    position: absolute;
+    top: 60px;
+    right: 18px;
+    z-index: 3;
+    width: 200px;
+    background: color-mix(in srgb, var(--cp-bg) 70%, transparent);
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    border: 1px solid var(--cp-border);
+    border-radius: var(--film-radius-md);
+    padding: 10px 12px;
+    color: var(--cp-text-primary);
+    font-family: var(--film-font-body);
+}
+.kg-legend-collapsed {
+    width: auto;
+    padding: 8px 10px;
+}
+.kg-legend-toggle {
+    font: 500 10px/1 var(--film-font-mono);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    color: var(--cp-text-secondary);
+    background: transparent;
+    border: 0;
+    padding: 0 0 8px 0;
+    cursor: pointer;
+}
+.kg-legend-collapsed .kg-legend-toggle {
+    padding: 0;
+}
+.kg-legend-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.kg-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 400 12px/1.2 var(--film-font-body);
+    color: var(--cp-text-primary);
+}
+.kg-legend-swatch {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.kg-legend-swatch-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.kg-legend-swatch-ring {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    background: transparent;
+}
+.kg-legend-swatch-dash {
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+}
+.kg-legend-swatch-dotdot {
+    width: 16px;
+    height: 4px;
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+}
+.kg-legend-swatch-dotdot > span {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+}
+.kg-legend-swatch-arrow {
+    font: 600 14px/1 var(--film-font-mono);
+}
+.kg-legend-label {
+    color: var(--cp-text-secondary);
+    text-transform: lowercase;
+}
+.kg-legend-row-community .kg-legend-label {
+    color: var(--cp-text-primary);
+}
+
+/* =========================================================
+   Bottom-right zoom controls
+   ========================================================= */
+.kg-zoom-controls {
+    position: absolute;
+    bottom: 18px;
+    right: 18px;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.kg-zoom-btn {
+    width: 32px;
+    height: 32px;
+    font: 500 16px/1 var(--film-font-mono);
+    color: var(--cp-text-primary);
+    background: color-mix(in srgb, var(--cp-bg) 70%, transparent);
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    border: 1px solid var(--cp-border-strong);
+    border-radius: var(--film-radius-sm);
+    cursor: pointer;
+    transition: background var(--film-dur-hover) var(--film-ease-shutter),
+        border-color var(--film-dur-hover) var(--film-ease-shutter),
+        box-shadow var(--film-dur-hover) var(--film-ease-shutter);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.kg-zoom-btn:hover {
+    background: var(--cp-surface);
+    border-color: var(--cp-accent);
+    box-shadow: var(--film-halation-soft);
+}
+
+/* Make the shell focusable without showing a default browser outline */
+.knowledge-graph-shell:focus {
+    outline: none;
+}
+.knowledge-graph-shell:focus-visible {
+    outline: 1px solid var(--cp-accent);
+    outline-offset: -1px;
+}
+
 /* Back-compat — keep the old class names alive in case any caller still references them. */
 .knowledge-graph-wrap {
     width: 100%;
