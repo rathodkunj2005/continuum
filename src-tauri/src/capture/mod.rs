@@ -35,8 +35,8 @@ use crate::context_runtime;
 use crate::embedding::{embed_imported_image, Embedder, EmbeddingBackend, EMBEDDING_DIM};
 use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
 use crate::inference::{
-    compose_import_memory_context, extract_image_semantics, ImageImportSource,
-    StructuredMemoryExtraction,
+    compose_import_memory_context, compose_import_memory_context_with_title, extract_image_semantics,
+    ImageImportSource, StructuredMemoryExtraction,
 };
 use crate::memory::reopen::build_reopen_target;
 use crate::memory_compaction::{
@@ -373,11 +373,12 @@ async fn compose_visual_capture_record(
         }
     };
 
-    let composed = compose_import_memory_context(
+    let composed = compose_import_memory_context_with_title(
         &synthetic_filename,
         &insight,
         None,
         ImageImportSource::ScreenCapture,
+        Some(window_title),
     );
 
     let session_key = build_session_key(app_name, window_title, url);
@@ -2153,6 +2154,17 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         continue;
                     }
                 };
+                // DEBUG: Log OCR pipeline filtering to diagnose zero-confidence issues
+                tracing::debug!(
+                    "OCR raw result [{}]: confidence={:.3}, blocks={}, text_len={}, stats={{kept_lines={}, dropped={}, low_conf={}}}",
+                    app_name,
+                    ocr_result.confidence,
+                    ocr_result.block_count,
+                    ocr_result.text.len(),
+                    ocr_result.ocr_stats.lines_used,
+                    ocr_result.ocr_stats.lines_dropped,
+                    ocr_result.ocr_stats.low_conf_count
+                );
                 source_low_signal = ocr_result.is_low_signal(config.min_text_length);
                 let high_signal = extract_ocr_text(&app_name, &ocr_result);
                 (

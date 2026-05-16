@@ -293,18 +293,26 @@ pub fn compose_import_memory_context(
     ocr_text: Option<&str>,
     source: ImageImportSource,
 ) -> ImportMemoryText {
-    let header = format!("{}: {filename}", source.header_label());
-    let mut body = if !insight.summary_detailed.trim().is_empty() {
-        insight.summary_detailed.trim().to_string()
-    } else {
-        insight.summary_short.trim().to_string()
-    };
+    compose_import_memory_context_with_title(filename, insight, ocr_text, source, None)
+}
+
+pub fn compose_import_memory_context_with_title(
+    filename: &str,
+    insight: &ImageSemanticInsight,
+    ocr_text: Option<&str>,
+    source: ImageImportSource,
+    window_title: Option<&str>,
+) -> ImportMemoryText {
+    // Build semantic narrative using: window_title (if available) → entities → activity type → summary
+    let mut body = build_semantic_narrative(insight, window_title, source);
+    // Append setting if not already in body (original behavior)
     if let Some(ref s) = insight.setting {
         let needle = s.trim().to_ascii_lowercase();
         if !needle.is_empty() && !body.to_ascii_lowercase().contains(&needle) {
             body.push_str(&format!(" Setting: {}.", s.trim()));
         }
     }
+    let header = format!("{}: {filename}", source.header_label());
     let mut memory_context = format!("{header}. {body}");
     // Only append the raw OCR appendix when the insight came from an actual
     // vision model. In the OCR-only and LLM-on-OCR fallback paths the OCR
@@ -390,6 +398,78 @@ pub fn compose_import_memory_context(
         user_intent: intent,
         insight_what_happened,
         insight_why_mattered,
+    }
+}
+
+/// Build semantic narrative from data signals instead of templates.
+/// Priority order: window_title → entities → activity type → summary.
+/// Returns narrative body string for memory_context.
+fn build_semantic_narrative(
+    insight: &ImageSemanticInsight,
+    window_title: Option<&str>,
+    _source: ImageImportSource,
+) -> String {
+    // Body: entity-first narrative, confidence-weighted
+    let model_tier = match insight.model_id.as_str() {
+        "qwen3-vl-2b" => 1, // VLM: highest tier (confidence >= 0.55)
+        "llm_ocr_grounded" => 2, // LLM-on-OCR: middle tier (0.40-0.54)
+        "ocr_only" => 3, // OCR-only: lowest tier (< 0.40)
+        _ => 2,
+    };
+
+    if let Some(wt) = window_title {
+        let wt_clean = wt.trim();
+        if !wt_clean.is_empty() && wt_clean.len() <= 100 {
+            // Use window_title as primary signal when available and reasonable length
+            if !insight.entities.is_empty() {
+                let entity_preview = insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+                format!("{}. Involves: {}", wt_clean, entity_preview)
+            } else {
+                wt_clean.to_string()
+            }
+        } else {
+            // Fallback to entity-first + activity narrative
+            build_entity_first_narrative(insight, model_tier)
+        }
+    } else {
+        // No window_title: use entity-first + activity narrative
+        build_entity_first_narrative(insight, model_tier)
+    }
+}
+
+/// Build entity-first narrative when window_title unavailable or unusable.
+/// Format: "[Entity1/Entity2] [activity/context]: [scene/summary]"
+/// When no clear model tier (empty model_id), prefer summary_detailed for compatibility.
+fn build_entity_first_narrative(insight: &ImageSemanticInsight, _model_tier: u8) -> String {
+    let entities_display = if !insight.entities.is_empty() {
+        insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(" + ")
+    } else if !insight.people_roles.is_empty() {
+        insight.people_roles.iter().take(1).cloned().collect::<Vec<_>>().join(", ")
+    } else {
+        "Activity".to_string()
+    };
+
+    let activity = insight
+        .activity_type
+        .as_ref()
+        .map(|a| a.trim())
+        .filter(|a| !a.is_empty())
+        .unwrap_or("captured");
+
+    // Prefer detailed summary (original behavior for backward compat),
+    // fall back to short, then scene_type
+    let context_str = if !insight.summary_detailed.is_empty() {
+        insight.summary_detailed.trim()
+    } else if !insight.summary_short.is_empty() {
+        insight.summary_short.trim()
+    } else {
+        insight.scene_type.as_str()
+    };
+
+    if context_str.is_empty() {
+        format!("{}: {}", entities_display, activity)
+    } else {
+        format!("{}: {} — {}", entities_display, activity, context_str)
     }
 }
 
