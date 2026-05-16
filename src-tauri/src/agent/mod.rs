@@ -2,6 +2,7 @@ pub mod actions;
 pub mod audit;
 pub mod context;
 pub mod evals;
+pub mod execution;
 pub mod policy;
 pub mod prompts;
 pub mod skills;
@@ -10,6 +11,7 @@ pub use actions::{
     policy_for_action, ActionPolicyDecision, ActionResult, AgentAction, AgentActionKind,
     AgentActionStatus,
 };
+pub use execution::{validate_command, execute_safe_command, execute_action};
 pub use audit::AgentAuditRecord;
 pub use context::{
     build_agent_context_pack, AgentContextPack, AgentContextRequest, AgentRunResponse,

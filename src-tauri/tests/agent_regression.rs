@@ -174,3 +174,53 @@ mod audit_persistence {
         assert_eq!(failed_rows[0].result_status, AgentRunStatus::Failed, "Status must be Failed");
     }
 }
+
+#[cfg(test)]
+mod command_validation {
+    use fndr_lib::agent::validate_command;
+
+    #[test]
+    fn git_status_is_allowed() {
+        assert!(validate_command("git", &["status"]).is_ok());
+    }
+
+    #[test]
+    fn git_commit_is_blocked() {
+        assert!(validate_command("git", &["commit", "-m", "hack"]).is_err());
+    }
+
+    #[test]
+    fn rm_is_blocked() {
+        assert!(validate_command("rm", &["-rf", "/"]).is_err());
+    }
+
+    #[test]
+    fn sudo_is_blocked() {
+        assert!(validate_command("sudo", &["ls"]).is_err());
+    }
+
+    #[test]
+    fn cargo_check_is_allowed() {
+        assert!(validate_command("cargo", &["check"]).is_ok());
+    }
+
+    #[test]
+    fn cargo_install_is_blocked() {
+        assert!(validate_command("cargo", &["install", "ripgrep"]).is_err());
+    }
+
+    #[test]
+    fn npm_typecheck_is_allowed() {
+        assert!(validate_command("npm", &["run", "typecheck"]).is_ok());
+    }
+
+    #[test]
+    fn npm_install_is_blocked() {
+        assert!(validate_command("npm", &["install"]).is_err());
+    }
+
+    #[test]
+    fn unknown_command_is_blocked() {
+        assert!(validate_command("curl", &["https://example.com"]).is_err());
+    }
+}
