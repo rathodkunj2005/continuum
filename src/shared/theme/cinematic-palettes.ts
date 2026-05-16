@@ -25,6 +25,39 @@ interface PaletteTokens {
 }
 
 export const PALETTES = {
+    film: {
+        name: "Old Film",
+        year: 2026,
+        director: "FNDR",
+        description: "Personal memory, processed like film. Amber halation over deep umber.",
+        shades: ["#1a1410", "#221915", "#2a2018", "#352a20", "#a37a30", "#d4a04a", "#e8b85a"],
+        dark: {
+            bg: "#1a1410",
+            surface: "#221915",
+            surfaceRaised: "#2a2018",
+            border: "rgba(232, 223, 200, 0.08)",
+            borderStrong: "rgba(232, 223, 200, 0.22)",
+            textPrimary: "#e8dfc8",
+            textSecondary: "#c4a878",
+            textInverse: "#1a1410",
+            accent: "#d4a04a",
+            accentMuted: "#a37a30",
+            accentSubtle: "#2a2018",
+        },
+        light: {
+            bg: "#f2ead8",
+            surface: "#e8dfc8",
+            surfaceRaised: "#ddd3bc",
+            border: "rgba(42, 31, 26, 0.10)",
+            borderStrong: "rgba(42, 31, 26, 0.30)",
+            textPrimary: "#2a1f1a",
+            textSecondary: "#5a4a3a",
+            textInverse: "#f2ead8",
+            accent: "#a35a1e",
+            accentMuted: "#c4621e",
+            accentSubtle: "#e8dfc8",
+        },
+    },
     matrix: {
         name: "The Matrix",
         year: 1999,
