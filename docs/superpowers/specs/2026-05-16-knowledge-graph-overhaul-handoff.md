@@ -109,3 +109,49 @@ S3 plan: `docs/superpowers/plans/2026-05-16-knowledge-graph-overhaul-s3.md` (to 
 
 - The d3 mouseenter pathway through jsdom is unreliable in tests; we drive neighborhood-highlight assertions through the `selectedNodeId` prop instead. Real-browser hover works fine (the same `data-state` effect runs on either input). If S3 adds further interactive tests, prefer prop-driven scenarios over `fireEvent.mouseEnter`.
 - The legacy `memory-graph-detail` aside duplicates some content with the new side panel (label, timestamp). Users in the graph-stage view now see two panels for the selected node. Decide in S3 whether to (a) port "Build Path" and semantic-search into the new side panel's actions and delete the legacy aside, or (b) hide the legacy aside when the new side panel is visible.
+
+---
+
+## Session 3 — 2026-05-16
+
+**Last commit on main (after Task 7):** `f1abf7e`
+
+**Shipped:**
+
+- [`graph/activeUseClock.ts`](../../../src/domains/memory-vault/graph/activeUseClock.ts) — accumulates ms only while `document.visibilityState === "visible"`; listens to `visibilitychange` and a 30s coarse tick. Test-only setters keep cache unit tests deterministic.
+- [`graph/graphCache.ts`](../../../src/domains/memory-vault/graph/graphCache.ts) — per-IPC-key cache slots; `isStale()` compares active-use hour buckets so cached subgraphs survive panel re-opens until the next foreground hour boundary. Includes `invalidate()`, `clear()`, `peek()`.
+- [`useGraph.ts`](../../../src/domains/memory-vault/useGraph.ts) — `load()` now routes through `graphCache.get(...)`. New `refresh()` callback invalidates the cache for the current opts and re-loads. `fetchNodeDetail / fetchPath / fetchGodNodes / runSemanticSearch` remain direct passthroughs.
+- Loading + error scrims in the graph shell: shutter-bar animation for `loading`, single amber line for `errorMessage`. Both gated by new `KnowledgeGraphProps`.
+- Node drift animation: 6s ease-in-out keyframe with a per-node phase offset; pauses when hovered/selected; respects `prefers-reduced-motion`.
+- Topic filter pill in the top bar; `GraphFilterState` gains `topics`; `applyFilters` filters by `metadata.topic`; backfilled test.
+
+**Verification:**
+
+- `npm run typecheck` — PASS.
+- `npm test` — **14 files / 73 tests pass**. Same single pre-existing failure in `MemoryCardsPanel.test.tsx` ("All Memories" tab). **+8 new passing tests** this session.
+- `cargo test` — same pre-existing build error in the in-flight agent epic; this session touched zero Rust files.
+
+**Cumulative totals across S1+S2+S3:**
+
+| Metric | Baseline | After S3 |
+|---|---|---|
+| Test files passing | 5 | 14 (+9) |
+| Tests passing | 10 | 73 (+63) |
+| New regressions | — | 0 |
+| Default cinematic palette | matrix | film |
+| `KnowledgeGraph.tsx` LoC | 357 | ~220 |
+
+**Deliberately NOT done (separate epics):**
+
+- **LOD / virtualization** for thousand-node graphs (own perf epic; current d3-force handles ~hundreds of nodes well enough for now).
+- **App-wide theme migration** — 32 panel CSS files still reference the previous palette tokens and have `skip-worktree` set. The graph and palette default are migrated; touching the other 32 files is its own theme epic and would invite regressions in unrelated panels.
+- **Legacy `memory-graph-detail` aside cleanup** — Build Path and semantic-search inputs live there; folding them into `KnowledgeGraphSidePanel.actions` requires a product call.
+- **Full WCAG audit + tab order pass.**
+- **Cursor amber trail** (low value; the design bundle calls it optional).
+- **Date filter pill** — the data shape doesn't yet expose a uniformly populated date field on `metadata`; would need a small extractor change to be useful.
+
+**Open concerns:**
+
+- Cache invalidation is currently bound to the foreground-time hour boundary only. Manual refresh exists (`useGraph().refresh()`) but is not wired to a UI button; the existing `MemoryCardsPanel.tsx` "Build graph from existing memories" button is a separate IPC and untouched. Decide if the new chrome should expose a refresh affordance.
+- The `activeUseClock` ticker leaks one `setInterval(30s)` per app instance after first call to `getActiveMillis()`. That's fine in practice (it's a singleton), but if you later require strict teardown for HMR, expose a `__stopActiveClock()` and call it from the dev plugin.
+- Drift uses CSS `transform: translate` on the SVG `<g>`, which composes correctly with the simulation's `transform` attribute in every modern browser tested. If a regression appears in older webkit, drop the keyframe to `transform-origin: center; transform: scale(...)` instead.
