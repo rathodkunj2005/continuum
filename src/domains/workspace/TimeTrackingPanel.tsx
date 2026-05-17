@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { getTimeTracking, AppTimeEntry, TimeTrackingResult } from "../api/tauri";
-import { usePolling } from "../hooks/usePolling";
+import { getTimeTracking, AppTimeEntry, TimeTrackingResult } from "@/shared/ipc/tauri";
+import { usePolling } from "@/shared/hooks/usePolling";
 import "./TimeTrackingPanel.css";
 
 interface TimeTrackingPanelProps {

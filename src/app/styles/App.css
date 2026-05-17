@@ -316,6 +316,15 @@
     position: relative;
 }
 
+.app-shader-wallpaper {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.96;
+    filter: saturate(1.2) contrast(1.08) brightness(0.7);
+}
+
 .app::before {
     content: "";
     position: fixed;

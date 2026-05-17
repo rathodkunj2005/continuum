@@ -1,6 +1,6 @@
 import { CSSProperties, useCallback, useMemo, useRef, useState } from "react";
-import { Stats, getStats } from "../api/tauri";
-import { usePolling } from "../hooks/usePolling";
+import { Stats, getStats } from "@/shared/ipc/tauri";
+import { usePolling } from "@/shared/hooks/usePolling";
 import "./StatsPanel.css";
 
 interface StatsPanelProps {

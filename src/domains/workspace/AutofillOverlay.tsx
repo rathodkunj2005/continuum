@@ -10,7 +10,7 @@ import {
     resolveAutofill,
     setAutofillOverlayReady,
     takePendingAutofillPayload,
-} from "../api/tauri";
+} from "@/shared/ipc/tauri";
 
 const SUCCESS_TOAST_MS = 900;
 const ERROR_TOAST_MS = 2200;

@@ -11,10 +11,10 @@ import {
     listAvailableModels,
     downloadModel,
     refreshAiModels,
-} from "../api/onboarding";
-import { useModelDownloadStatus } from "../hooks/useModelDownloadStatus";
-import { usePolling } from "../hooks/usePolling";
-import { formatBytes } from "../lib/format";
+} from "@/shared/ipc/onboarding";
+import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
+import { usePolling } from "@/shared/hooks/usePolling";
+import { formatBytes } from "@/shared/utils/format";
 import "./Onboarding.css";
 
 // ── Helper: step index for progress dots ─────────────────────────────────

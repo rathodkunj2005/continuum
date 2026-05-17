@@ -10,13 +10,18 @@ mkdir -p "$TARGET_DIR"
 
 echo "🔄 Downloading All-MiniLM-L6-v2 to: $TARGET_DIR"
 
+export FNDR_MODEL_TARGET_DIR="$TARGET_DIR"
+
 python3 << 'PYEOF'
 from huggingface_hub import hf_hub_download
 import os
 import shutil
 import sys
 
-target_dir = os.path.expanduser("$HOME/Library/Application Support/com.fndr.FNDR/models")
+target_dir = os.path.expanduser(os.environ.get("FNDR_MODEL_TARGET_DIR", ""))
+if not target_dir:
+    print("❌ FNDR_MODEL_TARGET_DIR is not set")
+    sys.exit(1)
 os.makedirs(target_dir, exist_ok=True)
 
 print("📥 Downloading all-MiniLM-L6-v2.onnx...")
@@ -60,4 +65,3 @@ if os.path.isdir(onnx_dir) and not os.listdir(onnx_dir):
 print("\n🎉 All-MiniLM-L6-v2 ready!")
 print("   📊 Model: ~90 MB, uses ~0.5 GB RAM")
 PYEOF
-

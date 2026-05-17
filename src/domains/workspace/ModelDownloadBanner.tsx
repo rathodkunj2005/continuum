@@ -4,9 +4,9 @@ import {
     downloadModel,
     listAvailableModels,
     refreshAiModels,
-} from "../api/onboarding";
-import { useModelDownloadStatus } from "../hooks/useModelDownloadStatus";
-import { formatBytes } from "../lib/format";
+} from "@/shared/ipc/onboarding";
+import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
+import { formatBytes } from "@/shared/utils/format";
 import "./ModelDownloadBanner.css";
 
 export function ModelDownloadBanner() {
