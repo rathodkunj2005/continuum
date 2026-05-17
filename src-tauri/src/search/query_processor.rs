@@ -1,3 +1,5 @@
+pub use super::hybrid::{QueryIntent, QueryProfile};
+
 #[derive(Debug, Clone)]
 pub struct QueryContext {
     pub raw_query: String,

@@ -17,6 +17,8 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use tauri::Emitter;
 
+pub mod graph_plan;
+pub mod query_plan;
 mod wiki_policy;
 
 static URL_RE: Lazy<Regex> =

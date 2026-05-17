@@ -455,6 +455,39 @@ fn extract_json_object(raw: &str) -> Option<String> {
     None
 }
 
+fn valid_query_plan_refinement(value: &serde_json::Value) -> bool {
+    let Some(obj) = value.as_object() else {
+        return false;
+    };
+    for (key, field) in obj {
+        match key.as_str() {
+            "target_project" => {
+                if !field.as_str().is_some_and(|value| !value.trim().is_empty()) {
+                    return false;
+                }
+            }
+            "target_topics" => {
+                let Some(topics) = field.as_array() else {
+                    return false;
+                };
+                if !topics
+                    .iter()
+                    .all(|topic| topic.as_str().is_some_and(|value| !value.trim().is_empty()))
+                {
+                    return false;
+                }
+            }
+            "graph_max_hops" => {
+                if !field.as_u64().is_some_and(|value| value <= 2) {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
 // ============================================================================
 // Public types
 // ============================================================================
@@ -947,6 +980,50 @@ impl InferenceEngine {
         let candidate = extract_json_object(&raw)?;
         let draft: MemoryCardDraft = serde_json::from_str(&candidate).ok()?;
         validate_memory_card_draft(draft)
+    }
+
+    pub async fn refine_query_plan(
+        &self,
+        query: &str,
+        current_plan_json: &str,
+        timeout_ms: u64,
+    ) -> Option<String> {
+        let system_msg = "You output a tiny JSON object with optional fields only.";
+        let user_msg = format!(
+            "Schema: {{\"target_project\"?: string, \"target_topics\"?: string[], \"graph_max_hops\"?: 0|1|2}}\n\
+            Query: {query}\n\
+            Current plan: {current_plan_json}\n\
+            Output JSON only."
+        );
+        let prompt = self.build_prompt(system_msg, &user_msg).ok()?;
+        let raw = match tokio::time::timeout(
+            std::time::Duration::from_millis(timeout_ms),
+            self.complete(&prompt, 80),
+        )
+        .await
+        {
+            Ok(raw) => raw,
+            Err(_) => {
+                crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.timeout");
+                return None;
+            }
+        };
+
+        let Some(candidate) = extract_json_object(&raw) else {
+            crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.fail");
+            return None;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&candidate) else {
+            crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.fail");
+            return None;
+        };
+        if !valid_query_plan_refinement(&value) {
+            crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.fail");
+            return None;
+        }
+
+        crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.success");
+        serde_json::to_string(&value).ok()
     }
 
     /// Generate a knowledge-rich significance sentence and enriched search aliases from a

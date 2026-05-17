@@ -12,7 +12,7 @@ use tokio::time::{timeout, Duration, Instant};
 pub struct HybridSearcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum QueryIntent {
+pub enum QueryIntent {
     Definition,
     HowTo,
     Lookup,
@@ -20,7 +20,7 @@ enum QueryIntent {
 }
 
 #[derive(Debug, Clone)]
-struct QueryProfile {
+pub struct QueryProfile {
     raw: String,
     normalized: String,
     intent: QueryIntent,
@@ -42,7 +42,7 @@ struct FusionSignals {
 }
 
 impl QueryProfile {
-    fn from_query(query: &str) -> Self {
+    pub fn from_query(query: &str) -> Self {
         let normalized = normalize_text(query);
         let mut tokens = token_vec(&normalized);
 
@@ -122,6 +122,22 @@ impl QueryProfile {
 
     fn is_empty(&self) -> bool {
         self.normalized.is_empty()
+    }
+
+    pub fn intent(&self) -> QueryIntent {
+        self.intent
+    }
+
+    pub fn normalized(&self) -> &str {
+        &self.normalized
+    }
+
+    pub fn wants_recency(&self) -> bool {
+        self.wants_recency
+    }
+
+    pub fn anchor_terms(&self) -> &[String] {
+        &self.primary_terms
     }
 
     fn keyword_variants(&self, max_variants: usize) -> Vec<String> {

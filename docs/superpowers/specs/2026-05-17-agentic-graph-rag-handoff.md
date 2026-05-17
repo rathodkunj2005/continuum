@@ -61,3 +61,39 @@ Notes for future agents:
 - Run Rust commands from `src-tauri/`, not the repo root.
 - If a fresh worktree fails Rust tests with `frontendDist = "../dist" but this path doesn't exist`, run `npm run build` from the repo root first.
 - `graph_rerank.rs` intentionally contains a compile-safe skeleton with an ignored test; the real implementation belongs to the later retrieval/fusion phases.
+
+## Session: Phase 1 query planner
+
+Branch/worktree:
+- Branch: `codex/agentic-graph-rag-phase1`
+- Worktree: `~/.config/superpowers/worktrees/fndr/codex-agentic-graph-rag-phase1`
+- Plan: `docs/superpowers/plans/2026-05-17-agentic-graph-rag.md`
+
+What changed:
+- Added `src-tauri/src/context_runtime/query_plan.rs` with typed `QueryPlan`, `PlannerIntent`, `Route`, `TimeWindow`, `EntityHint`, `NeededContext`, `GraphExpansion`, `PlanHints`, and deterministic `plan(...)` rules.
+- Added `src-tauri/src/context_runtime/graph_plan.rs` with per-intent graph seed kinds, allowed-edge whitelists, and max-hop rules.
+- Exposed the planner modules from `src-tauri/src/context_runtime/mod.rs`.
+- Promoted the existing hybrid-search `QueryProfile` / `QueryIntent` API for planner reuse and re-exported it through `src-tauri/src/search/query_processor.rs` and `src-tauri/src/search/mod.rs`.
+- Added `InferenceEngine::refine_query_plan(...)` with a 400ms-compatible timeout, strict JSON-object validation, and `fndr.retrieval.planner.llm.{success,timeout,fail}` counters.
+- Added `refine_plan_with_llm(...)` and `apply_refinement_json(...)` so optional LLM output can update only present fields in-place.
+- Added `fndr.retrieval.planner.ms` latency recording for the rule planner.
+- Added `src-tauri/tests/query_plan_rules.rs` with 10 planner-rule tests plus a model-skipping LLM smoke test.
+
+Verification run:
+- `cargo test -p fndr --test query_plan_rules` passed: 11 tests.
+- `cargo test -p fndr context_runtime::query_plan:: -- --nocapture` passed and printed 6 representative `QueryPlan` JSON fixtures.
+- `cargo test -p fndr context_runtime::graph_plan::` passed: 2 tests.
+
+Where to look next:
+- Phase 2 starts in `docs/superpowers/plans/2026-05-17-agentic-graph-rag.md` under "Phase 2 - Modular retrieval routes".
+- Primary Phase 2 handoff files:
+  - `src-tauri/src/context_runtime/query_plan.rs`
+  - `src-tauri/src/context_runtime/graph_plan.rs`
+  - `src-tauri/src/graph/graph_index.rs`
+  - `src-tauri/src/graph/graph_rerank.rs`
+  - existing retrieval entry points under `src-tauri/src/context_runtime/mod.rs` and `src-tauri/src/search/`
+
+Notes for future agents:
+- The Phase 1 planner is deterministic by default; LLM refinement is optional and additive.
+- `PlanHints` is the adapter boundary for entity aliases and clock/budget inputs. Phase 2 should populate those hints from real store/runtime state rather than adding storage calls inside the pure planner.
+- The plan has a small internal inconsistency on Definition max hops. The implementation follows the concrete example and route task: Definition uses `max_hops = 2`.

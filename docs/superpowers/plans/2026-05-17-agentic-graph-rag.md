@@ -215,21 +215,21 @@ pub struct GraphExpansion {
 
 ### Tasks
 
-- [ ] **1.1: Define structs** in `query_plan.rs` with `#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]`.
-- [ ] **1.2: Write `plan_rules`.** Use `QueryProfile::from_query` for anchor terms, intent disambiguation, and recency heuristics. Map `QueryIntent::Definition` → `PlannerIntent::Definition` etc. Detect `target_project` by matching anchor terms against `entity_aliases` store. Detect `target_entities` from CamelCase / dotted identifiers / file extensions / URLs.
-- [ ] **1.3: Write `route_selection` rules.**
+- [x] **1.1: Define structs** in `query_plan.rs` with `#[derive(Serialize, Deserialize, specta::Type, Clone, Debug)]`.
+- [x] **1.2: Write `plan_rules`.** Use `QueryProfile::from_query` for anchor terms, intent disambiguation, and recency heuristics. Map `QueryIntent::Definition` → `PlannerIntent::Definition` etc. Detect `target_project` by matching anchor terms against `entity_aliases` store. Detect `target_entities` from CamelCase / dotted identifiers / file extensions / URLs.
+- [x] **1.3: Write `route_selection` rules.**
   - Always include `Vector` and `Keyword`.
   - If `target_entities` non-empty or `target_project.is_some()`: add `Entity`.
   - If `time_window.is_some()` or query contains "today" / "yesterday" / "last week" / "before" / "after": add `Temporal`.
   - If intent ∈ {ResumeWork, Debug, Definition, RelatedTo}: add `Graph` with `max_hops=2`. Otherwise `Graph` with `max_hops=1`.
-- [ ] **1.4: Write `GraphPlan::from(intent)`** in `graph_plan.rs`. Allowed-edge whitelist per intent:
+- [x] **1.4: Write `GraphPlan::from(intent)`** in `graph_plan.rs`. Allowed-edge whitelist per intent:
   - Definition → `BelongsToProject, MentionedIn, EvidencedBy`
   - Debug → `Causes, Resolves, FixedBy, BrokeBy, TriggeredBy`
   - ResumeWork → `OccurredInSession, BelongsToProject, PrecededBy, FollowedBy, SameTaskAs`
   - RelatedTo → `SimilarTo, MentionedIn`
-- [ ] **1.5: Write 10 unit tests** in `tests/query_plan_rules.rs` covering one example per `PlannerIntent`, route set, and graph expansion.
+- [x] **1.5: Write 10 unit tests** in `tests/query_plan_rules.rs` covering one example per `PlannerIntent`, route set, and graph expansion.
   Example: `plan("why is the planner debounce 250ms")` → `intent=Definition`, `routes=[Vector,Keyword,Graph]`, `graph_expansion.max_hops=2`, `allowed_edges` includes `EvidencedBy`.
-- [ ] **1.6: Add `InferenceEngine::refine_query_plan`** with prompt:
+- [x] **1.6: Add `InferenceEngine::refine_query_plan`** with prompt:
   ```
   System: You output a tiny JSON object with optional fields only.
   Schema: {"target_project"?: string, "target_topics"?: string[], "graph_max_hops"?: 0|1|2}
@@ -238,10 +238,10 @@ pub struct GraphExpansion {
   Output JSON only.
   ```
   400ms timeout via `tokio::time::timeout`. On parse-fail return `None`.
-- [ ] **1.7: `refine_plan_with_llm`** races the LLM call against the timeout, merges the parsed JSON into the plan in-place (only fields present override), and is safe to call concurrently.
-- [ ] **1.8: Integration test.** With a real `InferenceEngine` (skipped if model missing), confirm refinement parses on 3 fixture queries.
-- [ ] **1.9: Telemetry.** Add `fndr.retrieval.planner.ms` histogram and `fndr.retrieval.planner.llm.{success,timeout,fail}` counters.
-- [ ] **1.10: Commit.**
+- [x] **1.7: `refine_plan_with_llm`** races the LLM call against the timeout, merges the parsed JSON into the plan in-place (only fields present override), and is safe to call concurrently.
+- [x] **1.8: Integration test.** With a real `InferenceEngine` (skipped if model missing), confirm refinement parses on 3 fixture queries.
+- [x] **1.9: Telemetry.** Add `fndr.retrieval.planner.ms` histogram and `fndr.retrieval.planner.llm.{success,timeout,fail}` counters.
+- [x] **1.10: Commit.**
   ```bash
   git commit -m "feat(query_plan): rule-based planner + optional LLM refinement"
   ```
