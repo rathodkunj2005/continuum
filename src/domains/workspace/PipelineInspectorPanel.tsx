@@ -9,7 +9,7 @@ import {
     listMemoryCards,
     searchMemoryCards,
     searchRawResults,
-} from "../../shared/ipc/tauri";
+} from "@/shared/ipc/tauri";
 import "./PipelineInspectorPanel.css";
 
 interface PipelineInspectorPanelProps {

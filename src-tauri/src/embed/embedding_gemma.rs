@@ -106,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn embedding_dimensions_is_256() {
-        assert_eq!(embedding_dimensions(), 256);
+    fn embedding_dimensions_is_384() {
+        assert_eq!(embedding_dimensions(), 384);
     }
 }

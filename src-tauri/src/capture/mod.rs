@@ -522,7 +522,7 @@ async fn compose_visual_capture_record(
         entities: insight.entities.clone(),
         tags: insight.topics.clone(),
         embedding_text: composed.embedding_text.clone(),
-        embedding_model: "bge-large-en-v1.5".to_string(),
+        embedding_model: "all-MiniLM-L6-v2".to_string(),
         embedding_dim: EMBEDDING_DIM as u32,
         evidence_confidence: insight.confidence,
         extraction_confidence: insight.confidence,
@@ -1794,6 +1794,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
 
     // Batch buffer
     let mut batch: Vec<MemoryRecord> = Vec::new();
+    let mut batch_outcomes: Vec<crate::StoreOutcome> = Vec::new();
     let mut continuity_index: HashMap<String, String> = HashMap::new();
     let mut last_flush = Instant::now();
 
@@ -1821,14 +1822,29 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         // Flush batch if needed
         let should_flush = batch.len() >= max_batch_size || last_flush.elapsed() >= flush_interval;
         if should_flush && !batch.is_empty() {
-            batch.retain(|record| {
-                !Blocklist::is_blocked(&record.app_name, &config.blocklist)
-                    && !Blocklist::is_context_blocked(
-                        record.url.as_deref(),
-                        Some(&record.window_title),
-                        &config.blocklist,
-                    )
-            });
+            let pre_filter_count = batch.len();
+            // Filter batch and outcomes in lockstep so their indices stay
+            // aligned. A plain `retain` + `truncate` would keep the first N
+            // outcomes regardless of which records were removed.
+            let keep: Vec<bool> = batch
+                .iter()
+                .map(|record| {
+                    !Blocklist::is_blocked(&record.app_name, &config.blocklist)
+                        && !Blocklist::is_context_blocked(
+                            record.url.as_deref(),
+                            Some(&record.window_title),
+                            &config.blocklist,
+                        )
+                })
+                .collect();
+            {
+                let mut keep_iter = keep.iter().copied();
+                batch_outcomes.retain(|_| keep_iter.next().unwrap_or(false));
+            }
+            {
+                let mut keep_iter = keep.iter().copied();
+                batch.retain(|_| keep_iter.next().unwrap_or(false));
+            }
             if batch.is_empty() {
                 purge_capture_artifacts(state.store.frames_dir());
                 last_flush = Instant::now();
@@ -1836,34 +1852,51 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             }
 
             let flush_start = Instant::now();
-            if let Err(e) = state.store.add_batch(&batch).await {
-                tracing::error!("Failed to flush batch: {}", e);
-            } else {
-                if let Err(err) =
-                    context_runtime::sync_memory_records(state.as_ref(), &batch, Some("screen"))
-                        .await
-                {
-                    tracing::warn!("Context runtime batch sync failed: {}", err);
+            match state.store.add_batch_and_get_count(&batch).await {
+                Ok(inserted_count) => {
+                    if inserted_count > 0 {
+                        for outcome in batch_outcomes.iter() {
+                            state.capture_stats.record_store(*outcome);
+                        }
+                        if let Err(err) =
+                            context_runtime::sync_memory_records(state.as_ref(), &batch, Some("screen"))
+                                .await
+                        {
+                            tracing::warn!("Context runtime batch sync failed: {}", err);
+                        }
+                        for rec in batch.iter() {
+                            state.enqueue_graph_from_flushed_memory(rec);
+                        }
+                        if let Err(err) =
+                            crate::ipc::commands::commit_graph_updates_now(state.clone()).await
+                        {
+                            tracing::debug!("immediate graph commit skipped: {}", err);
+                        }
+                    }
+                    purge_capture_artifacts(state.store.frames_dir());
+                    state.invalidate_memory_derived_caches();
+                    let flush_ms = flush_start.elapsed().as_millis() as u64;
+                    runtime_metrics::record_ms("capture.flush_ms", flush_ms);
+                    if inserted_count > 0 {
+                        tracing::info!(
+                            "Flushed: attempted {} records, inserted {} in {:?}",
+                            batch.len(),
+                            inserted_count,
+                            std::time::Duration::from_millis(flush_ms)
+                        );
+                    } else {
+                        tracing::debug!(
+                            "Batch flush skipped: all {} records filtered/deduped during storage",
+                            batch.len()
+                        );
+                    }
                 }
-                for rec in batch.iter() {
-                    state.enqueue_graph_from_flushed_memory(rec);
+                Err(e) => {
+                    tracing::error!("Failed to flush batch: {}", e);
                 }
-                if let Err(err) =
-                    crate::ipc::commands::commit_graph_updates_now(state.clone()).await
-                {
-                    tracing::debug!("immediate graph commit skipped: {}", err);
-                }
-                purge_capture_artifacts(state.store.frames_dir());
-                state.invalidate_memory_derived_caches();
-                let flush_ms = flush_start.elapsed().as_millis() as u64;
-                runtime_metrics::record_ms("capture.flush_ms", flush_ms);
-                tracing::info!(
-                    "Flushed {} records in {:?}",
-                    batch.len(),
-                    std::time::Duration::from_millis(flush_ms)
-                );
             }
             batch.clear();
+            batch_outcomes.clear();
             last_flush = Instant::now();
         }
 
@@ -2035,7 +2068,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 schema_version: 2,
                 activity_type: "browsing".to_string(),
                 embedding_text: format!("url: {} | title: {}", domain, snippet),
-                embedding_model: "bge-large-en-v1.5".to_string(),
+                embedding_model: "all-MiniLM-L6-v2".to_string(),
                 embedding_dim: EMBEDDING_DIM as u32,
                 synthesis_branch: "url_only".to_string(),
                 ..Default::default()
@@ -2043,6 +2076,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             record.dedup_fingerprint =
                 deterministic_dedup_fingerprint(&record, Some(&record.memory_context));
             batch.push(record);
+            batch_outcomes.push(crate::StoreOutcome::UrlOnly);
             if force_capture {
                 last_forced_capture = Instant::now();
             }
@@ -2060,9 +2094,6 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 }),
             );
             state.frames_captured.fetch_add(1, Ordering::Relaxed);
-            state
-                .capture_stats
-                .record_store(crate::StoreOutcome::UrlOnly);
             state
                 .last_capture_time
                 .store(now.timestamp_millis() as u64, Ordering::Relaxed);
@@ -2247,10 +2278,8 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                                 config.capture_pipeline.visual_novelty_ring_capacity,
                             );
                             batch.push(record);
+                            batch_outcomes.push(crate::StoreOutcome::VisualPath);
                             state.frames_captured.fetch_add(1, Ordering::Relaxed);
-                            state
-                                .capture_stats
-                                .record_store(crate::StoreOutcome::VisualPath);
                             state.last_capture_time.store(
                                 chrono::Utc::now().timestamp_millis() as u64,
                                 Ordering::Relaxed,
@@ -2559,14 +2588,19 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         // the row would land as a Willow/Shottr-style polluted card —
         // skip storage outright so neither retrieval nor the iOS/OpenClaw
         // surfaces see it.
+        //
+        // `possible_ungrounded_extraction` is intentionally excluded: it fires
+        // at grounding < 0.80 which is too broad for a 1B model that often
+        // uses semantically-correct but lexically-different wording. Including
+        // it caused (grounding < 0.55) to always produce stacked_critical = 2,
+        // dropping every frame the LLM touched. The effective gate is now:
+        // both weakly-grounded AND an unsupported hallucinated outcome field.
         let stacked_critical_extraction_issues = extraction_issues
             .iter()
             .filter(|issue| {
                 matches!(
                     issue.as_str(),
-                    "structured_fields_weakly_grounded"
-                        | "unsupported_outcome"
-                        | "possible_ungrounded_extraction"
+                    "structured_fields_weakly_grounded" | "unsupported_outcome"
                 )
             })
             .count();
@@ -3313,7 +3347,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 .map(|_| dedup_fingerprint.clone())
                 .unwrap_or(dedup_fingerprint),
             embedding_text: primary_embed_input,
-            embedding_model: "bge-large-en-v1.5".to_string(), // Default assumption, actual model set in pipeline
+            embedding_model: "all-MiniLM-L6-v2".to_string(), // Default assumption, actual model set in pipeline
             embedding_dim: EMBEDDING_DIM as u32,
             enrichment_status: String::new(),
             fallback_reason: None,
@@ -3347,6 +3381,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             insight_card_confidence: 0.0,
         };
         let incoming_record_id = record.id.clone();
+        let batch_size_before = batch.len();
         let merged_or_new = match merge_or_append_memory_record(
             state.as_ref(),
             &mut batch,
@@ -3357,10 +3392,17 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         )
         .await
         {
-            Ok(merged) => merged,
+            Ok(merged) => {
+                let batch_size_after = batch.len();
+                if batch_size_after > batch_size_before {
+                    batch_outcomes.push(crate::StoreOutcome::OcrPath);
+                }
+                merged
+            }
             Err(err) => {
                 tracing::warn!("Memory continuity merge failed for {}: {}", record.id, err);
                 batch.push(record.clone());
+                batch_outcomes.push(crate::StoreOutcome::OcrPath);
                 record
             }
         };
@@ -3427,9 +3469,6 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         );
 
         state.frames_captured.fetch_add(1, Ordering::Relaxed);
-        state
-            .capture_stats
-            .record_store(crate::StoreOutcome::OcrPath);
         if extraction_parse_failed_degraded {
             tracing::debug!(
                 app = %app_name,

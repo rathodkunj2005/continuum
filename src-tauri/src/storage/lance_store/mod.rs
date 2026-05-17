@@ -35,7 +35,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub const MEMORIES_TABLE: &str = "memories";
+pub const MEMORIES_TABLE: &str = "memories_v4_minilm_384";
 pub const TASKS_TABLE: &str = "tasks";
 pub const MEETINGS_TABLE: &str = "meetings";
 pub const SEGMENTS_TABLE: &str = "segments";
@@ -101,8 +101,6 @@ const SEARCH_RESULT_COLUMNS: &[&str] = &[
 ];
 const TEXT_EMBED_DIM: i32 = DEFAULT_TEXT_EMBEDDING_DIM as i32;
 const IMAGE_EMBED_DIM: i32 = DEFAULT_IMAGE_EMBEDDING_DIM as i32;
-/// EmbeddingGemma 256-dim — same as TEXT_EMBED_DIM now that config is updated.
-pub(crate) const EMBED_GEMMA_DIM: i32 = TEXT_EMBED_DIM;
 const VECTOR_QUERY_MULTIPLIER: usize = DEFAULT_STORE_VECTOR_QUERY_MULTIPLIER;
 const KEYWORD_QUERY_MULTIPLIER: usize = DEFAULT_STORE_KEYWORD_QUERY_MULTIPLIER;
 const MAX_KEYWORD_SCAN: usize = DEFAULT_STORE_MAX_KEYWORD_SCAN;
@@ -952,8 +950,18 @@ impl Store {
         &self,
         records: &[MemoryRecord],
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.add_batch_and_get_count(records).await?;
+        Ok(())
+    }
+
+    /// Add a batch of records and return the count of records actually stored.
+    /// This accounts for records filtered out due to low signal or deduplication.
+    pub async fn add_batch_and_get_count(
+        &self,
+        records: &[MemoryRecord],
+    ) -> Result<usize, Box<dyn std::error::Error>> {
         if records.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
         let incoming_count = records.len();
         let normalized = records
@@ -964,17 +972,19 @@ impl Store {
         let compacted = dedup_records_for_insert(&normalized);
         let skipped_count = incoming_count.saturating_sub(normalized.len());
         let deduped_count = normalized.len().saturating_sub(compacted.len());
+        let inserted_count = compacted.len();
         tracing::info!(
             incoming_count,
-            inserted_count = compacted.len(),
+            inserted_count,
             skipped_count,
             deduped_count,
             "lancedb:add_batch"
         );
         if compacted.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
-        self.insert_memory_batch(&compacted).await
+        self.insert_memory_batch(&compacted).await?;
+        Ok(inserted_count)
     }
 
     /// Product-named wrapper for writing one memory chunk to the stable index.

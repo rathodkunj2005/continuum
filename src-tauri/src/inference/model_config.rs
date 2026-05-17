@@ -12,11 +12,11 @@ pub const MULTIMODAL_MODEL_RAM_GB: f32 = 3.5;
 /// Minimum on-disk size to accept as a real Qwen3-VL-2B GGUF (rejects LFS pointers).
 pub const QWEN3_VL_2B_MAIN_GGUF_MIN_BYTES: u64 = 900_000_000;
 
-pub const EMBEDDING_MODEL_ID: &str = "google/embeddinggemma-300m";
-pub const EMBEDDING_MODEL_FILENAME: &str = "embeddinggemma-300m.onnx";
+pub const EMBEDDING_MODEL_ID: &str = "sentence-transformers/all-MiniLM-L6-v2";
+pub const EMBEDDING_MODEL_FILENAME: &str = "all-MiniLM-L6-v2.onnx";
 pub const EMBEDDING_TOKENIZER_FILENAME: &str = "tokenizer.json";
-/// EmbeddingGemma-300M with matryoshka head at 256 dimensions.
-pub const EMBEDDING_DIMENSIONS: usize = 256;
+/// all-MiniLM-L6-v2 produces 384-dimensional sentence embeddings.
+pub const EMBEDDING_DIMENSIONS: usize = 384;
 pub const EMBEDDING_DIMENSIONS_I32: i32 = EMBEDDING_DIMENSIONS as i32;
 pub const EMBEDDING_MAX_SEQ_LEN: usize = 512;
 
@@ -29,8 +29,11 @@ pub const QWEN_CONTEXT_SIZE: u32 = 4096;
 pub const QWEN_TEMPERATURE: f32 = 0.1;
 pub const QWEN_TOP_P: f32 = 0.8;
 
-/// LanceDB table name for memories using EmbeddingGemma 256-dim vectors.
+/// LanceDB table name for memories using EmbeddingGemma 256-dim vectors (read-only sidecar).
 pub const MEMORIES_V3_TABLE: &str = "memories_v3_egemma_256";
+
+/// LanceDB table name for memories using all-MiniLM-L6-v2 384-dim vectors (primary table).
+pub const MEMORIES_V4_TABLE: &str = "memories_v4_minilm_384";
 
 /// Old model directories to list in cleanup dry-run (not deleted automatically).
 pub const CLEANUP_OLD_MODEL_DIRS: &[&str] = &[

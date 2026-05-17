@@ -3,10 +3,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub const DEFAULT_TEXT_EMBEDDING_DIM: usize = 256;
+pub const DEFAULT_TEXT_EMBEDDING_DIM: usize = 384;
 pub const DEFAULT_IMAGE_EMBEDDING_DIM: usize = 512;
-pub const DEFAULT_EMBEDDING_MODEL_NAME: &str = "google/embeddinggemma-300m";
-pub const DEFAULT_EMBEDDING_MODEL_FILENAME: &str = "embeddinggemma-300m.onnx";
+pub const DEFAULT_EMBEDDING_MODEL_NAME: &str = "sentence-transformers/all-MiniLM-L6-v2";
+pub const DEFAULT_EMBEDDING_MODEL_FILENAME: &str = "all-MiniLM-L6-v2.onnx";
 pub const DEFAULT_EMBEDDING_TOKENIZER_FILENAME: &str = "tokenizer.json";
 pub const DEFAULT_EMBEDDING_MAX_SEQ_LEN: usize = 512;
 pub const DEFAULT_EMBEDDING_CACHE_CAPACITY: usize = 1024;
@@ -1134,14 +1134,14 @@ mod tests {
     #[test]
     fn rejects_embedding_dimension_mismatch() {
         let mut config = Config::default();
-        config.embedding.dimension = 384;
+        config.embedding.dimension = 256;
 
         let err = config
             .normalized()
             .validate()
             .expect_err("wrong embedding dimension must fail at startup");
 
-        assert!(err.contains("256-dimensional text embeddings"));
+        assert!(err.contains("384-dimensional text embeddings"));
     }
 
     #[test]

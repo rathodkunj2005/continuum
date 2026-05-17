@@ -572,7 +572,7 @@ pub fn memories_v3_schema() -> Schema {
             "embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                super::EMBED_GEMMA_DIM,
+                256,
             ),
             false,
         ),
