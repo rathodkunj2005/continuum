@@ -17,7 +17,7 @@ use tokio::time::{timeout, Duration};
 const MAX_GROUP_SNIPPETS: usize = DEFAULT_MEMORY_CARD_MAX_GROUP_SNIPPETS;
 const GROUPING_TIMEOUT: Duration = Duration::from_millis(DEFAULT_MEMORY_CARD_GROUPING_TIMEOUT_MS);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct MemoryCard {
     pub id: String,
     pub title: String,
@@ -92,6 +92,11 @@ pub struct MemoryCard {
     /// Synonym/alias terms surfaced by synthesis.
     #[serde(default)]
     pub search_aliases: Vec<String>,
+    /// Phase 3 — "Why this surfaced" populated by the composer when this card
+    /// was produced by the agentic-graph-rag pipeline. Defaults to `None` for
+    /// legacy code paths so existing frontend / serde consumers stay unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surfacing_reason: Option<crate::context_runtime::context_pack::SurfacingReason>,
 }
 
 #[derive(Debug, Clone)]
@@ -307,6 +312,7 @@ impl MemoryCardSynthesizer {
                 synthesis_branch: anchor.synthesis_branch.clone(),
                 topic_categories: anchor.topic_categories.clone(),
                 search_aliases: anchor.search_aliases.clone(),
+                surfacing_reason: None,
             });
         }
 
@@ -813,7 +819,14 @@ fn fallback_card_for_result(query: &str, result: &SearchResult) -> MemoryCard {
         synthesis_branch: result.synthesis_branch.clone(),
         topic_categories: result.topic_categories.clone(),
         search_aliases: result.search_aliases.clone(),
+        surfacing_reason: None,
     }
+}
+
+/// `pub(crate)` re-export used by `context_runtime::composer` to build cards
+/// from a single `SearchResult` without duplicating field-mapping logic.
+pub(crate) fn build_fallback_card(query: &str, result: &SearchResult) -> MemoryCard {
+    fallback_card_for_result(query, result)
 }
 
 /// Extract the short id encoded by `build_durable_memory_context` after

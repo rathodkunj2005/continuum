@@ -1,7 +1,7 @@
 //! Search module with hybrid search
 
 mod hybrid;
-mod memory_cards;
+pub mod memory_cards;
 mod query_processor;
 mod reranker;
 

@@ -17,7 +17,11 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use tauri::Emitter;
 
+pub mod composer;
+pub mod context_pack;
 pub mod entity_route;
+pub mod evidence_pack;
+pub mod fusion;
 pub mod graph_plan;
 pub mod graph_route;
 pub mod keyword_route;
@@ -25,6 +29,7 @@ pub mod query_plan;
 pub mod retrieval_routes;
 pub mod temporal_route;
 pub mod vector_route;
+pub mod verifier;
 mod wiki_policy;
 
 static URL_RE: Lazy<Regex> =
@@ -486,6 +491,8 @@ pub async fn build_context_pack(
         excluded,
         confidence: average_confidence(&events),
         graph_context,
+        surfacing_reasons: Vec::new(),
+        verify_outcome: None,
     };
 
     apply_section_budgets(&mut pack);
@@ -3000,6 +3007,92 @@ fn recursive_size(path: &std::path::Path) -> u64 {
         }
     }
     total
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — agentic graph rag entry point
+// ---------------------------------------------------------------------------
+
+/// Compose mode for [`run_query`] — caller picks deterministic cards vs. a
+/// grounded LLM answer (still bundled with cards + evidence + verifier outcome).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComposeMode {
+    Cards,
+    Answer,
+}
+
+/// Single-call entry point that drives the full Phase 3 pipeline:
+/// plan → RouteRunner::dispatch (5 routes) → fuse → collect_evidence → verify
+/// → compose. Returns the bundled [`ComposedAnswer`] (always carrying cards +
+/// evidence + verify_outcome regardless of mode).
+pub async fn run_query(
+    state: &AppState,
+    query: &str,
+    limit: usize,
+    mode: ComposeMode,
+) -> Result<context_pack::ComposedAnswer, String> {
+    let plan = query_plan::plan(query, &query_plan::PlanHints::default());
+    let weights = context_pack::FusionWeights::for_intent(plan.intent);
+
+    let embedder = Embedder::new().ok();
+    // The typed insight graph (`graph::schema`) is not yet persisted; until the
+    // typed-graph storage table lands, the graph route runs against an empty
+    // in-memory index built fresh per query. The other four routes still hit
+    // real data, so the pipeline gracefully degrades without graph hops.
+    let nodes: Vec<crate::graph::schema::GraphNode> = Vec::new();
+    let edges: Vec<crate::graph::schema::GraphEdge> = Vec::new();
+    let graph_index = crate::graph::graph_index::GraphIndex::build(&nodes, &edges);
+    let inference = {
+        let guard = state.inference.read();
+        guard.as_ref().map(std::sync::Arc::clone)
+    };
+
+    let search_config = state.config.read().search.clone().normalized();
+    let mut ctx = retrieval_routes::RouteCtx::new(&state.store, &search_config)
+        .with_graph(&graph_index, &nodes, &edges)
+        .with_limits(limit.max(1), None, None, &[])
+        .with_now_ms(chrono::Utc::now().timestamp_millis());
+    if let Some(emb) = embedder.as_ref() {
+        ctx = ctx.with_embedder(emb);
+    }
+    if let Some(eng) = inference.as_deref() {
+        ctx = ctx.with_inference(Some(eng));
+    }
+
+    let route_hits = retrieval_routes::RouteRunner::dispatch(&plan, &ctx).await;
+    let fused = fusion::fuse(&plan, route_hits, &weights);
+    let evidence = evidence_pack::collect_evidence(&fused, &state.store).await;
+    let outcome = verifier::verify(&plan, &fused, &evidence);
+
+    let answer = match mode {
+        ComposeMode::Cards => {
+            let cards = composer::compose_cards(&plan, &fused, &evidence, &state.store).await;
+            context_pack::ComposedAnswer {
+                query: plan.raw.clone(),
+                answer: String::new(),
+                evidence,
+                cards,
+                verify_outcome: outcome,
+                surfacing_reasons: fused
+                    .iter()
+                    .map(|h| h.surfacing_reason.clone())
+                    .collect(),
+            }
+        }
+        ComposeMode::Answer => {
+            composer::compose_answer(
+                &plan,
+                &fused,
+                &evidence,
+                outcome,
+                inference.as_deref(),
+                &state.store,
+            )
+            .await
+        }
+    };
+
+    Ok(answer)
 }
 
 #[cfg(test)]

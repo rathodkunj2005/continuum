@@ -311,6 +311,7 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         synthesis_branch: result.synthesis_branch.clone(),
         topic_categories: result.topic_categories.clone(),
         search_aliases: result.search_aliases.clone(),
+        surfacing_reason: None,
     }
 }
 

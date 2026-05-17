@@ -1250,6 +1250,18 @@ pub struct ContextPack {
     /// Compact insight-graph slice for MCP / agents (bounded JSON).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph_context: Option<serde_json::Value>,
+    /// Phase 3 — per-result "Why this surfaced" populated when the pack was
+    /// produced by the agentic-graph-rag pipeline. Serialized as opaque JSON
+    /// to keep `storage::schema` free of `context_runtime` dependencies; the
+    /// canonical typed form is
+    /// [`crate::context_runtime::context_pack::SurfacingReason`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surfacing_reasons: Vec<serde_json::Value>,
+    /// Phase 3 verifier outcome (Grounded / PartialAnswer / NotEnoughEvidence)
+    /// serialized as opaque JSON for the same reason. Default `None` keeps
+    /// legacy persisted packs deserializing unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verify_outcome: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
