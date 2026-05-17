@@ -38,6 +38,7 @@ interface AppSidebarProps {
     isOpen: boolean;
     onTogglePanel: (panel: PanelKey) => void;
     onOpenCommandPalette: () => void;
+    onCloseSidebar?: () => void;
 }
 
 export function AppSidebar({
@@ -45,9 +46,21 @@ export function AppSidebar({
     isOpen,
     onTogglePanel,
     onOpenCommandPalette,
+    onCloseSidebar,
 }: AppSidebarProps) {
     return (
         <aside className={`left-sidebar ${isOpen ? "open" : ""}`}>
+            <div className="sidebar-brand">
+                <button
+                    className="sidebar-collapse-btn"
+                    onClick={() => onCloseSidebar?.()}
+                    aria-label="Close sidebar"
+                    title="Close sidebar"
+                >
+                    ✕
+                </button>
+            </div>
+
             {SIDEBAR_GROUPS.map((group) => (
                 <div key={group.label} className="sidebar-group sidebar-actions">
                     <div className="sidebar-label">{group.label}</div>
