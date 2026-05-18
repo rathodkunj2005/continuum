@@ -32,6 +32,7 @@ import {
     reclaimMemoryStorage,
     getPrivacyAlerts,
     cleanDevBuildCache,
+    fndrQualityStatus,
 } from "@/shared/ipc/tauri";
 import {
     ModelInfo,
@@ -123,6 +124,11 @@ export function ControlPanel({
         useState<AutofillSettings>(DEFAULT_AUTOFILL_SETTINGS);
     const [autofillBusy, setAutofillBusy] = useState(false);
     const [autofillMsg, setAutofillMsg] = useState<string | null>(null);
+    const [qualityStatus, setQualityStatus] = useState<{
+        stored_count: number;
+        dropped_count: number;
+        flagged_count: number;
+    } | null>(null);
     const prevPrivacyAlertCountRef = useRef(0);
 
     // Theme state
@@ -150,23 +156,25 @@ export function ControlPanel({
     const loadData = useCallback(async () => {
         try {
             if (evalUi) {
-                const [bl, ret, onboarding, health, autofill] = await Promise.all([
+                const [bl, ret, onboarding, health, autofill, quality] = await Promise.all([
                     getBlocklist(),
                     getRetentionDays(),
                     getOnboardingState(),
                     getStorageHealth(),
                     getAutofillSettings(),
+                    fndrQualityStatus(),
                 ]);
                 setBlocklistState(bl);
                 setRetentionDaysState(ret);
                 setStorageHealth(health);
+                setQualityStatus(quality);
                 const name = onboarding.display_name ?? "";
                 setProfileName(name);
                 setProfileDraft(name);
                 setAutofillSettingsState(autofill);
                 setSavedAutofillSettingsState(autofill);
             } else {
-                const [bl, ret, mcp, runtimeStatus, onboarding, health, autofill] = await Promise.all([
+                const [bl, ret, mcp, runtimeStatus, onboarding, health, autofill, quality] = await Promise.all([
                     getBlocklist(),
                     getRetentionDays(),
                     getMcpServerStatus(),
@@ -174,12 +182,14 @@ export function ControlPanel({
                     getOnboardingState(),
                     getStorageHealth(),
                     getAutofillSettings(),
+                    fndrQualityStatus(),
                 ]);
                 setBlocklistState(bl);
                 setRetentionDaysState(ret);
                 setMcpStatus(mcp);
                 setContextRuntimeStatus(runtimeStatus);
                 setStorageHealth(health);
+                setQualityStatus(quality);
                 const name = onboarding.display_name ?? "";
                 setProfileName(name);
                 setProfileDraft(name);
@@ -741,6 +751,19 @@ export function ControlPanel({
                                 </button>
                                 <CapturePipelineSummary status={status} />
                             </section>
+
+                            {qualityStatus && (
+                                <section className="panel-section">
+                                    <h3>Memory Quality</h3>
+                                    <div className="capture-stats">
+                                        <span>Stored: {qualityStatus.stored_count.toLocaleString()}</span>
+                                        <span>Dropped: {qualityStatus.dropped_count.toLocaleString()}</span>
+                                        {qualityStatus.flagged_count > 0 && (
+                                            <span>Flagged: {qualityStatus.flagged_count.toLocaleString()}</span>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
 
                             <section className="panel-section">
                                 <h3>Indexing</h3>

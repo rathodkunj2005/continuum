@@ -18,10 +18,3 @@ export {
     tSpringGentle,
     tSpringReveal,
 } from "./transitions";
-export {
-    IMMERSIVE_SECTIONS,
-    SECTION_BY_INDEX,
-    SECTION_OBSERVER_OPTIONS,
-    type ImmersiveSectionId,
-    type ImmersiveSectionConfig,
-} from "./scrollConfig";

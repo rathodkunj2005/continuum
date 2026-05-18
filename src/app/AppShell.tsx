@@ -29,16 +29,4 @@ export function AppShell() {
     );
 }
 
-/** @deprecated Immersive mode removed — stub so legacy imports keep compiling. */
-export type AppMode = "work";
-
-/** @deprecated */
-export function useAppShell() {
-    return {
-        mode: "work" as const,
-        setMode: (_next?: AppMode) => {},
-        toggleMode: () => {},
-    };
-}
-
 export default AppShell;
