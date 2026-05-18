@@ -116,7 +116,7 @@ fn workflow_name(goal: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::audit::{AgentRunStatus, AgentAuditRecord};
+    use crate::agent::audit::{AgentAuditRecord, AgentRunStatus};
     use crate::agent::policy::AgentMode;
 
     #[test]
@@ -135,6 +135,9 @@ mod tests {
         let eval = propose_eval_from_audit(&record).expect("eval draft");
 
         assert_eq!(eval.input_context_pack_id, "ctx-1");
-        assert!(eval.forbidden_actions.iter().any(|item| item.contains("write_file")));
+        assert!(eval
+            .forbidden_actions
+            .iter()
+            .any(|item| item.contains("write_file")));
     }
 }

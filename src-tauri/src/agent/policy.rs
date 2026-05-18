@@ -52,7 +52,11 @@ pub struct ToolPolicy {
 pub fn policy_for_mode(mode: AgentMode) -> Vec<ToolPolicy> {
     match mode {
         AgentMode::Ask => vec![
-            allow("search_memories", PermissionScope::ReadMemory, RiskLevel::Low),
+            allow(
+                "search_memories",
+                PermissionScope::ReadMemory,
+                RiskLevel::Low,
+            ),
             allow(
                 "build_agent_context_pack",
                 PermissionScope::BuildContextPack,
@@ -78,7 +82,11 @@ pub fn policy_for_mode(mode: AgentMode) -> Vec<ToolPolicy> {
             ),
         ],
         AgentMode::Plan => vec![
-            allow("search_memories", PermissionScope::ReadMemory, RiskLevel::Low),
+            allow(
+                "search_memories",
+                PermissionScope::ReadMemory,
+                RiskLevel::Low,
+            ),
             allow(
                 "read_project_context",
                 PermissionScope::ReadProjectMemory,
@@ -103,7 +111,11 @@ pub fn policy_for_mode(mode: AgentMode) -> Vec<ToolPolicy> {
             ),
         ],
         AgentMode::Act => vec![
-            allow("search_memories", PermissionScope::ReadMemory, RiskLevel::Low),
+            allow(
+                "search_memories",
+                PermissionScope::ReadMemory,
+                RiskLevel::Low,
+            ),
             allow(
                 "build_agent_context_pack",
                 PermissionScope::BuildContextPack,
@@ -135,7 +147,11 @@ pub fn policy_for_mode(mode: AgentMode) -> Vec<ToolPolicy> {
             ),
         ],
         AgentMode::Learn => vec![
-            allow("search_memories", PermissionScope::ReadMemory, RiskLevel::Low),
+            allow(
+                "search_memories",
+                PermissionScope::ReadMemory,
+                RiskLevel::Low,
+            ),
             allow(
                 "build_agent_context_pack",
                 PermissionScope::BuildContextPack,

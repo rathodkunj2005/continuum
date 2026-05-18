@@ -46,7 +46,14 @@ pub fn evaluate(
         }
     }
 
-    const PASSWORD_MANAGERS: &[&str] = &["1password", "bitwarden", "keychain", "lastpass", "dashlane", "keepass"];
+    const PASSWORD_MANAGERS: &[&str] = &[
+        "1password",
+        "bitwarden",
+        "keychain",
+        "lastpass",
+        "dashlane",
+        "keepass",
+    ];
     for pm in PASSWORD_MANAGERS {
         if app.contains(pm) {
             return SafetyDecision::SkipStorage;
@@ -61,9 +68,20 @@ pub fn evaluate(
     }
 
     const BANKING_DOMAINS: &[&str] = &[
-        "chase.com", "bankofamerica", "wellsfargo", "citibank", "capitalone",
-        "usbank", "fidelity", "vanguard", "schwab", "americanexpress", "discover.com",
-        "paypal.com", "venmo.com", "robinhood.com",
+        "chase.com",
+        "bankofamerica",
+        "wellsfargo",
+        "citibank",
+        "capitalone",
+        "usbank",
+        "fidelity",
+        "vanguard",
+        "schwab",
+        "americanexpress",
+        "discover.com",
+        "paypal.com",
+        "venmo.com",
+        "robinhood.com",
     ];
     for domain in BANKING_DOMAINS {
         if url_lower.contains(domain) {
@@ -78,7 +96,17 @@ pub fn evaluate(
         }
     }
 
-    const AUTH_INDICATORS: &[&str] = &["sign in", "log in", "login", "authenticate", "authorization", "oauth", "saml", "two-factor", "2fa"];
+    const AUTH_INDICATORS: &[&str] = &[
+        "sign in",
+        "log in",
+        "login",
+        "authenticate",
+        "authorization",
+        "oauth",
+        "saml",
+        "two-factor",
+        "2fa",
+    ];
     for indicator in AUTH_INDICATORS {
         if title.contains(indicator) || url_lower.contains(indicator) {
             return SafetyDecision::SkipStorage;
@@ -86,9 +114,19 @@ pub fn evaluate(
     }
 
     const SECRET_PATTERNS: &[&str] = &[
-        "api_key", "apikey", "secret_key", "private_key", "access_token",
-        "password:", "passwd:", "token:", "-----begin rsa", "-----begin ec",
-        "ghp_", "sk-", "xoxb-",
+        "api_key",
+        "apikey",
+        "secret_key",
+        "private_key",
+        "access_token",
+        "password:",
+        "passwd:",
+        "token:",
+        "-----begin rsa",
+        "-----begin ec",
+        "ghp_",
+        "sk-",
+        "xoxb-",
     ];
     for pattern in SECRET_PATTERNS {
         if text_lower.contains(pattern) {
@@ -106,7 +144,14 @@ mod tests {
     #[test]
     fn allows_normal_content() {
         assert_eq!(
-            evaluate(Some("VS Code"), None, None, Some("main.rs"), Some("fn main() {}"), &[]),
+            evaluate(
+                Some("VS Code"),
+                None,
+                None,
+                Some("main.rs"),
+                Some("fn main() {}"),
+                &[]
+            ),
             SafetyDecision::Allow
         );
     }
@@ -122,7 +167,14 @@ mod tests {
     #[test]
     fn blocks_banking_url() {
         assert_eq!(
-            evaluate(Some("Safari"), None, Some("https://chase.com/account"), Some("Chase Bank"), None, &[]),
+            evaluate(
+                Some("Safari"),
+                None,
+                Some("https://chase.com/account"),
+                Some("Chase Bank"),
+                None,
+                &[]
+            ),
             SafetyDecision::SkipStorage
         );
     }
@@ -130,7 +182,14 @@ mod tests {
     #[test]
     fn blocks_incognito_window() {
         assert_eq!(
-            evaluate(Some("Chrome"), None, None, Some("New Incognito Window"), None, &[]),
+            evaluate(
+                Some("Chrome"),
+                None,
+                None,
+                Some("New Incognito Window"),
+                None,
+                &[]
+            ),
             SafetyDecision::SkipStorage
         );
     }
@@ -138,7 +197,14 @@ mod tests {
     #[test]
     fn redacts_api_key_in_text() {
         assert_eq!(
-            evaluate(Some("Terminal"), None, None, Some("bash"), Some("export api_key=abc123"), &[]),
+            evaluate(
+                Some("Terminal"),
+                None,
+                None,
+                Some("bash"),
+                Some("export api_key=abc123"),
+                &[]
+            ),
             SafetyDecision::Redact
         );
     }
@@ -146,7 +212,14 @@ mod tests {
     #[test]
     fn respects_user_blocklist() {
         assert_eq!(
-            evaluate(Some("Figma"), None, None, Some("Client NDA Design"), None, &["nda".to_string()]),
+            evaluate(
+                Some("Figma"),
+                None,
+                None,
+                Some("Client NDA Design"),
+                None,
+                &["nda".to_string()]
+            ),
             SafetyDecision::SkipStorage
         );
     }
@@ -154,7 +227,14 @@ mod tests {
     #[test]
     fn blocks_auth_pages() {
         assert_eq!(
-            evaluate(Some("Safari"), None, Some("https://app.example.com/login"), Some("Sign in"), None, &[]),
+            evaluate(
+                Some("Safari"),
+                None,
+                Some("https://app.example.com/login"),
+                Some("Sign in"),
+                None,
+                &[]
+            ),
             SafetyDecision::SkipStorage
         );
     }

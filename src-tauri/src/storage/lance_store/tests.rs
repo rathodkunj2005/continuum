@@ -1,4 +1,9 @@
 use super::*;
+use arrow_array::{RecordBatch, StringArray};
+use arrow_schema::{DataType, Field, Schema};
+use lancedb::table::NewColumnTransform;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 fn record(url: Option<&str>, title: &str, snippet: &str) -> MemoryRecord {
     MemoryRecord {
@@ -107,6 +112,103 @@ fn normalize_record_for_index_repairs_vector_dimensions() {
         .snippet_embedding
         .iter()
         .all(|value| *value == 0.0));
+}
+
+#[test]
+fn memory_schema_migration_covers_current_writer_columns() {
+    let existing = HashSet::from([
+        "id".to_string(),
+        "timestamp".to_string(),
+        "memory_context".to_string(),
+    ]);
+    let mut transforms = Vec::new();
+
+    push_current_memory_writer_column_transforms(&existing, &mut transforms);
+
+    let added = transforms
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect::<HashSet<_>>();
+    for required in [
+        "schema_version",
+        "activity_type",
+        "files_touched",
+        "symbols_changed",
+        "session_duration_mins",
+        "project",
+        "tags",
+        "entities",
+        "decisions",
+        "errors",
+        "next_steps",
+        "git_stats",
+        "outcome",
+        "extraction_confidence",
+        "dedup_fingerprint",
+        "embedding_text",
+        "embedding_model",
+        "embedding_dim",
+        "is_consolidated",
+        "is_soft_deleted",
+        "parent_id",
+        "related_ids",
+        "consolidated_from",
+        "synthesis_branch",
+        "topic_categories",
+    ] {
+        assert!(added.contains(required), "missing transform for {required}");
+    }
+    assert!(transforms
+        .iter()
+        .any(|(name, expr)| name == "embedding_dim" && expr.contains("INTEGER UNSIGNED")));
+}
+
+#[tokio::test]
+async fn current_writer_schema_transforms_create_append_compatible_types() {
+    let conn = lancedb::connect("memory://").execute().await.unwrap();
+    let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Utf8, false)]));
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![Arc::new(StringArray::from(vec!["legacy-row"]))],
+    )
+    .unwrap();
+    let table = conn
+        .create_table("legacy_current_writer_schema", batch)
+        .execute()
+        .await
+        .unwrap();
+
+    let existing = HashSet::from(["id".to_string()]);
+    let mut transforms = Vec::new();
+    push_current_memory_writer_column_transforms(&existing, &mut transforms);
+
+    table
+        .add_columns(NewColumnTransform::SqlExpressions(transforms), None)
+        .await
+        .unwrap();
+
+    let migrated = table.schema().await.unwrap();
+    assert_eq!(
+        migrated
+            .field_with_name("schema_version")
+            .unwrap()
+            .data_type(),
+        &DataType::UInt32
+    );
+    assert_eq!(
+        migrated
+            .field_with_name("embedding_dim")
+            .unwrap()
+            .data_type(),
+        &DataType::UInt32
+    );
+    assert_eq!(
+        migrated
+            .field_with_name("topic_categories")
+            .unwrap()
+            .data_type(),
+        &DataType::List(Arc::new(Field::new("item", DataType::Utf8, true)))
+    );
 }
 
 #[test]

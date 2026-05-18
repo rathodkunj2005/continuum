@@ -1,0 +1,324 @@
+/* =============================================================
+   FNDR Atoms — shared primitives used by MemoryCard,
+   CommandPalette, KnowledgeGraph chrome, immersive sections.
+
+   Reference: /tmp/fndr-design-v2/design_handoff_fndr_immersive/ui_kits/macos/Atoms.jsx
+   ============================================================= */
+
+/* ── DossierCorner ──────────────────────────────────────────── */
+.fndr-dossier-corner {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-style: solid;
+    border-color: var(--fg-2);
+    border-width: 0;
+    opacity: 0.5;
+    pointer-events: none;
+}
+.fndr-dossier-corner--tl {
+    top: 8px;
+    left: 8px;
+    border-top-width: 1px;
+    border-left-width: 1px;
+}
+.fndr-dossier-corner--tr {
+    top: 8px;
+    right: 8px;
+    border-top-width: 1px;
+    border-right-width: 1px;
+}
+.fndr-dossier-corner--bl {
+    bottom: 8px;
+    left: 8px;
+    border-bottom-width: 1px;
+    border-left-width: 1px;
+}
+.fndr-dossier-corner--br {
+    bottom: 8px;
+    right: 8px;
+    border-bottom-width: 1px;
+    border-right-width: 1px;
+}
+
+/* ── DossierFrame (4-corner wrapper) ────────────────────────── */
+.fndr-dossier-frame {
+    position: relative;
+    padding: 22px;
+    background: var(--bg-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-medium);
+}
+
+/* ── Stamp (rotated archival badge) ─────────────────────────── */
+.fndr-stamp {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 9px;
+    letter-spacing: 0.28em;
+    line-height: 1;
+    text-transform: uppercase;
+    padding: 5px 9px;
+    border: 1px solid var(--alarm);
+    color: var(--alarm);
+    border-radius: var(--film-radius-xs);
+    transform: rotate(-2deg);
+    white-space: nowrap;
+}
+.fndr-stamp--developed,
+.fndr-stamp--amber {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: rotate(2deg);
+}
+.fndr-stamp--muted {
+    border-color: var(--fg-3);
+    color: var(--fg-3);
+    transform: rotate(-1deg);
+}
+
+/* ── Pill (mono cap tag) ───────────────────────────────────── */
+.fndr-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 6px 11px;
+    border-radius: var(--film-radius-pill);
+    border: 1px solid var(--hairline-strong);
+    color: var(--fg-2);
+    background: transparent;
+    white-space: nowrap;
+}
+.fndr-pill::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--fg-3);
+    flex-shrink: 0;
+}
+.fndr-pill[data-no-dot="true"]::before {
+    display: none;
+}
+.fndr-pill--live {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: var(--halation-soft);
+}
+.fndr-pill--live::before {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+}
+.fndr-pill--alarm {
+    border-color: var(--alarm);
+    color: var(--alarm);
+}
+.fndr-pill--alarm::before {
+    background: var(--alarm);
+}
+.fndr-pill--muted {
+    color: var(--fg-3);
+}
+.fndr-pill--muted::before {
+    background: var(--fg-4);
+}
+.fndr-pill--solid {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+}
+.fndr-pill--solid::before {
+    background: var(--bg);
+}
+
+/* ── MonoLabel ──────────────────────────────────────────────── */
+.fndr-mono-label-atom {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: var(--t-micro);
+    line-height: 1.2;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin: 0;
+}
+.fndr-mono-label-atom--accent {
+    color: var(--accent);
+    letter-spacing: var(--film-track-stamp);
+}
+.fndr-mono-label-atom--fg-2 {
+    color: var(--fg-2);
+}
+
+/* ── Field (input) ──────────────────────────────────────────── */
+.fndr-field-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+.fndr-field-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--fg-3);
+    display: flex;
+    pointer-events: none;
+}
+.fndr-field {
+    width: 100%;
+    background: var(--bg-2);
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.2;
+    outline: none;
+    transition: border-color var(--film-dur-fast) var(--film-ease-shutter),
+        box-shadow var(--film-dur-fast) var(--film-ease-shutter);
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+.fndr-field--icon {
+    padding-left: 38px;
+}
+.fndr-field::placeholder {
+    color: var(--fg-3);
+    font-style: italic;
+}
+.fndr-field:focus,
+.fndr-field[data-focused="true"] {
+    border-color: var(--accent);
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.18), var(--halation-soft);
+}
+.fndr-field--display {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 22px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--hairline);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 8px 0;
+}
+.fndr-field--display:focus {
+    border-color: var(--accent);
+    box-shadow: 0 1px 0 var(--accent);
+}
+.fndr-field--error {
+    border-color: var(--alarm);
+}
+
+/* ── Button ─────────────────────────────────────────────────── */
+.fndr-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 13px;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    padding: 9px 18px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--film-dur-fast) var(--film-ease-shutter);
+    background: transparent;
+    color: var(--fg);
+    white-space: nowrap;
+    user-select: none;
+}
+.fndr-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.fndr-button:active {
+    transform: scale(0.985);
+    opacity: 0.92;
+}
+.fndr-button--primary {
+    background: var(--accent);
+    color: var(--bg);
+    box-shadow: var(--halation-soft);
+    border-color: transparent;
+}
+.fndr-button--primary:hover {
+    background: var(--accent-2);
+    box-shadow: var(--halation);
+}
+.fndr-button--secondary {
+    background: transparent;
+    border-color: var(--hairline-strong);
+    color: var(--fg);
+}
+.fndr-button--secondary:hover {
+    background: var(--bg-3);
+    border-color: var(--fg-2);
+}
+.fndr-button--ghost {
+    background: transparent;
+    color: var(--fg-2);
+}
+.fndr-button--ghost:hover {
+    background: var(--bg-3);
+    color: var(--fg);
+}
+.fndr-button--alarm {
+    background: transparent;
+    color: var(--alarm);
+    border-color: var(--alarm);
+}
+.fndr-button--alarm:hover {
+    background: var(--alarm);
+    color: var(--fg);
+}
+.fndr-button--mono {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+}
+
+/* ── Pin (amber dot / hollow ring) ──────────────────────────── */
+.fndr-pin {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.fndr-pin--on {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+}
+.fndr-pin--off {
+    background: transparent;
+    border: 1px solid var(--hairline-strong);
+}
+
+/* ── Divider ────────────────────────────────────────────────── */
+.fndr-divider {
+    background: var(--hairline);
+    height: 1px;
+    width: 100%;
+    border: 0;
+    margin: 0;
+}
+.fndr-divider--vertical {
+    width: 1px;
+    height: auto;
+    align-self: stretch;
+}

@@ -157,13 +157,12 @@ pub fn build_user_prompt(input: &MemorySynthesisInput) -> String {
 
 pub fn parse_synthesis_json(raw: &str) -> Result<MemorySynthesisOutput, String> {
     let trimmed = strip_markdown_fence(raw);
-    let slice = extract_json_object(&trimmed)
-        .ok_or_else(|| {
-            let preview: String = trimmed.chars().take(200).collect();
-            format!("no JSON object in output: {preview}")
-        })?;
-    let row: SynthesisJsonRow = serde_json::from_str(slice)
-        .map_err(|e| format!("JSON parse: {e}"))?;
+    let slice = extract_json_object(&trimmed).ok_or_else(|| {
+        let preview: String = trimmed.chars().take(200).collect();
+        format!("no JSON object in output: {preview}")
+    })?;
+    let row: SynthesisJsonRow =
+        serde_json::from_str(slice).map_err(|e| format!("JSON parse: {e}"))?;
     if row.memory_context.trim().is_empty() {
         return Err("memory_context is empty".to_string());
     }
@@ -182,7 +181,8 @@ pub fn parse_synthesis_json(raw: &str) -> Result<MemorySynthesisOutput, String> 
         search_aliases: sanitize_list(row.search_aliases, 24, 48),
         insight_what_happened: sanitize_field(&row.insight_what_happened),
         insight_why_mattered: sanitize_field(&row.insight_why_mattered),
-        topic_categories: row.topic_categories
+        topic_categories: row
+            .topic_categories
             .into_iter()
             .map(|s| s.trim().to_lowercase())
             .filter(|s| !s.is_empty() && s.len() <= 40)
@@ -200,7 +200,10 @@ pub fn synthesis_ocr_only_fallback(input: &MemorySynthesisInput) -> MemorySynthe
     let url_str = input.url.as_deref().unwrap_or("");
 
     let memory_context = if !title.is_empty() && !app.is_empty() {
-        format!("{app} — {title}. {}", input.ocr_text.chars().take(600).collect::<String>())
+        format!(
+            "{app} — {title}. {}",
+            input.ocr_text.chars().take(600).collect::<String>()
+        )
     } else if !input.ocr_text.trim().is_empty() {
         input.ocr_text.chars().take(800).collect()
     } else {
@@ -208,18 +211,28 @@ pub fn synthesis_ocr_only_fallback(input: &MemorySynthesisInput) -> MemorySynthe
     };
 
     let summary_short = if !title.is_empty() {
-        if !app.is_empty() { format!("{app}: {title}") } else { title.to_string() }
+        if !app.is_empty() {
+            format!("{app}: {title}")
+        } else {
+            title.to_string()
+        }
     } else {
         app.to_string()
     };
 
     let mut urls = Vec::new();
-    if !url_str.is_empty() { urls.push(url_str.to_string()); }
+    if !url_str.is_empty() {
+        urls.push(url_str.to_string());
+    }
 
     MemorySynthesisOutput {
         memory_context,
         summary_short,
-        topic: if !title.is_empty() { Some(title.to_string()) } else { None },
+        topic: if !title.is_empty() {
+            Some(title.to_string())
+        } else {
+            None
+        },
         activity_type: Some("observing".to_string()),
         user_intent: None,
         entities: Vec::new(),
@@ -251,13 +264,23 @@ fn strip_markdown_fence(s: &str) -> String {
 fn extract_json_object(s: &str) -> Option<&str> {
     let start = s.find('{')?;
     let end = s.rfind('}')?;
-    if end > start { Some(&s[start..=end]) } else { None }
+    if end > start {
+        Some(&s[start..=end])
+    } else {
+        None
+    }
 }
 
 fn clamp(mut s: String, max_chars: usize) -> String {
     s.retain(|c| c != '\0');
-    if s.chars().count() <= max_chars { s }
-    else { s.chars().take(max_chars.saturating_sub(1)).collect::<String>() + "…" }
+    if s.chars().count() <= max_chars {
+        s
+    } else {
+        s.chars()
+            .take(max_chars.saturating_sub(1))
+            .collect::<String>()
+            + "…"
+    }
 }
 
 fn sanitize_list(mut v: Vec<String>, max_items: usize, max_each: usize) -> Vec<String> {

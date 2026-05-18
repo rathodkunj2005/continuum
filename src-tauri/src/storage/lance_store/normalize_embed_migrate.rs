@@ -1565,7 +1565,7 @@ pub(super) async fn open_or_create_named_table(
 
 pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), lancedb::Error> {
     let schema = table.schema().await?;
-    let existing: std::collections::HashSet<String> = schema
+    let existing: HashSet<String> = schema
         .fields()
         .iter()
         .map(|field| field.name().to_string())
@@ -1643,28 +1643,28 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
         transforms.push(("memory_context".to_string(), "display_summary".to_string()));
     }
     if !existing.contains("commands") {
-        transforms.push(("commands".to_string(), "[]".to_string()));
+        transforms.push(("commands".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("blockers") {
-        transforms.push(("blockers".to_string(), "[]".to_string()));
+        transforms.push(("blockers".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("todos") {
-        transforms.push(("todos".to_string(), "[]".to_string()));
+        transforms.push(("todos".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("open_questions") {
-        transforms.push(("open_questions".to_string(), "[]".to_string()));
+        transforms.push(("open_questions".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("results") {
-        transforms.push(("results".to_string(), "[]".to_string()));
+        transforms.push(("results".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("related_tools") {
-        transforms.push(("related_tools".to_string(), "[]".to_string()));
+        transforms.push(("related_tools".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("related_agents") {
-        transforms.push(("related_agents".to_string(), "[]".to_string()));
+        transforms.push(("related_agents".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("related_projects") {
-        transforms.push(("related_projects".to_string(), "[]".to_string()));
+        transforms.push(("related_projects".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("raw_evidence") {
         transforms.push(("raw_evidence".to_string(), "'{}'".to_string()));
@@ -1673,19 +1673,19 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
         transforms.push(("reopen_kind".to_string(), "'unknown'".to_string()));
     }
     if !existing.contains("reopen_url") {
-        transforms.push(("reopen_url".to_string(), "NULL".to_string()));
+        transforms.push(("reopen_url".to_string(), null_string_sql()));
     }
     if !existing.contains("reopen_file_path") {
-        transforms.push(("reopen_file_path".to_string(), "NULL".to_string()));
+        transforms.push(("reopen_file_path".to_string(), null_string_sql()));
     }
     if !existing.contains("reopen_app_bundle_id") {
-        transforms.push(("reopen_app_bundle_id".to_string(), "NULL".to_string()));
+        transforms.push(("reopen_app_bundle_id".to_string(), null_string_sql()));
     }
     if !existing.contains("reopen_app_name") {
-        transforms.push(("reopen_app_name".to_string(), "NULL".to_string()));
+        transforms.push(("reopen_app_name".to_string(), null_string_sql()));
     }
     if !existing.contains("reopen_app_deep_link") {
-        transforms.push(("reopen_app_deep_link".to_string(), "NULL".to_string()));
+        transforms.push(("reopen_app_deep_link".to_string(), null_string_sql()));
     }
     if !existing.contains("reopen_captured_at_ms") {
         transforms.push(("reopen_captured_at_ms".to_string(), "timestamp".to_string()));
@@ -1703,16 +1703,16 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
         ));
     }
     if !existing.contains("search_aliases") {
-        transforms.push(("search_aliases".to_string(), "[]".to_string()));
+        transforms.push(("search_aliases".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("related_memory_ids") {
-        transforms.push(("related_memory_ids".to_string(), "[]".to_string()));
+        transforms.push(("related_memory_ids".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("graph_node_ids") {
-        transforms.push(("graph_node_ids".to_string(), "[]".to_string()));
+        transforms.push(("graph_node_ids".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("graph_edge_ids") {
-        transforms.push(("graph_edge_ids".to_string(), "[]".to_string()));
+        transforms.push(("graph_edge_ids".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("project_confidence") {
         transforms.push((
@@ -1733,10 +1733,10 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
         ));
     }
     if !existing.contains("project_evidence") {
-        transforms.push(("project_evidence".to_string(), "[]".to_string()));
+        transforms.push(("project_evidence".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("related_project_ids") {
-        transforms.push(("related_project_ids".to_string(), "[]".to_string()));
+        transforms.push(("related_project_ids".to_string(), empty_string_list_sql()));
     }
     if !existing.contains("evidence_confidence") {
         transforms.push((
@@ -1807,6 +1807,7 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
     if !existing.contains("action_items") {
         transforms.push(("action_items".to_string(), "'[]'".to_string()));
     }
+    push_current_memory_writer_column_transforms(&existing, &mut transforms);
     if !existing.contains("anchor_coverage_score") {
         transforms.push((
             "anchor_coverage_score".to_string(),
@@ -1851,6 +1852,57 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
     validate_memory_vector_schema(table).await?;
 
     Ok(())
+}
+
+pub(super) fn push_current_memory_writer_column_transforms(
+    existing: &HashSet<String>,
+    transforms: &mut Vec<(String, String)>,
+) {
+    let mut push = |column: &str, expression: String| {
+        if !existing.contains(column) {
+            transforms.push((column.to_string(), expression));
+        }
+    };
+
+    push("schema_version", "CAST(2 AS INTEGER UNSIGNED)".to_string());
+    push("activity_type", "''".to_string());
+    push("files_touched", empty_string_list_sql());
+    push("symbols_changed", empty_string_list_sql());
+    push(
+        "session_duration_mins",
+        "CAST(0 AS INTEGER UNSIGNED)".to_string(),
+    );
+    push("project", "''".to_string());
+    push("tags", empty_string_list_sql());
+    push("entities", empty_string_list_sql());
+    push("decisions", empty_string_list_sql());
+    push("errors", empty_string_list_sql());
+    push("next_steps", empty_string_list_sql());
+    push("git_stats", null_string_sql());
+    push("outcome", "''".to_string());
+    push("extraction_confidence", "CAST(0.0 AS FLOAT)".to_string());
+    push("dedup_fingerprint", "''".to_string());
+    push("embedding_text", "''".to_string());
+    push("embedding_model", "'all-MiniLM-L6-v2'".to_string());
+    push(
+        "embedding_dim",
+        format!("CAST({} AS INTEGER UNSIGNED)", DEFAULT_TEXT_EMBEDDING_DIM),
+    );
+    push("is_consolidated", "false".to_string());
+    push("is_soft_deleted", "false".to_string());
+    push("parent_id", null_string_sql());
+    push("related_ids", empty_string_list_sql());
+    push("consolidated_from", empty_string_list_sql());
+    push("synthesis_branch", "''".to_string());
+    push("topic_categories", empty_string_list_sql());
+}
+
+fn empty_string_list_sql() -> String {
+    "make_array(CAST('' AS string))".to_string()
+}
+
+fn null_string_sql() -> String {
+    "CAST(NULL AS string)".to_string()
 }
 
 pub(super) async fn validate_memory_vector_schema(table: &Table) -> Result<(), lancedb::Error> {

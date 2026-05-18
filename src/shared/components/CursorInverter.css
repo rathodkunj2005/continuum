@@ -1,0 +1,17 @@
+.cursor-inverter {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  position: fixed;
+  pointer-events: none;
+  background: white;
+  mix-blend-mode: difference;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  will-change: left, top;
+}
+.cursor-inverter.is-visible {
+  opacity: 1;
+}

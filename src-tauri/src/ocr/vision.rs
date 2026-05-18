@@ -646,8 +646,14 @@ pub fn preprocess_ocr_for_qwen(lines: &[(String, f32)]) -> (String, OcrAggregate
     // DEBUG: Log raw OCR lines before filtering
     let confidence_dist = lines.iter().map(|(_, c)| c).cloned().collect::<Vec<_>>();
     if !confidence_dist.is_empty() {
-        let min_conf = confidence_dist.iter().cloned().fold(f32::INFINITY, f32::min);
-        let max_conf = confidence_dist.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let min_conf = confidence_dist
+            .iter()
+            .cloned()
+            .fold(f32::INFINITY, f32::min);
+        let max_conf = confidence_dist
+            .iter()
+            .cloned()
+            .fold(f32::NEG_INFINITY, f32::max);
         tracing::debug!(
             "OCR preprocess_ocr_for_qwen: {} raw lines, conf range=[{:.3}, {:.3}], dropped_if_<{:.2}",
             lines.len(),

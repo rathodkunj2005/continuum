@@ -130,13 +130,23 @@ pub fn policy_for_action(
     // Act/Learn mode: check kind and risk
     let (allowed, requires_approval, reason, blocked) = match kind {
         AgentActionKind::OpenUrl => (true, false, "Safe to open URLs".to_string(), None),
-        AgentActionKind::OpenFile => (true, false, "Safe to open known project files".to_string(), None),
+        AgentActionKind::OpenFile => (
+            true,
+            false,
+            "Safe to open known project files".to_string(),
+            None,
+        ),
         AgentActionKind::RevealInFinder => (true, false, "Safe reveal on macOS".to_string(), None),
         AgentActionKind::CreateDraftNote => (true, false, "Local-only note".to_string(), None),
         AgentActionKind::CreateChecklist => (true, false, "Local-only checklist".to_string(), None),
         AgentActionKind::RunReadOnlyCommand => match risk_level {
             RiskLevel::Low => (true, false, "Safe read-only command".to_string(), None),
-            RiskLevel::Medium => (true, true, "Medium risk command requires approval".to_string(), None),
+            RiskLevel::Medium => (
+                true,
+                true,
+                "Medium risk command requires approval".to_string(),
+                None,
+            ),
             _ => (
                 false,
                 false,
@@ -144,12 +154,42 @@ pub fn policy_for_action(
                 Some("Blocked by policy: high risk".to_string()),
             ),
         },
-        AgentActionKind::RunProjectTest => (true, true, "Test execution requires approval".to_string(), None),
-        AgentActionKind::DelegateToHermes => (true, true, "Hermes delegation requires approval".to_string(), None),
-        AgentActionKind::DelegateToClaudeCode => (true, true, "Claude Code delegation requires approval".to_string(), None),
-        AgentActionKind::CreateSkillCandidate => (true, false, "Skill candidate (no auto-activation)".to_string(), None),
-        AgentActionKind::CreateEvalCandidate => (true, false, "Eval candidate (no auto-activation)".to_string(), None),
-        AgentActionKind::ScheduleAgentJob => (true, true, "Scheduled job requires approval".to_string(), None),
+        AgentActionKind::RunProjectTest => (
+            true,
+            true,
+            "Test execution requires approval".to_string(),
+            None,
+        ),
+        AgentActionKind::DelegateToHermes => (
+            true,
+            true,
+            "Hermes delegation requires approval".to_string(),
+            None,
+        ),
+        AgentActionKind::DelegateToClaudeCode => (
+            true,
+            true,
+            "Claude Code delegation requires approval".to_string(),
+            None,
+        ),
+        AgentActionKind::CreateSkillCandidate => (
+            true,
+            false,
+            "Skill candidate (no auto-activation)".to_string(),
+            None,
+        ),
+        AgentActionKind::CreateEvalCandidate => (
+            true,
+            false,
+            "Eval candidate (no auto-activation)".to_string(),
+            None,
+        ),
+        AgentActionKind::ScheduleAgentJob => (
+            true,
+            true,
+            "Scheduled job requires approval".to_string(),
+            None,
+        ),
         AgentActionKind::Unsupported => (
             false,
             false,

@@ -138,7 +138,10 @@ mod tests {
     #[test]
     fn embedding_doc_filters_bad_aliases() {
         let mut m = base();
-        m.search_aliases = vec!["https://example.com/reopen?find similar".into(), "valid".into()];
+        m.search_aliases = vec![
+            "https://example.com/reopen?find similar".into(),
+            "valid".into(),
+        ];
         let doc = build_embedding_document(&m);
         assert!(!doc.text.contains("https://"));
         assert!(doc.text.contains("valid"));

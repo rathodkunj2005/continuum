@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
 use crate::inference::qwen_vl_memory::MemorySynthesisOutput;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
 pub struct TaskCandidate {

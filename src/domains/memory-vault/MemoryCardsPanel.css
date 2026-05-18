@@ -101,6 +101,184 @@
     flex-direction: column;
 }
 
+/* ── Graph mode body — fills remaining height ──────────────────────────── */
+.memory-cards-body--graph {
+    overflow: hidden;
+}
+
+/* Toolbar above the graph canvas (scope selector + filters + action buttons) */
+.memory-graph-chrome {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 10px 16px 10px;
+    border-bottom: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--bg-2) 85%, transparent);
+    flex-shrink: 0;
+}
+
+.memory-graph-project-field,
+.memory-graph-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+}
+
+.memory-graph-project-field input,
+.memory-graph-filter-field input {
+    background: var(--bg-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 12px;
+    padding: 5px 9px;
+    outline: none;
+    min-width: 160px;
+}
+
+.memory-graph-project-field input:focus,
+.memory-graph-filter-field input:focus {
+    border-color: var(--accent);
+}
+
+.memory-graph-chrome-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* Full-height layout that houses the graph canvas + optional detail sidebar */
+.memory-graph-layout {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.memory-graph-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Make the KnowledgeGraph shell fill the stage */
+.memory-graph-stage .knowledge-graph-shell {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--hairline);
+}
+
+/* Node detail aside */
+.memory-graph-detail {
+    width: 300px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-left: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--bg-2) 90%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.memory-graph-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.memory-graph-detail-header h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--fg);
+    margin: 0;
+}
+
+.memory-graph-detail-close {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 14px;
+}
+
+.memory-graph-empty-hint {
+    font-size: 12px;
+    color: var(--fg-3);
+    text-align: center;
+    max-width: 400px;
+}
+
+/* Embedded mini-graph strip in vault list mode */
+.memory-vault-global-graph {
+    border-bottom: 1px solid var(--hairline);
+    position: relative;
+}
+
+.memory-vault-cluster-legend {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.memory-vault-graph-strip-loading {
+    height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--fg-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+/* Tab bar for view mode (Global graph / By project) */
+.memory-cards-view-tabs {
+    display: flex;
+    gap: 6px;
+}
+
+.memory-cards-tab {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    padding: 5px 12px;
+}
+
+.memory-cards-tab--active {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+}
+
 .memory-cards-stream {
     flex: 1;
     min-height: 0;

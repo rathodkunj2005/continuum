@@ -31,7 +31,6 @@ import {
     getFunGreeting,
 } from "@/shared/ipc/tauri";
 import { getOnboardingState, saveOnboardingState, type OnboardingState } from "@/shared/ipc/onboarding";
-import { ShaderWallpaper } from "@/shared/components/ShaderWallpaper";
 import { EVAL_UI } from "@/shared/utils/eval-ui";
 import "./styles/App.css";
 
@@ -516,15 +515,21 @@ function App() {
     }
 
     return (
-        <div className="app">
-            <ShaderWallpaper shader="chromatic-leak" className="app-shader-wallpaper" />
+        <div className="app film-grain">
             {!EVAL_UI && (
                 <button
-                    className="ui-action-btn sidebar-toggle"
+                    type="button"
+                    className="fndr-os-chrome-btn sidebar-toggle"
                     onClick={() => setIsSidebarOpen((prev) => !prev)}
                     aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
                 >
-                    {isSidebarOpen ? "Close" : "Menu"}
+                    {isSidebarOpen ? (
+                        <span aria-hidden="true">×</span>
+                    ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                            <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+                        </svg>
+                    )}
                 </button>
             )}
 
@@ -559,16 +564,7 @@ function App() {
 
             {!EVAL_UI && (
                 <aside className={`left-sidebar ${isSidebarOpen ? "open" : ""}`}>
-                    <div className="sidebar-brand">
-                        <button
-                            className="sidebar-collapse-btn"
-                            onClick={() => setIsSidebarOpen(false)}
-                            aria-label="Close sidebar"
-                            title="Close sidebar"
-                        >
-                            ✕
-                        </button>
-                    </div>
+                    <div className="sidebar-brand"></div>
 
                     {SIDEBAR_GROUPS.map((group) => (
                         <div key={group.label} className="sidebar-group sidebar-actions">
@@ -601,39 +597,74 @@ function App() {
                             Cmd+K Palette
                         </button>
                     </div>
+
+                    <div className="sidebar-reel-footer">
+                        <div className="sidebar-reel-meta">
+                            <span className="sidebar-reel-date">
+                                {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}
+                            </span>
+                            {status?.frames_captured != null && (
+                                <span className="sidebar-reel-frames">
+                                    {String(status.frames_captured).padStart(4, "0")} FR
+                                </span>
+                            )}
+                        </div>
+                        <div className="sidebar-reel-strip" aria-hidden="true">
+                            <div className="sidebar-reel-inner" />
+                        </div>
+                    </div>
                 </aside>
             )}
 
             <main className={`app-main ${isFocusMode ? "search-centered" : ""}`}>
-                {isFocusMode && (
-                    <div className="home-focus-header">
-                        <div className="home-date-context">{homeDateLabel}</div>
-                        <div className="home-greeting">
-                            <div>{homeGreetingLine1}</div>
-                            <div>Let&apos;s dive into your memories.</div>
-                        </div>
+                {isFocusMode ? (
+                    <div className="home-hero-stage">
+                        <header className="home-focus-header">
+                            <p className="home-date-context">{homeDateLabel}</p>
+                            <h1 className="home-greeting-primary">{homeGreetingLine1}</h1>
+                            <p className="home-greeting-sub">Let&apos;s dive into your memories.</p>
+                        </header>
+                        <section className={`search-shell ${query.trim() ? "is-active" : ""}`}>
+                            <SearchBar
+                                value={queryDraft}
+                                submittedValue={query}
+                                onChange={setQueryDraft}
+                                onSubmit={(v) => void handleSearchSubmit(v)}
+                                timeFilter={timeFilter}
+                                onTimeFilterChange={setTimeFilter}
+                                appFilter={appFilter}
+                                onAppFilterChange={setAppFilter}
+                                onSetMeetingPanelOpen={(open) => setActivePanel(open ? "meeting" : null)}
+                                onSetMemoryCardsPanelOpen={(open) => setActivePanel(open ? "memoryCards" : null)}
+                                onSetKnowledgeGraphPanelOpen={(open) => setActivePanel(open ? "knowledgeGraph" : null)}
+                                appNames={appNames}
+                                resultCount={visibleResults.length}
+                                searchResults={visibleResults}
+                                disabled={!searchAllowed}
+                            />
+                        </section>
                     </div>
+                ) : (
+                    <section className={`search-shell ${query.trim() ? "is-active" : ""}`}>
+                        <SearchBar
+                                value={queryDraft}
+                                submittedValue={query}
+                                onChange={setQueryDraft}
+                                onSubmit={(v) => void handleSearchSubmit(v)}
+                                timeFilter={timeFilter}
+                                onTimeFilterChange={setTimeFilter}
+                                appFilter={appFilter}
+                                onAppFilterChange={setAppFilter}
+                                onSetMeetingPanelOpen={(open) => setActivePanel(open ? "meeting" : null)}
+                                onSetMemoryCardsPanelOpen={(open) => setActivePanel(open ? "memoryCards" : null)}
+                                onSetKnowledgeGraphPanelOpen={(open) => setActivePanel(open ? "knowledgeGraph" : null)}
+                            appNames={appNames}
+                            resultCount={visibleResults.length}
+                            searchResults={visibleResults}
+                            disabled={!searchAllowed}
+                        />
+                    </section>
                 )}
-
-                <section className={`search-shell ${query.trim() ? "is-active" : ""}`}>
-                    <SearchBar
-                        value={queryDraft}
-                        submittedValue={query}
-                        onChange={setQueryDraft}
-                        onSubmit={(v) => void handleSearchSubmit(v)}
-                        timeFilter={timeFilter}
-                        onTimeFilterChange={setTimeFilter}
-                        appFilter={appFilter}
-                        onAppFilterChange={setAppFilter}
-                        onSetMeetingPanelOpen={(open) => setActivePanel(open ? "meeting" : null)}
-                        onSetMemoryCardsPanelOpen={(open) => setActivePanel(open ? "memoryCards" : null)}
-                        onSetKnowledgeGraphPanelOpen={(open) => setActivePanel(open ? "knowledgeGraph" : null)}
-                        appNames={appNames}
-                        resultCount={visibleResults.length}
-                        searchResults={visibleResults}
-                        disabled={!searchAllowed}
-                    />
-                </section>
 
                 {!isFocusMode && (
                     <div className="main-layout">
@@ -687,6 +718,7 @@ function App() {
                     onOpenMemoryById={handleOpenMemoryById}
                 />
             )}
+
         </div>
     );
 }

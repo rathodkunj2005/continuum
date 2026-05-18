@@ -35,8 +35,8 @@ use crate::context_runtime;
 use crate::embedding::{embed_imported_image, Embedder, EmbeddingBackend, EMBEDDING_DIM};
 use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
 use crate::inference::{
-    compose_import_memory_context, compose_import_memory_context_with_title, extract_image_semantics,
-    ImageImportSource, StructuredMemoryExtraction,
+    compose_import_memory_context, compose_import_memory_context_with_title,
+    extract_image_semantics, ImageImportSource, StructuredMemoryExtraction,
 };
 use crate::memory::reopen::build_reopen_target;
 use crate::memory_compaction::{
@@ -185,6 +185,8 @@ enum VisualAdmissionOutcome {
     Failed(String),
 }
 
+const VISUAL_UNGROUNDED_LOW_RAM_REASON: &str = "visual_capture_ungrounded_low_ram";
+
 fn capture_pixel_vlm_route(
     config: &crate::config::Config,
     app_data_dir: &std::path::Path,
@@ -213,6 +215,20 @@ fn capture_pixel_vlm_route(
         vlm_timeout_secs: config.vlm_timeout_secs,
         _phantom: std::marker::PhantomData,
     })
+}
+
+fn should_skip_ungrounded_low_ram_visual_capture(
+    vlm_route: &VlmRouteDecision,
+    observed_text_len: usize,
+    observed_confidence: f32,
+    observed_block_count: usize,
+    source_low_signal: bool,
+    min_text_length: usize,
+) -> bool {
+    vlm_route.fallback_reason() == Some("vlm_blocked_low_ram")
+        && (source_low_signal
+            || observed_text_len < min_text_length
+            || (observed_block_count == 0 && observed_confidence <= 0.05))
 }
 
 /// First half of the visual-narrative path: decode the screen PNG once,
@@ -275,8 +291,10 @@ async fn compose_visual_capture_record(
     bundle_id: Option<&str>,
     window_title: &str,
     url: Option<&str>,
+    observed_text_len: usize,
     observed_confidence: f32,
     observed_block_count: usize,
+    source_low_signal: bool,
     novelty: f32,
 ) -> Result<MemoryRecord, String> {
     let now = Local::now();
@@ -290,14 +308,13 @@ async fn compose_visual_capture_record(
     // machines below the VLM RAM floor, skip MTMD and fall back to the
     // OCR/window grounded path.
     let config = state.config.read().clone();
-    let host_supports_qwen_vlm =
-        crate::telemetry::system_metrics::host_supports_lightweight_vlm();
+    let host_supports_qwen_vlm = crate::telemetry::system_metrics::host_supports_lightweight_vlm();
     let (skip_vlm, skip_reason) =
         crate::telemetry::system_metrics::pressure_recommends_skipping_heavy_models();
     let vlm_route = capture_pixel_vlm_route(
         &config,
         state.app_data_dir.as_path(),
-        0,
+        observed_text_len,
         observed_confidence,
         observed_block_count,
         true,
@@ -322,6 +339,21 @@ async fn compose_visual_capture_record(
             .await
             .map(|s| crate::inference::insight_from_structured(&s))
     };
+
+    if should_skip_ungrounded_low_ram_visual_capture(
+        &vlm_route,
+        observed_text_len,
+        observed_confidence,
+        observed_block_count,
+        source_low_signal,
+        config.min_text_length,
+    ) {
+        tracing::info!(
+            app = %app_name,
+            "compose_visual_capture_record: skipping ungrounded visual-only frame because VLM is blocked by low RAM and OCR/browser text is below the storage gate"
+        );
+        return Err(VISUAL_UNGROUNDED_LOW_RAM_REASON.to_string());
+    }
 
     let insight = if !vlm_route.runs_pixel_vlm() {
         let reason = vlm_route
@@ -402,7 +434,11 @@ async fn compose_visual_capture_record(
     // into the lexical shadow so keyword search can hit them even when raw OCR
     // doesn't contain those terms. E.g. "sport" finds cricket captures.
     let mut shadow_extras: Vec<&str> = Vec::new();
-    for v in composed.search_aliases.iter().chain(composed.topic_categories.iter()) {
+    for v in composed
+        .search_aliases
+        .iter()
+        .chain(composed.topic_categories.iter())
+    {
         shadow_extras.push(v.as_str());
     }
     let lexical_shadow = build_lexical_shadow_with_aliases(
@@ -1858,9 +1894,12 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         for outcome in batch_outcomes.iter() {
                             state.capture_stats.record_store(*outcome);
                         }
-                        if let Err(err) =
-                            context_runtime::sync_memory_records(state.as_ref(), &batch, Some("screen"))
-                                .await
+                        if let Err(err) = context_runtime::sync_memory_records(
+                            state.as_ref(),
+                            &batch,
+                            Some("screen"),
+                        )
+                        .await
                         {
                             tracing::warn!("Context runtime batch sync failed: {}", err);
                         }
@@ -2266,8 +2305,10 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         app_context.bundle_id.as_deref(),
                         &window_title,
                         url.as_deref(),
+                        text.len(),
                         observed_confidence,
                         observed_block_count,
+                        source_low_signal,
                         novelty,
                     )
                     .await
@@ -2313,13 +2354,18 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                                 app_name,
                                 err
                             );
+                            let stored_or_skipped = if err == VISUAL_UNGROUNDED_LOW_RAM_REASON {
+                                "skipped_visual_ungrounded_low_ram"
+                            } else {
+                                "skipped_visual_vlm_failed"
+                            };
                             emit_capture_quality_signal(
                                 state.as_ref(),
                                 json!({
                                     "timestamp_ms": chrono::Utc::now().timestamp_millis(),
                                     "app_name": app_name,
                                     "bundle_id": app_context.bundle_id.clone(),
-                                    "stored_or_skipped": "skipped_visual_vlm_failed",
+                                    "stored_or_skipped": stored_or_skipped,
                                     "source_kind": "visual_capture",
                                     "reason": err,
                                 }),
@@ -4120,7 +4166,8 @@ pub(crate) async fn merge_memory_records_with_policy(
     let consolidated_from =
         merge_string_lists(&existing.consolidated_from, &incoming.consolidated_from);
     let synthesis_branch = prefer_non_empty(&incoming.synthesis_branch, &existing.synthesis_branch);
-    let topic_categories = merge_string_lists(&existing.topic_categories, &incoming.topic_categories);
+    let topic_categories =
+        merge_string_lists(&existing.topic_categories, &incoming.topic_categories);
     let insight_what_happened = prefer_non_empty(
         &incoming.insight_what_happened,
         &existing.insight_what_happened,
@@ -4319,7 +4366,10 @@ pub(crate) async fn merge_memory_records_with_policy(
         embedding_text,
         embedding_model,
         embedding_dim,
-        enrichment_status: prefer_non_empty(&incoming.enrichment_status, &existing.enrichment_status),
+        enrichment_status: prefer_non_empty(
+            &incoming.enrichment_status,
+            &existing.enrichment_status,
+        ),
         fallback_reason: incoming
             .fallback_reason
             .clone()
@@ -5320,6 +5370,34 @@ Activity patterns and insights dashboard
             .files_touched
             .iter()
             .any(|file| file == "DESIGN_DIRECTION.md"));
+    }
+
+    #[test]
+    fn visual_only_low_ram_capture_without_ocr_is_not_stored() {
+        let route = VlmRouteDecision::FallbackOcrOnly {
+            reason: "vlm_blocked_low_ram".to_string(),
+        };
+
+        assert!(should_skip_ungrounded_low_ram_visual_capture(
+            &route, 0, 0.0, 0, false, 20
+        ));
+        assert!(!should_skip_ungrounded_low_ram_visual_capture(
+            &route, 64, 0.42, 6, false, 20
+        ));
+        assert!(should_skip_ungrounded_low_ram_visual_capture(
+            &route, 9, 0.42, 6, false, 20
+        ));
+        assert!(should_skip_ungrounded_low_ram_visual_capture(
+            &route, 64, 0.42, 6, true, 20
+        ));
+        assert!(!should_skip_ungrounded_low_ram_visual_capture(
+            &VlmRouteDecision::RunQwenVlm,
+            0,
+            0.0,
+            0,
+            false,
+            20
+        ));
     }
 
     #[test]

@@ -1,9 +1,7 @@
 //! Phase 3 composer: build either deterministic memory cards (with
 //! `surfacing_reason`) or a grounded LLM answer over the evidence pack.
 
-use crate::context_runtime::context_pack::{
-    ComposedAnswer, EvidencePack, FusedHit, VerifyOutcome,
-};
+use crate::context_runtime::context_pack::{ComposedAnswer, EvidencePack, FusedHit, VerifyOutcome};
 use crate::context_runtime::query_plan::QueryPlan;
 use crate::context_runtime::retrieval_routes::memory_record_to_search_result;
 use crate::inference::InferenceEngine;
@@ -169,8 +167,15 @@ async fn render_context(fused: &[FusedHit], evidence: &EvidencePack, store: &Sto
 fn citations_valid(answer: &str, evidence: &EvidencePack) -> bool {
     let lower = answer.to_lowercase();
     for token in lower.split_whitespace() {
-        let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/' && c != '_' && c != '-');
-        if cleaned.contains('/') || cleaned.ends_with(".rs") || cleaned.ends_with(".ts") || cleaned.ends_with(".tsx") || cleaned.ends_with(".py") {
+        let cleaned = token.trim_matches(|c: char| {
+            !c.is_alphanumeric() && c != '.' && c != '/' && c != '_' && c != '-'
+        });
+        if cleaned.contains('/')
+            || cleaned.ends_with(".rs")
+            || cleaned.ends_with(".ts")
+            || cleaned.ends_with(".tsx")
+            || cleaned.ends_with(".py")
+        {
             let found = evidence
                 .files
                 .iter()
@@ -210,7 +215,10 @@ mod tests {
 
     #[test]
     fn citations_valid_rejects_unknown_file_path() {
-        assert!(!citations_valid("see src/foo.rs for details", &EvidencePack::default()));
+        assert!(!citations_valid(
+            "see src/foo.rs for details",
+            &EvidencePack::default()
+        ));
     }
 
     #[test]

@@ -66,7 +66,10 @@ pub fn fuse(plan: &QueryPlan, hits: Vec<RouteHits>, weights: &FusionWeights) -> 
     });
     fused.truncate(MAX_FUSED_HITS);
 
-    runtime_metrics::record_ms("fndr.retrieval.fusion.ms", started.elapsed().as_millis() as u64);
+    runtime_metrics::record_ms(
+        "fndr.retrieval.fusion.ms",
+        started.elapsed().as_millis() as u64,
+    );
     fused
 }
 
@@ -231,7 +234,10 @@ mod tests {
         let hits = vec![
             RouteHits {
                 route: Route::Vector,
-                hits: vec![hit("a", 0.9, RouteBranch::Semantic), hit("b", 0.6, RouteBranch::Semantic)],
+                hits: vec![
+                    hit("a", 0.9, RouteBranch::Semantic),
+                    hit("b", 0.6, RouteBranch::Semantic),
+                ],
                 elapsed_ms: 1,
             },
             RouteHits {
@@ -244,8 +250,14 @@ mod tests {
         assert_eq!(fused[0].memory_id, "a");
         assert!(fused[0].score > fused[1].score);
         assert_eq!(fused[0].contributing_routes.len(), 2);
-        assert!(fused[0].surfacing_reason.routes.contains(&"vector".to_string()));
-        assert!(fused[0].surfacing_reason.routes.contains(&"keyword".to_string()));
+        assert!(fused[0]
+            .surfacing_reason
+            .routes
+            .contains(&"vector".to_string()));
+        assert!(fused[0]
+            .surfacing_reason
+            .routes
+            .contains(&"keyword".to_string()));
     }
 
     #[test]

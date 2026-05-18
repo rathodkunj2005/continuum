@@ -50,12 +50,7 @@ fn run_query_returns_grounded_answer_with_evidence_for_planner_bug() {
         "Notes on the FNDR planner architecture and debounce semantics",
     ];
     let embeddings = embedder
-        .embed_batch(
-            &texts
-                .iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>(),
-        )
+        .embed_batch(&texts.iter().map(|t| t.to_string()).collect::<Vec<_>>())
         .expect("embeddings");
 
     let mut records = Vec::new();
@@ -100,7 +95,11 @@ fn run_query_returns_grounded_answer_with_evidence_for_planner_bug() {
         .allowing_mock_vectors();
 
     let hits = rt.block_on(async { RouteRunner::dispatch(&plan_value, &ctx).await });
-    let fused = fuse(&plan_value, hits, &FusionWeights::for_intent(plan_value.intent));
+    let fused = fuse(
+        &plan_value,
+        hits,
+        &FusionWeights::for_intent(plan_value.intent),
+    );
     assert!(!fused.is_empty(), "expected at least one fused hit");
 
     let evidence = rt.block_on(async { collect_evidence(&fused, &store).await });

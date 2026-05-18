@@ -6,7 +6,9 @@ pub enum VlmRouteDecision {
     SkipLowValue,
     /// Run Qwen3-VL-2B for this frame.
     RunQwenVlm,
-    FallbackOcrOnly { reason: String },
+    FallbackOcrOnly {
+        reason: String,
+    },
 }
 
 impl VlmRouteDecision {
@@ -162,14 +164,20 @@ mod tests {
     fn fallback_system_pressure() {
         let mut inp = base_input();
         inp.system_pressure_skip = true;
-        assert!(matches!(should_run_vlm(&inp), VlmRouteDecision::FallbackOcrOnly { .. }));
+        assert!(matches!(
+            should_run_vlm(&inp),
+            VlmRouteDecision::FallbackOcrOnly { .. }
+        ));
     }
 
     #[test]
     fn fallback_vlm_disabled() {
         let mut inp = base_input();
         inp.vlm_enabled = false;
-        assert!(matches!(should_run_vlm(&inp), VlmRouteDecision::FallbackOcrOnly { .. }));
+        assert!(matches!(
+            should_run_vlm(&inp),
+            VlmRouteDecision::FallbackOcrOnly { .. }
+        ));
     }
 
     #[test]
@@ -178,7 +186,9 @@ mod tests {
         inp.vlm_calls_remaining = 0;
         assert_eq!(
             should_run_vlm(&inp),
-            VlmRouteDecision::FallbackOcrOnly { reason: "vlm_rate_limited".to_string() }
+            VlmRouteDecision::FallbackOcrOnly {
+                reason: "vlm_rate_limited".to_string()
+            }
         );
     }
 
@@ -188,7 +198,9 @@ mod tests {
         inp.vlm_available = false;
         assert_eq!(
             should_run_vlm(&inp),
-            VlmRouteDecision::FallbackOcrOnly { reason: "vlm_unavailable".to_string() }
+            VlmRouteDecision::FallbackOcrOnly {
+                reason: "vlm_unavailable".to_string()
+            }
         );
     }
 }

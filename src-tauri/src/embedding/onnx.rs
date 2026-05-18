@@ -799,52 +799,63 @@ fn resolve_model_dir() -> Option<PathBuf> {
         }
     }
 
-    // 2. ~/.fndr/models (user-installed, common for Homebrew/manual installs)
-    if let Some(home) = dirs::home_dir() {
-        let user_models = home.join(".fndr").join("models");
-        if model_assets_present(&user_models) {
-            tracing::info!("Embedder model found at ~/.fndr/models");
-            return Some(user_models);
+    for (label, dir) in candidate_embedding_model_dirs() {
+        if model_assets_present(&dir) {
+            tracing::info!("Embedder model found at {} ({label})", dir.display());
+            return Some(dir);
         }
     }
 
-    // 2b. Tauri app bundle data dir (matches `tauri.conf.json` identifier `com.fndr.app`)
-    if let Some(home) = dirs::home_dir() {
-        let tauri_models = home.join("Library/Application Support/com.fndr.app/models");
-        if model_assets_present(&tauri_models) {
-            tracing::info!("Embedder model found at {}", tauri_models.display());
-            return Some(tauri_models);
+    // Fallback: return the canonical app-data models directory if it exists so
+    // the caller's error message points at the place onboarding/dev scripts use.
+    for (label, dir) in candidate_embedding_model_dirs() {
+        if dir.exists() {
+            tracing::warn!(
+                "Embedder model directory exists at {} ({label}), but {} or {} is missing.",
+                dir.display(),
+                MODEL_FILENAME,
+                TOKENIZER_FILENAME
+            );
+            return Some(dir);
         }
-    }
-
-    // 3. ProjectDirs app data location
-    let app_models = directories::ProjectDirs::from("com", "fndr", "FNDR")
-        .map(|proj| proj.data_dir().join("models"));
-
-    // 4. Dev build: CARGO_MANIFEST_DIR/models
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models");
-
-    if let Some(ref path) = app_models {
-        if model_assets_present(path) {
-            return Some(path.clone());
-        }
-    }
-
-    if model_assets_present(&dev) {
-        return Some(dev);
-    }
-
-    // Fallback: directory exists but assets may not yet be downloaded
-    if let Some(path) = app_models {
-        if path.exists() {
-            return Some(path);
-        }
-    }
-    if dev.exists() {
-        return Some(dev);
     }
 
     None
+}
+
+fn candidate_embedding_model_dirs() -> Vec<(&'static str, PathBuf)> {
+    let mut dirs = Vec::new();
+
+    if let Some(home) = dirs::home_dir() {
+        // Canonical Tauri 2 app-data path from tauri.conf.json identifier.
+        dirs.push((
+            "tauri-app-data",
+            home.join("Library/Application Support/com.fndr.app/models"),
+        ));
+        // Legacy path from older README/bootstrap scripts. Keep it readable so
+        // existing local downloads still work, but do not make it the default.
+        dirs.push((
+            "legacy-readme-path",
+            home.join("Library/Application Support/com.fndr.FNDR/models"),
+        ));
+        dirs.push(("user-home", home.join(".fndr").join("models")));
+    }
+
+    if let Some(project_models) = directories::ProjectDirs::from("com", "fndr", "FNDR")
+        .map(|proj| proj.data_dir().join("models"))
+    {
+        dirs.push(("project-dirs-legacy", project_models));
+    }
+
+    dirs.push((
+        "dev-cargo-manifest",
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models"),
+    ));
+
+    let mut seen = std::collections::HashSet::new();
+    dirs.into_iter()
+        .filter(|(_, dir)| seen.insert(dir.clone()))
+        .collect()
 }
 
 fn model_assets_present(dir: &PathBuf) -> bool {
@@ -929,5 +940,23 @@ mod tests {
         let vectors = MockEmbedder.embed_batch(&["dimension probe".to_string()]);
         assert_eq!(vectors.len(), 1);
         assert_eq!(vectors[0].len(), EMBEDDING_DIM);
+    }
+
+    #[test]
+    fn embedding_model_dirs_prefer_tauri_identifier_path_before_legacy_readme_path() {
+        let dirs = candidate_embedding_model_dirs();
+        let canonical = dirs
+            .iter()
+            .position(|(label, _)| *label == "tauri-app-data")
+            .expect("canonical app-data models dir");
+        let legacy = dirs
+            .iter()
+            .position(|(label, _)| *label == "legacy-readme-path")
+            .expect("legacy README models dir");
+
+        assert!(
+            canonical < legacy,
+            "com.fndr.app must be searched before the legacy com.fndr.FNDR path"
+        );
     }
 }

@@ -21,7 +21,7 @@ pub use context::{
     build_agent_context_pack, AgentContextPack, AgentContextRequest, AgentRunResponse,
 };
 pub use evals::AgentEvalCase;
-pub use policy::{policy_for_mode, AgentMode, PermissionScope, RiskLevel, ToolPolicy};
 pub use execution::validate_command;
+pub use policy::{policy_for_mode, AgentMode, PermissionScope, RiskLevel, ToolPolicy};
 pub use prompts::{get_agent_prompt, list_agent_prompts, AgentPrompt};
 pub use skills::AgentSkillCandidate;

@@ -368,8 +368,8 @@ mod tests {
     fn fluff_gate_blocks_timestamped_filename_insight() {
         let cfg = default_memory_quality_config();
         let record = MemoryRecord {
-            insight_what_happened:
-                "Screen capture (visual): Claude_1778938598807.png. Claude".to_string(),
+            insight_what_happened: "Screen capture (visual): Claude_1778938598807.png. Claude"
+                .to_string(),
             app_name: "Claude".to_string(),
             ..Default::default()
         };

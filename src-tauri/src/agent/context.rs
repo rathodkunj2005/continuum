@@ -116,7 +116,9 @@ pub async fn run_agent_request(
                 .err()
                 .map(|audit_err| format!(" Audit write failed: {audit_err}"))
                 .unwrap_or_default();
-            return Err(format!("Agent run failed: {err}.{audit_message} run_id={run_id}"));
+            return Err(format!(
+                "Agent run failed: {err}.{audit_message} run_id={run_id}"
+            ));
         }
     };
     let answer = deterministic_response(&context_pack);
@@ -161,7 +163,11 @@ async fn build_from_context_pack(
     note_unsupported_filters(&request, &mut disallowed_context);
 
     let blocklist = state.config.read().blocklist.clone();
-    let selected: HashSet<&str> = request.selected_memory_ids.iter().map(String::as_str).collect();
+    let selected: HashSet<&str> = request
+        .selected_memory_ids
+        .iter()
+        .map(String::as_str)
+        .collect();
     let mut memory_cards = Vec::new();
     let mut seen = HashSet::new();
 
@@ -183,10 +189,16 @@ async fn build_from_context_pack(
             .await
             .map_err(|err| err.to_string())?;
         if let Some(memory) = memory {
-            if is_private_memory(&memory.app_name, memory.url.as_deref(), &memory.window_title, &blocklist) {
+            if is_private_memory(
+                &memory.app_name,
+                memory.url.as_deref(),
+                &memory.window_title,
+                &blocklist,
+            ) {
                 disallowed_context.push(RedactionNote {
                     id: memory.id.clone(),
-                    reason: "excluded by FNDR privacy blocklist or sensitive-context policy".to_string(),
+                    reason: "excluded by FNDR privacy blocklist or sensitive-context policy"
+                        .to_string(),
                 });
                 continue;
             }
@@ -260,7 +272,11 @@ async fn build_from_context_pack(
         .iter()
         .map(DecisionEvidence::from_decision)
         .collect();
-    let todos = pack.open_tasks.iter().map(TodoEvidence::from_task).collect();
+    let todos = pack
+        .open_tasks
+        .iter()
+        .map(TodoEvidence::from_task)
+        .collect();
     let evidence_summary = evidence_summary(&pack, memory_cards.len(), disallowed_context.len());
     let tokens_used = pack.tokens_used;
 
@@ -465,9 +481,11 @@ fn collect_command_evidence(cards: &[AgentMemoryCard]) -> Vec<CommandEvidence> {
 }
 
 fn starts_like_command(value: &str) -> bool {
-    ["cargo ", "npm ", "pnpm ", "yarn ", "git ", "make ", "python ", "python3 ", "uv "]
-        .iter()
-        .any(|prefix| value.starts_with(prefix))
+    [
+        "cargo ", "npm ", "pnpm ", "yarn ", "git ", "make ", "python ", "python3 ", "uv ",
+    ]
+    .iter()
+    .any(|prefix| value.starts_with(prefix))
 }
 
 fn evidence_summary(pack: &ContextPack, memory_count: usize, redaction_count: usize) -> String {
@@ -479,7 +497,9 @@ fn evidence_summary(pack: &ContextPack, memory_count: usize, redaction_count: us
         parts.push(truncate_words(&pack.summary, 34));
     }
     if redaction_count > 0 {
-        parts.push(format!("{redaction_count} context items were dropped or redacted"));
+        parts.push(format!(
+            "{redaction_count} context items were dropped or redacted"
+        ));
     }
     parts.join(". ")
 }
@@ -575,9 +595,8 @@ fn extract_urls(value: &str) -> Vec<String> {
     value
         .split_whitespace()
         .filter_map(|part| {
-            let trimmed = part.trim_matches(|ch: char| {
-                matches!(ch, '"' | '\'' | ')' | '(' | ',' | '.' | ';')
-            });
+            let trimmed = part
+                .trim_matches(|ch: char| matches!(ch, '"' | '\'' | ')' | '(' | ',' | '.' | ';'));
             (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
                 .then(|| trimmed.to_string())
         })

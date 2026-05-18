@@ -2070,9 +2070,7 @@ impl Store {
     }
 
     /// Open (or create) the EmbeddingGemma 256-dim memories table on demand.
-    pub async fn open_or_create_memories_v3(
-        &self,
-    ) -> Result<lancedb::Table, lancedb::Error> {
+    pub async fn open_or_create_memories_v3(&self) -> Result<lancedb::Table, lancedb::Error> {
         use crate::inference::model_config::MEMORIES_V3_TABLE;
         let db_path = self.data_dir.join("lancedb");
         let uri = db_path.to_string_lossy();
@@ -2141,7 +2139,9 @@ impl Store {
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         use crate::inference::model_config::MEMORIES_V3_TABLE;
         // Ensure v3 table exists
-        let _ = self.open_or_create_memories_v3().await
+        let _ = self
+            .open_or_create_memories_v3()
+            .await
             .map_err(|e| format!("cannot open v3 table: {e}"))?;
         tracing::info!("reindex_memories_to_embeddinggemma_256: v3 table ({MEMORIES_V3_TABLE}) ready; full reindex not yet implemented");
         Ok(0)

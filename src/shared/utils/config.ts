@@ -6,8 +6,12 @@
 export const STORAGE_KEYS = {
     theme: "fndr-theme",
     palette: "fndr-palette",
+    /** Interactive motion shader background id (see wallpaper-registry). */
+    wallpaper: "fndr-wallpaper",
     automations: "fndr-automations",
     searchHistory: "fndr-search-history",
+    /** Selected top-level shell mode: "immersive" (scroll experience) or "work" (productive). */
+    appMode: "fndr_app_mode",
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

@@ -507,7 +507,7 @@ export function SearchBar({
                                     }
                                 }
                             }}
-                            placeholder={activePlaceholder}
+                            placeholder={showAnimatedPlaceholder ? "" : activePlaceholder}
                             className="search-input search-input-cycling search-input-scrollable"
                             autoComplete="off"
                             disabled={disabled}
@@ -532,13 +532,18 @@ export function SearchBar({
                     </div>
 
                     <button
-                        className={`voice-btn ${isRecording ? "recording" : ""}`}
+                        type="button"
+                        className={`fndr-os-chrome-btn voice-btn ${isRecording ? "recording" : ""}`}
                         onClick={() => void handleVoiceToggle()}
                         aria-label={isRecording ? "Stop voice recording" : "Start voice recording"}
-                        title={isRecording ? "Stop voice recording" : "Start voice recording"}
+                        title={isRecording ? "Stop voice recording" : "Speak"}
                         disabled={disabled || isTranscribing}
                     >
-                        {isRecording ? "Stop" : isTranscribing ? "..." : "Mic"}
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                            <rect x="5" y="8" width="2.5" height="10" rx="1.2" />
+                            <rect x="10.75" y="5" width="2.5" height="14" rx="1.2" />
+                            <rect x="16.5" y="9" width="2.5" height="8" rx="1.2" />
+                        </svg>
                     </button>
 
                     {value && (

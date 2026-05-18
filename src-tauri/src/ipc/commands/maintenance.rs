@@ -1484,9 +1484,7 @@ pub async fn run_idle_wiki_knowledge_compile(
 use crate::inference::model_config::CLEANUP_OLD_MODEL_DIRS;
 
 #[tauri::command]
-pub async fn models_cleanup_dry_run(
-    app_handle: tauri::AppHandle,
-) -> Result<Vec<String>, String> {
+pub async fn models_cleanup_dry_run(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     use tauri::Manager;
     let app_data_dir = app_handle
         .path()
@@ -1523,9 +1521,7 @@ pub async fn models_cleanup_dry_run(
 }
 
 #[tauri::command]
-pub async fn models_cleanup_confirm(
-    app_handle: tauri::AppHandle,
-) -> Result<Vec<String>, String> {
+pub async fn models_cleanup_confirm(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     use tauri::Manager;
     let app_data_dir = app_handle
         .path()

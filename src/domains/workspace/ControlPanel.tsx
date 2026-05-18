@@ -32,6 +32,7 @@ import {
     reclaimMemoryStorage,
     getPrivacyAlerts,
     cleanDevBuildCache,
+    fndrQualityStatus,
 } from "@/shared/ipc/tauri";
 import {
     ModelInfo,
@@ -54,6 +55,12 @@ import {
     listPalettes,
     type PaletteKey,
 } from "@/shared/theme/cinematic-palettes";
+import {
+    WALLPAPERS,
+    isWallpaperId,
+    listWallpapers,
+    type WallpaperId,
+} from "@/shared/wallpaper/wallpaper-registry";
 import "./ControlPanel.css";
 import { PrivacyPanel } from "./PrivacyPanel";
 
@@ -79,7 +86,7 @@ const DEFAULT_AUTOFILL_SETTINGS: AutofillSettings = {
 
 export function ControlPanel({
     status,
-    compact = false,
+    compact: _compact = false,
     evalUi = false,
     onOpenPanel: _onOpenPanel,
 }: ControlPanelProps) {
@@ -117,6 +124,11 @@ export function ControlPanel({
         useState<AutofillSettings>(DEFAULT_AUTOFILL_SETTINGS);
     const [autofillBusy, setAutofillBusy] = useState(false);
     const [autofillMsg, setAutofillMsg] = useState<string | null>(null);
+    const [qualityStatus, setQualityStatus] = useState<{
+        stored_count: number;
+        dropped_count: number;
+        flagged_count: number;
+    } | null>(null);
     const prevPrivacyAlertCountRef = useRef(0);
 
     // Theme state
@@ -126,6 +138,10 @@ export function ControlPanel({
     const [paletteKey, setPaletteKey] = useState<PaletteKey>(() => {
         const stored = localStorage.getItem(STORAGE_KEYS.palette);
         return isPaletteKey(stored) ? stored : "matrix";
+    });
+    const [wallpaperId, setWallpaperId] = useState<WallpaperId>(() => {
+        const stored = localStorage.getItem(STORAGE_KEYS.wallpaper);
+        return isWallpaperId(stored) ? stored : "aurora";
     });
 
     // Model tab state
@@ -140,23 +156,25 @@ export function ControlPanel({
     const loadData = useCallback(async () => {
         try {
             if (evalUi) {
-                const [bl, ret, onboarding, health, autofill] = await Promise.all([
+                const [bl, ret, onboarding, health, autofill, quality] = await Promise.all([
                     getBlocklist(),
                     getRetentionDays(),
                     getOnboardingState(),
                     getStorageHealth(),
                     getAutofillSettings(),
+                    fndrQualityStatus(),
                 ]);
                 setBlocklistState(bl);
                 setRetentionDaysState(ret);
                 setStorageHealth(health);
+                setQualityStatus(quality);
                 const name = onboarding.display_name ?? "";
                 setProfileName(name);
                 setProfileDraft(name);
                 setAutofillSettingsState(autofill);
                 setSavedAutofillSettingsState(autofill);
             } else {
-                const [bl, ret, mcp, runtimeStatus, onboarding, health, autofill] = await Promise.all([
+                const [bl, ret, mcp, runtimeStatus, onboarding, health, autofill, quality] = await Promise.all([
                     getBlocklist(),
                     getRetentionDays(),
                     getMcpServerStatus(),
@@ -164,12 +182,14 @@ export function ControlPanel({
                     getOnboardingState(),
                     getStorageHealth(),
                     getAutofillSettings(),
+                    fndrQualityStatus(),
                 ]);
                 setBlocklistState(bl);
                 setRetentionDaysState(ret);
                 setMcpStatus(mcp);
                 setContextRuntimeStatus(runtimeStatus);
                 setStorageHealth(health);
+                setQualityStatus(quality);
                 const name = onboarding.display_name ?? "";
                 setProfileName(name);
                 setProfileDraft(name);
@@ -253,17 +273,40 @@ export function ControlPanel({
         }
     }, [isAppearanceOpen, isOpen]);
 
-    // Apply theme to document root
+    // Apply theme to document root.
+    // film-paper.css now responds to both "dark"/"film" (dark mode) and
+    // "light"/"paper" (light mode) so we can set the label as-is.
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
         localStorage.setItem(STORAGE_KEYS.theme, theme);
         localStorage.setItem(STORAGE_KEYS.palette, paletteKey);
+        localStorage.setItem(STORAGE_KEYS.wallpaper, wallpaperId);
         applyPalette(paletteKey, theme);
-    }, [paletteKey, theme]);
+    }, [paletteKey, theme, wallpaperId]);
 
-    const selectAppearance = (nextPalette: PaletteKey, nextTheme: Theme) => {
+    const selectAppearance = (nextPalette: PaletteKey, nextTheme: Theme, nextWallpaper?: WallpaperId) => {
         setPaletteKey(nextPalette);
         setTheme(nextTheme);
+        if (nextWallpaper) setWallpaperId(nextWallpaper);
+        window.dispatchEvent(
+            new CustomEvent("fndr-appearance-changed", {
+                detail: {
+                    palette: nextPalette,
+                    mode: nextTheme,
+                    wallpaper: nextWallpaper ?? wallpaperId,
+                },
+            })
+        );
+    };
+
+    const selectWallpaper = (nextWallpaper: WallpaperId) => {
+        setWallpaperId(nextWallpaper);
+        localStorage.setItem(STORAGE_KEYS.wallpaper, nextWallpaper);
+        window.dispatchEvent(
+            new CustomEvent("fndr-appearance-changed", {
+                detail: { palette: paletteKey, mode: theme, wallpaper: nextWallpaper },
+            })
+        );
     };
 
     useEffect(() => {
@@ -593,9 +636,10 @@ export function ControlPanel({
 
     return (
         <div className="control-panel-container">
-            <div className="control-panel-actions">
+            <div className="control-panel-actions fndr-os-chrome-row">
                 <button
-                    className={`ui-action-btn settings-toggle ${compact ? "compact" : ""}`}
+                    type="button"
+                    className="fndr-os-chrome-btn"
                     onClick={() => {
                         setIsOpen(false);
                         setIsAppearanceOpen(!isAppearanceOpen);
@@ -603,10 +647,13 @@ export function ControlPanel({
                     aria-label="Open appearance"
                     title="Open appearance"
                 >
-                    <span className="settings-toggle-icon" aria-hidden="true">◐</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
                 </button>
                 <button
-                    className={`ui-action-btn settings-toggle ${compact ? "compact" : ""}`}
+                    type="button"
+                    className="fndr-os-chrome-btn control-panel-settings-btn"
                     onClick={() => {
                         setIsAppearanceOpen(false);
                         setIsOpen(!isOpen);
@@ -614,7 +661,7 @@ export function ControlPanel({
                     aria-label={privacyAlertCount > 0 ? `Open settings, ${privacyAlertCount} privacy alert${privacyAlertCount === 1 ? "" : "s"}` : "Open settings"}
                     title={privacyAlertCount > 0 ? `${privacyAlertCount} privacy alert${privacyAlertCount === 1 ? "" : "s"}` : "Open settings"}
                 >
-                    <svg className="settings-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
                         <circle cx="12" cy="12" r="3" />
                         <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.86l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.7 1.7 0 0 0-1.86-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.86.34l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.86 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.86l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.7 1.7 0 0 0 1.86.34h0a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h0a1.7 1.7 0 0 0 1.86-.34l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.86v0a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
                     </svg>
@@ -704,6 +751,19 @@ export function ControlPanel({
                                 </button>
                                 <CapturePipelineSummary status={status} />
                             </section>
+
+                            {qualityStatus && (
+                                <section className="panel-section">
+                                    <h3>Memory Quality</h3>
+                                    <div className="capture-stats">
+                                        <span>Stored: {qualityStatus.stored_count.toLocaleString()}</span>
+                                        <span>Dropped: {qualityStatus.dropped_count.toLocaleString()}</span>
+                                        {qualityStatus.flagged_count > 0 && (
+                                            <span>Flagged: {qualityStatus.flagged_count.toLocaleString()}</span>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
 
                             <section className="panel-section">
                                 <h3>Indexing</h3>
@@ -1189,32 +1249,64 @@ export function ControlPanel({
                 <header className="panel-header">
                     <div>
                         <h2>Appearance</h2>
-                        <p className="panel-subtitle">Choose a mode and cinematic palette.</p>
+                        <p className="panel-subtitle">Mode, motion background, and cinematic palette.</p>
                     </div>
                     <button className="ui-action-btn panel-close" onClick={() => setIsAppearanceOpen(false)} aria-label="Close">X</button>
                 </header>
                 <div className="panel-content">
                     <section className="panel-section">
                         <h3>Appearance</h3>
-                        <p className="section-hint">Choose a mode and cinematic palette.</p>
+                        <p className="section-hint">Mode, motion background, and cinematic palette.</p>
                         <div className="theme-choice-row" role="radiogroup" aria-label="Theme selection">
                             <button
-                                className={`ui-action-btn theme-choice ${theme === "dark" ? "active" : ""}`}
-                                onClick={() => setTheme("dark")}
+                                type="button"
+                                className={`fndr-os-glass-btn theme-choice ${theme === "dark" ? "active" : ""}`}
+                                onClick={() => selectAppearance(paletteKey, "dark")}
                                 aria-pressed={theme === "dark"}
                             >
                                 <span className="theme-choice-icon" aria-hidden="true">🌙</span>
                                 Dark
                             </button>
                             <button
-                                className={`ui-action-btn theme-choice ${theme === "light" ? "active" : ""}`}
-                                onClick={() => setTheme("light")}
+                                type="button"
+                                className={`fndr-os-glass-btn theme-choice ${theme === "light" ? "active" : ""}`}
+                                onClick={() => selectAppearance(paletteKey, "light")}
                                 aria-pressed={theme === "light"}
                             >
                                 <span className="theme-choice-icon" aria-hidden="true">☀️</span>
                                 Light
                             </button>
                         </div>
+                        <h4 className="appearance-subheading">Motion background</h4>
+                        <p className="section-hint appearance-subhint">
+                            Interactive shaders — move the pointer and click empty space to play.
+                        </p>
+                        <div className="wallpaper-choice-grid" role="listbox" aria-label="Motion background">
+                            {listWallpapers().map((key) => {
+                                const wp = WALLPAPERS[key];
+                                const active = wallpaperId === key;
+                                return (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        className={`wallpaper-choice ${active ? "active" : ""}`}
+                                        onClick={() => selectWallpaper(key)}
+                                        aria-selected={active}
+                                    >
+                                        <span
+                                            className="wallpaper-choice-preview"
+                                            style={{ background: wp.preview }}
+                                            aria-hidden
+                                        />
+                                        <span className="wallpaper-choice-copy">
+                                            <strong>{wp.name}</strong>
+                                            <span>{wp.description}</span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <h4 className="appearance-subheading">Cinematic palette</h4>
                         <div className="palette-choice-grid" role="listbox" aria-label="Cinematic palette">
                             {listPalettes().map((key) => {
                                 const palette = PALETTES[key];
@@ -1233,7 +1325,7 @@ export function ControlPanel({
                                                 selectAppearance(key, "light");
                                                 return;
                                             }
-                                            setPaletteKey(key);
+                                            selectAppearance(key, theme);
                                         }}
                                         aria-selected={active}
                                     >

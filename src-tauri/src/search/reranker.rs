@@ -126,14 +126,22 @@ mod tests {
 
 /// Extension hook for future reranker models. Default is NoopReranker.
 pub trait OptionalReranker: Send + Sync {
-    fn rerank(&self, query: &str, candidates: Vec<crate::storage::SearchResult>) -> Vec<crate::storage::SearchResult>;
+    fn rerank(
+        &self,
+        query: &str,
+        candidates: Vec<crate::storage::SearchResult>,
+    ) -> Vec<crate::storage::SearchResult>;
 }
 
 /// No-op reranker — passes candidates through unchanged.
 pub struct NoopReranker;
 
 impl OptionalReranker for NoopReranker {
-    fn rerank(&self, _query: &str, candidates: Vec<crate::storage::SearchResult>) -> Vec<crate::storage::SearchResult> {
+    fn rerank(
+        &self,
+        _query: &str,
+        candidates: Vec<crate::storage::SearchResult>,
+    ) -> Vec<crate::storage::SearchResult> {
         candidates
     }
 }
@@ -146,8 +154,16 @@ mod noop_tests {
     fn noop_reranker_passes_through() {
         let r = NoopReranker;
         let results = vec![
-            crate::storage::SearchResult { id: "a".into(), score: 0.9, ..Default::default() },
-            crate::storage::SearchResult { id: "b".into(), score: 0.7, ..Default::default() },
+            crate::storage::SearchResult {
+                id: "a".into(),
+                score: 0.9,
+                ..Default::default()
+            },
+            crate::storage::SearchResult {
+                id: "b".into(),
+                score: 0.7,
+                ..Default::default()
+            },
         ];
         let out = r.rerank("query", results);
         assert_eq!(out.len(), 2);

@@ -21,10 +21,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 mod image_semantics;
-mod vlm;
 pub mod model_config;
 pub mod model_worker;
 pub mod qwen_vl_memory;
+mod vlm;
 pub mod vlm_router;
 
 /// Global shared LlamaBackend singleton.
@@ -61,10 +61,11 @@ pub fn get_or_init_backend() -> Result<Arc<LlamaBackend>, Box<dyn std::error::Er
     Ok(backend)
 }
 pub use image_semantics::{
-    build_import_raw_evidence, compose_import_memory_context, compose_import_memory_context_with_title,
-    extract_image_semantics, insight_from_ocr_only, insight_from_structured, should_include_import_ocr,
-    synthesize_vision_insight, ImageImportSource, ImageSemanticInsight, ImportMemoryText,
-    ImportOcrStats, SynthesizedVisionMemory,
+    build_import_raw_evidence, compose_import_memory_context,
+    compose_import_memory_context_with_title, extract_image_semantics, insight_from_ocr_only,
+    insight_from_structured, should_include_import_ocr, synthesize_vision_insight,
+    ImageImportSource, ImageSemanticInsight, ImportMemoryText, ImportOcrStats,
+    SynthesizedVisionMemory,
 };
 pub use vlm::VlmEngine;
 

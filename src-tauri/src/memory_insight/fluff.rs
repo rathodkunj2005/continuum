@@ -141,10 +141,7 @@ fn remove_subsequent_occurrences_ci(text: &str, needle: &str) -> String {
 }
 
 fn normalize_whitespace(text: &str) -> String {
-    let collapsed = text
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
     // Collapse " ,", " .", " ;"
     collapsed
         .replace(" ,", ",")
@@ -189,12 +186,7 @@ mod tests {
 
     #[test]
     fn strip_fluff_drops_the_user_prefix() {
-        let out = strip_fluff(
-            "the user is viewing a news article",
-            "",
-            "",
-            "",
-        );
+        let out = strip_fluff("the user is viewing a news article", "", "", "");
         assert!(out.to_lowercase().contains("news article"));
         assert!(!out.to_lowercase().starts_with("the user"));
     }

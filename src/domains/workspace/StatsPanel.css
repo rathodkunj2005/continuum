@@ -341,7 +341,7 @@
 
 .stats-wave-panel {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.02);
     padding: 12px;
 }
@@ -423,7 +423,7 @@
 .stats-daypart-panel {
     grid-column: 1 / -1;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.015);
     padding: 12px;
 }
@@ -464,7 +464,7 @@
 
 .stats-donut-panel {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.015);
     padding: 12px;
     min-height: 210px;
@@ -617,7 +617,7 @@
 .stats-weekday-bars {
     margin-top: 4px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.015);
     padding: 12px;
 }

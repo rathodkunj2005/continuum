@@ -97,8 +97,18 @@ mod tests {
     #[test]
     fn format_skips_empty_fields() {
         let text = format_for_embedding(
-            "title", None, None, None,
-            "context", &[], &[], &[], &[], &[], &[], &[],
+            "title",
+            None,
+            None,
+            None,
+            "context",
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
         );
         assert!(!text.contains("Topic:"));
         assert!(!text.contains("Entities:"));

@@ -36,11 +36,14 @@ FNDR captures macOS screen context, extracts OCR text, stores compact memory rec
 | --- | --- |
 | Capture | macOS screen capture, OCR, adaptive sampling, perceptual deduplication, semantic deduplication, and batched memory writes |
 | Search | Hybrid vector and keyword search, sentence-aware reranking, Memory Vault / memory cards, timeline browsing, and raw result inspection |
+| Memory Vault | Expanded memory cards, surfacing-reason chips, query-scoped knowledge graph, memory provenance strip, and one-click copy for agent context |
+| Context Runtime | Agentic retrieval pipeline: rule-based query planner, multi-route modular retrieval, fusion ranker, evidence packer, verifier, and context composer |
 | Summaries | Local model-backed memory summaries, daily summaries, daily briefings, and search-result synthesis |
 | Tasks | Todo, reminder, and follow-up parsing with persisted task state |
 | Meetings | Meeting detection heuristics, ffmpeg-based segmented audio capture, Whisper sidecar transcription, transcript search, and markdown/json export |
 | Speech | Voice transcription and local text-to-speech command paths |
-| Graph | Local graph store and graph visualization panel |
+| Graph | Local graph store, typed-entity/edge graph with Window, App, and Command nodes, agentic graph-RAG via `fndr.*` MCP namespace, and graph visualization panel |
+| Immersive UI | Full-screen cinematic scroll experience (ScrollModeShell) with parallax sections, Aurora wallpaper, chapter rail, sticky scenes, and section-transition bridges |
 | Downloads | Downloads folder watcher that injects local file-arrival memory records |
 | Autofill | Global shortcut-driven autofill retrieval and injection settings |
 
@@ -54,24 +57,29 @@ FNDR captures macOS screen context, extracts OCR text, stores compact memory rec
 
 | Path | Role |
 | --- | --- |
-| `src/app/` | App shell: `App.tsx`, `main.tsx`, autofill entry, sidebar, panels host, global `styles/`. |
+| `src/app/` | App shell: `App.tsx`, `main.tsx`, `ScrollModeShell.tsx` (immersive), `WorkModeShell.tsx` (standard), autofill entry, sidebar, panels host, global `styles/`. |
+| `src/domains/immersive/` | Full-screen cinematic scroll experience: `sections/` (Hero, Capture, Search, Graph, Agent, Privacy, Workspace), `components/` (ParallaxLayer, StickyScene, ChapterRail, SectionTransitionBridge, ScrollProgressIndicator, MorphMemoryCard). |
 | `src/domains/` | User-facing product areas (Memory Vault, search bar, timeline, command palette, workspace panels). See `src/domains/README.md`. |
-| `src/shared/` | Reusable UI glue: `ipc/` (Tauri `invoke` bindings), `hooks/`, `utils/`, `theme/`. |
+| `src/shared/components/` | Reusable UI: `atoms/` (Button, Field, Pill, Stamp, DossierFrame, …), `AuroraWallpaper.tsx`, `CursorInverter.tsx`, `StatusBar.tsx`. |
+| `src/shared/motion/` | Animation primitives: motion tokens, scroll config, Framer Motion variants, and a `useReducedMotionSafe` hook. |
+| `src/shared/theme/` | Design tokens: `cinematic-palettes.ts` (10 palettes) and `film-paper.css` (CSS custom properties). |
+| `src/shared/` | Reusable UI glue: `ipc/` (Tauri `invoke` bindings), `hooks/`, `utils/`. |
 
 **Backend (`src-tauri/`)**
 
 | Path | Role |
 | --- | --- |
-| `src-tauri/src/ipc/` | Thin Tauri command handlers (`ipc/commands/*`). |
+| `src-tauri/src/ipc/` | Thin Tauri command handlers (`ipc/commands/*`), including `retrieval.rs` for agentic context-pack commands. |
 | `src-tauri/src/capture/` | Screen capture pipeline. |
 | `src-tauri/src/ocr/` | Apple Vision OCR. |
 | `src-tauri/src/embedding/` | Chunking and embeddings. |
 | `src-tauri/src/search/` | Hybrid retrieval and memory cards. |
+| `src-tauri/src/context_runtime/` | Agentic retrieval: query planner, multi-route retrieval, fusion ranker, evidence packer, verifier, and context composer. |
 | `src-tauri/src/storage/` | LanceDB and filesystem persistence. |
-| `src-tauri/src/memory/` | Memory-centric graph (`memory/graph/`). |
+| `src-tauri/src/memory/` | Memory-centric typed graph with Window, App, Command, and 5+ edge variants (`memory/graph/`). |
 | `src-tauri/src/inference/` | Local LLM / VLM. |
 | `src-tauri/src/privacy/` | Privacy enforcement. |
-| `src-tauri/src/mcp/` | MCP server. |
+| `src-tauri/src/mcp/` | MCP server with `fndr.*` namespace for agentic graph-RAG tools. |
 | `src-tauri/sidecars/` | Python helpers (Whisper, TTS, etc.). |
 
 ```text
@@ -89,11 +97,16 @@ fndr/
 
 | Component | Primary paths |
 | --- | --- |
-| Frontend shell | `src/app/App.tsx`, `src/app/main.tsx`, `src/app/AppPanels.tsx` |
+| Frontend shell | `src/app/App.tsx`, `src/app/main.tsx`, `src/app/ScrollModeShell.tsx`, `src/app/WorkModeShell.tsx` |
+| Immersive scroll | `src/domains/immersive/` |
+| Design system | `src/shared/theme/`, `src/shared/motion/`, `src/shared/components/atoms/` |
 | Tauri commands | `src-tauri/src/ipc/commands/` |
 | Capture pipeline | `src-tauri/src/capture/` |
 | Search + Memory Vault | `src-tauri/src/search/` |
+| Context runtime | `src-tauri/src/context_runtime/` |
 | LanceDB | `src-tauri/src/storage/` |
+| Graph store | `src-tauri/src/memory/graph/` |
+| MCP (fndr.* namespace) | `src-tauri/src/mcp/` |
 | Model catalog | `src-tauri/src/models.rs` |
 | Runtime config | `src-tauri/src/config.rs` |
 | Privacy controls | `src-tauri/src/privacy/` |
@@ -196,7 +209,7 @@ FNDR runs fully local with two models in this setup:
 ./scripts/bootstrap/download-minilm.sh
 ```
 
-Models are stored under `~/Library/Application Support/com.fndr.FNDR/models/`.
+Models are stored under `~/Library/Application Support/com.fndr.app/models/`.
 
 Validate the local embedding and LanceDB path with:
 

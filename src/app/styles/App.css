@@ -311,29 +311,32 @@
 /* ===== App shell ===== */
 .app {
     display: flex;
-    min-height: 100vh;
-    background: var(--page-bg);
+    flex-direction: column;
+    height: 100%;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    background: transparent;
     position: relative;
+    z-index: 1;
 }
 
-.app-shader-wallpaper {
+/* Aurora wallpaper sits at z-index:0, behind every interactive layer.
+   The static page-bg gradient is removed — the WebGL canvas owns the
+   background. A faint film-grain overlay is layered via .film-grain
+   on the .app wrapper. */
+.app-aurora-wallpaper {
     position: fixed;
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.96;
-    filter: saturate(1.2) contrast(1.08) brightness(0.7);
 }
 
-.app::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background:
-        radial-gradient(ellipse 52% 26% at 50% 10%, color-mix(in srgb, var(--cp-secondary-2, var(--accent)) 20%, transparent), transparent 72%),
-        radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--cp-accent-subtle, var(--accent-light)) 46%, transparent), transparent 38%);
-    opacity: 0.82;
+/* Film grain overlay — very subtle so the nebula void stays deep. */
+.app.film-grain::after {
+    opacity: 0.022;
+    mix-blend-mode: soft-light;
+    z-index: 1;
 }
 
 /* ===== Left sidebar — genuine glass material ===== */
@@ -393,26 +396,6 @@
     top: 12px;
     left: 12px;
     z-index: 80;
-    width: auto;
-    min-width: 64px;
-    height: 36px;
-    font-size: 0.95rem;
-    padding: 0 16px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--surface-elevated) 78%, transparent);
-    border: 1px solid var(--border);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    transition: background 0.2s var(--ease-smooth), transform 0.15s var(--ease-spring);
-}
-
-.sidebar-toggle:hover {
-    background: var(--accent-light);
-    transform: scale(1.04);
-}
-
-.sidebar-toggle:active {
-    transform: scale(0.96);
 }
 
 .top-right-control {
@@ -420,9 +403,6 @@
     top: 12px;
     right: 12px;
     z-index: 80;
-    display: flex;
-    align-items: center;
-    gap: 6px;
 }
 
 /* ===== Recording consent banner — removed pointless pulse, stronger hierarchy ===== */
@@ -434,11 +414,11 @@
     z-index: 95;
     min-width: min(780px, calc(100vw - 24px));
     max-width: min(780px, calc(100vw - 24px));
-    border: 1px solid color-mix(in srgb, var(--cp-accent, #dc6464) 35%, transparent);
-    background: color-mix(in srgb, var(--cp-dominant-2, #2a0e0e) 76%, transparent);
+    border: 1px solid color-mix(in srgb, var(--alarm) 38%, transparent);
+    background: color-mix(in srgb, var(--bg-2) 84%, transparent);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     padding: 12px 16px;
     display: grid;
     gap: 4px;
@@ -543,8 +523,8 @@
     justify-content: flex-start;
     width: 100%;
     min-height: 38px;
-    padding: 0 17px;
-    border-radius: 14px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
     font-size: 0.78rem;
     font-weight: 500;
     letter-spacing: 0.005em;
@@ -599,12 +579,71 @@
     box-shadow: 0 8px 16px var(--shadow-color);
 }
 
+/* ── Sidebar reel footer ─────────────────────────────────────────────────── */
+.sidebar-reel-footer {
+    margin-top: auto;
+    padding-top: 8px;
+}
+
+.sidebar-reel-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px 6px;
+}
+
+.sidebar-reel-date,
+.sidebar-reel-frames {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+}
+
+.sidebar-reel-strip {
+    height: 22px;
+    overflow: hidden;
+    border-top: 1px solid var(--hairline);
+    position: relative;
+}
+
+.sidebar-reel-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 200%;
+    background-image: repeating-linear-gradient(
+        90deg,
+        transparent 0px,
+        transparent 8px,
+        var(--hairline-strong) 8px,
+        var(--hairline-strong) 9px,
+        transparent 9px,
+        transparent 12px,
+        var(--accent) 12px,
+        var(--accent) 13px,
+        transparent 13px,
+        transparent 20px
+    );
+    opacity: 0.35;
+    animation: reelScroll 4s linear infinite;
+}
+
+@keyframes reelScroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
 /* ===== Main content ===== */
 .app-main {
     flex: 1;
+    min-height: 0;
     padding: 28px;
     width: 100%;
     max-width: none;
+    overflow: hidden;
 }
 
 .app-main.search-centered {
@@ -612,9 +651,22 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    padding-top: 48px;
-    padding-bottom: 48px;
+    flex: 1;
+    min-height: 0;
+    padding: 0 28px;
+    overflow: hidden;
+}
+
+.home-hero-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    gap: 0;
 }
 
 .search-shell {
@@ -628,21 +680,62 @@
     margin: 4px 0 18px;
 }
 
-.app-main.search-centered .search-shell {
-    margin: 0 0 16px;
-    width: min(760px, 100%);
+.home-hero-stage .search-shell {
+    margin: 0;
+    width: 100%;
+    max-width: 680px;
 }
 
 .app-main.search-centered .search-panel {
     width: 100%;
 }
 
+.app-main.search-centered .search-bar {
+    height: var(--fndr-os-pill-height, 58px);
+    border-radius: var(--fndr-os-pill-radius, 29px);
+    padding: 0 7px 0 20px;
+    gap: 8px;
+    background: color-mix(in srgb, var(--cp-dominant-2, var(--cp-surface)) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cp-secondary-1, var(--cp-accent)) 48%, transparent);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow:
+        0 0 28px color-mix(in srgb, var(--cp-secondary-2, var(--cp-accent)) 14%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.app-main.search-centered .search-bar:focus-within {
+    border-color: color-mix(in srgb, var(--cp-secondary-2, var(--cp-accent)) 72%, transparent);
+    box-shadow:
+        0 0 40px color-mix(in srgb, var(--cp-accent-raw, var(--cp-accent)) 22%, transparent),
+        0 0 0 2px color-mix(in srgb, var(--cp-accent-raw, var(--cp-accent)) 16%, transparent);
+}
+
+.app-main.search-centered .search-icon {
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+}
+
+.app-main.search-centered .search-input {
+    color: var(--cp-wall-text-primary, var(--fg));
+}
+
+.app-main.search-centered .search-input.search-input-cycling::placeholder {
+    color: transparent;
+    opacity: 1;
+}
+
+.app-main.search-centered .search-placeholder-overlay {
+    color: var(--cp-wall-text-secondary, var(--fg-3));
+    opacity: 0.72;
+}
+
 /* ===== Home focus / greeting ===== */
 .home-focus-header {
-    display: grid;
-    gap: 12px;
-    justify-items: center;
-    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: var(--s-6);
+    text-align: center;
     animation: greetingIn 0.6s var(--ease-spring) 0.1s both;
 }
 
@@ -658,23 +751,41 @@
     }
 }
 
-.home-greeting {
-    display: grid;
-    gap: 4px;
-    font-size: 1.625rem;
+.home-greeting-primary {
+    font-family: var(--film-font-display);
+    font-size: clamp(44px, 6.5vw, 68px);
     font-weight: 500;
+    line-height: 1.08;
     letter-spacing: -0.02em;
-    color: var(--text-primary);
-    text-align: center;
+    color: var(--cp-wall-text-primary, var(--text-primary));
+    margin: 0 0 var(--s-3);
+    max-width: 18ch;
+    text-shadow:
+        0 1px 2px color-mix(in srgb, var(--cp-dominant-1, #000) 75%, transparent),
+        0 10px 36px color-mix(in srgb, var(--cp-dominant-1, #000) 50%, transparent);
+}
+
+.home-greeting-sub {
+    font-family: var(--film-font-body);
+    font-size: clamp(17px, 2vw, 21px);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    margin: 0;
+    opacity: 0.92;
+    max-width: 28ch;
+    text-shadow: 0 6px 24px color-mix(in srgb, var(--cp-dominant-1, #000) 45%, transparent);
 }
 
 .home-date-context {
-    font-size: 0.8rem;
+    font-family: var(--film-font-mono);
+    font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--text-secondary);
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
     margin-bottom: 0;
+    opacity: 0.85;
 }
 
 .main-layout {
@@ -691,13 +802,75 @@
     border: 1px solid var(--border);
     backdrop-filter: blur(20px) saturate(160%);
     -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     padding: 14px 18px;
     margin-bottom: 18px;
     color: var(--text-secondary);
-    font-size: 0.88rem;
+    font-family: var(--font-body);
+    font-size: var(--t-body-sm);
     line-height: 1.5;
     box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+/* ===== Sidebar brand — FNDR mark =====
+   Amber dot + Cormorant wordmark per the handoff spec.
+   Replaces the empty .sidebar-brand placeholder div. */
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    margin: 0 0 18px 6px;
+}
+
+.sidebar-brand::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(212, 160, 74, 0.4);
+    flex-shrink: 0;
+}
+
+.sidebar-brand::after {
+    content: "FNDR";
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.22em;
+    color: var(--fg);
+    text-transform: uppercase;
+}
+
+/* Sidebar section labels — mono caps per spec. */
+.sidebar-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    opacity: 0.85;
+    padding: 0 6px;
+    margin-bottom: 6px;
+}
+
+/* Active nav item — amber left bar with halation. */
+.sidebar-actions .ui-action-btn.active {
+    position: relative;
+}
+.sidebar-actions .ui-action-btn.active::after {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+    box-shadow: 0 0 8px var(--accent);
+    pointer-events: none;
 }
 
 /* ===== App toast stack ===== */
@@ -848,8 +1021,12 @@
     }
 
     .app-main.search-centered {
-        padding-top: 58px;
+        padding: 0 16px;
         justify-content: center;
+    }
+
+    .home-hero-stage {
+        padding: 0 var(--s-4);
     }
 
     .main-layout.with-reconstruction {
@@ -902,7 +1079,7 @@
 
 /* ===== Light theme — app shell ===== */
 [data-theme="light"] .app {
-    background: var(--page-bg);
+    background: transparent;
 }
 
 [data-theme="light"] .left-sidebar {
@@ -917,26 +1094,22 @@
     background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
 }
 
-[data-theme="light"] .sidebar-toggle {
-    background: var(--surface-translucent);
-    border-color: var(--border);
-    box-shadow: 0 2px 8px var(--shadow-color);
-}
-
-[data-theme="light"] .sidebar-toggle:hover {
-    background: var(--surface-hover);
-}
-
 [data-theme="light"] .panel-backdrop {
     background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
 }
 
-[data-theme="light"] .home-greeting {
-    color: var(--text-primary);
+/* Home hero sits on the motion wallpaper — keep wall ink in every UI theme. */
+[data-theme="light"] .home-greeting-primary,
+[data-theme="light"] .home-greeting-sub {
+    color: var(--cp-wall-text-primary, var(--text-primary));
+}
+
+[data-theme="light"] .home-greeting-sub {
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
 }
 
 [data-theme="light"] .home-date-context {
-    color: var(--text-secondary);
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
 }
 
 [data-theme="light"] .recording-consent-banner {

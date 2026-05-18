@@ -669,8 +669,8 @@ mod imp {
         let compressor_bytes = (s.compressor_page_count as u64) * page_size;
         // Keep the speculative+purgeable estimate available for the snapshot
         // (UI continues to render "compressed" as the volatile reclaim pool).
-        let compressed = (s.speculative_count as u64 + s.purgeable_count as u64) * page_size
-            + compressor_bytes;
+        let compressed =
+            (s.speculative_count as u64 + s.purgeable_count as u64) * page_size + compressor_bytes;
         // Total physical = active + wired + inactive + free + compressor.
         // (Speculative + purgeable are subsets of inactive/free in practice.)
         let total = free + active + inactive + wired + compressor_bytes;
@@ -888,9 +888,7 @@ mod tests {
             // "high" purely from the calibration call.
             // Calibration round: both delta counters must be zero before
             // we can assert the label is the calmest value.
-            if snap.process_energy.idle_wakeups == 0
-                && snap.process_energy.interrupt_wakeups == 0
-            {
+            if snap.process_energy.idle_wakeups == 0 && snap.process_energy.interrupt_wakeups == 0 {
                 assert_eq!(snap.process_energy.label, "low");
             }
             assert!(snap.process_energy.idle_wakeups < 100_000_000);
@@ -911,8 +909,7 @@ mod tests {
         // pressure!) we can't make any claim — that's correct behavior.
         let available = snap.host_memory.free_bytes + snap.host_memory.inactive_bytes;
         let compressor_calm = snap.host_memory.total_bytes == 0
-            || (snap.host_memory.compressed_bytes as f32
-                / snap.host_memory.total_bytes as f32)
+            || (snap.host_memory.compressed_bytes as f32 / snap.host_memory.total_bytes as f32)
                 <= 0.15;
         if snap.host_memory.total_bytes > 0
             && (available as f32 / snap.host_memory.total_bytes as f32) >= 0.20
@@ -1014,7 +1011,10 @@ mod tests {
 
     #[test]
     fn vlm_safe_min_lightweight_is_eight_gib() {
-        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT, 8 * 1024 * 1024 * 1024);
+        assert_eq!(
+            VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT,
+            8 * 1024 * 1024 * 1024
+        );
     }
 
     #[test]
@@ -1041,7 +1041,10 @@ mod tests {
     fn host_supports_lightweight_vlm_matches_threshold() {
         let supports = host_supports_lightweight_vlm();
         if host_total_ram_bytes() < VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT {
-            assert!(!supports, "must refuse lightweight VLM on very small-RAM hosts");
+            assert!(
+                !supports,
+                "must refuse lightweight VLM on very small-RAM hosts"
+            );
         } else {
             assert!(supports, "must allow lightweight VLM on 8+ GB hosts");
         }

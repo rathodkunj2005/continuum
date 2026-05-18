@@ -178,8 +178,7 @@ pub async fn import_meta_glasses_photo(
 
     let config = state.config.read().clone();
     let model_id = models::configured_vlm_model_id(&config);
-    let host_supports_qwen_vlm =
-        crate::telemetry::system_metrics::host_supports_lightweight_vlm();
+    let host_supports_qwen_vlm = crate::telemetry::system_metrics::host_supports_lightweight_vlm();
     let vlm_available =
         models::pixel_vlm_available(model_id.as_deref(), Some(app_data_dir.as_path()));
 
@@ -491,7 +490,7 @@ mod tests {
 
         let decision = route_import_pixel_vlm(
             &config,
-            true,  // host_supports_qwen_vlm
+            true, // host_supports_qwen_vlm
             false,
             true,
             config.vlm_max_calls_per_minute,

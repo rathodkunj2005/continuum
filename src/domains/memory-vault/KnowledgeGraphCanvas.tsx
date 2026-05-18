@@ -138,13 +138,34 @@ export const KnowledgeGraphCanvas = forwardRef<
                 d.fy = null;
             });
 
-        const nodeSel = gRoot
-            .append("g")
-            .attr("class", "kg-nodes")
+        // Add ambient dust layer (30 fixed background circles)
+        const dustG = gRoot.append("g").attr("class", "kg-dust");
+        const centerX = (actualWidth || 800) / 2;
+        const centerY = height / 2;
+        const dustRadius = Math.min(centerX, centerY) * 1.1;
+        for (let i = 0; i < 30; i++) {
+            const angle = (Math.PI * 2 * i) / 30 + Math.sin(i * 1.7) * 0.4;
+            const r = dustRadius * (0.2 + (Math.sin(i * 0.9 + 1.3) * 0.5 + 0.5) * 0.8);
+            dustG
+                .append("circle")
+                .attr("cx", centerX + Math.cos(angle) * r)
+                .attr("cy", centerY + Math.sin(angle) * r)
+                .attr("r", 0.6)
+                .attr("fill", "var(--fg)")
+                .style("opacity", String(0.05 + (i % 7) * 0.02));
+        }
+
+        const nodesG = gRoot.append("g").attr("class", "kg-nodes");
+        // Disable drift animation when graph is large (performance)
+        if (simNodes.length > 500) {
+            nodesG.attr("data-perf-reduced", "true");
+        }
+
+        const nodeSel = nodesG
             .selectAll<SVGGElement, LayoutSimNode>("g")
             .data(simNodes, (d) => d.id)
             .join("g")
-            .attr("class", "kg-node")
+            .attr("class", (d) => `kg-node kg-drift-${d.id.charCodeAt(0) % 5}`)
             .attr("data-node-id", (d) => d.id)
             .style("cursor", "pointer")
             .style("animation-delay", (d) => `${(d.id.charCodeAt(0) % 6) * 0.5}s`)
@@ -153,10 +174,20 @@ export const KnowledgeGraphCanvas = forwardRef<
             .on("click", (_e, d) => onSelect(d.view))
             .call(drag);
 
+        // Outer halation ring (large, faint)
+        nodeSel
+            .append("circle")
+            .attr("class", "kg-node-halo kg-node-halo-outer")
+            .attr("r", (d) => d.size + 14)
+            .attr("fill", "var(--accent)")
+            .style("opacity", "0")
+            .style("transition", "opacity var(--film-dur-fast) var(--film-ease-shutter)");
+
+        // Inner halation ring
         nodeSel
             .append("circle")
             .attr("class", "kg-node-halo")
-            .attr("r", (d) => d.size + 10);
+            .attr("r", (d) => d.size + 8);
 
         nodeSel
             .append("circle")
@@ -164,9 +195,25 @@ export const KnowledgeGraphCanvas = forwardRef<
             .attr("r", (d) => d.size)
             .attr("fill", (d) =>
                 d.community !== null
-                    ? view.communityColors[d.community] ?? "var(--cp-accent)"
-                    : "var(--cp-accent-muted)",
+                    ? view.communityColors[d.community] ?? "var(--accent)"
+                    : "var(--accent-2)",
             );
+
+        // Label: show for weight≥3 or hovered/selected (CSS toggles visibility)
+        nodeSel
+            .append("text")
+            .attr("class", "kg-node-label")
+            .attr("text-anchor", "middle")
+            .attr("y", (d) => d.size + 14)
+            .attr("fill", "var(--fg-2)")
+            .style("font", `11px var(--font-mono)`)
+            .style("text-transform", "lowercase")
+            .style("pointer-events", "none")
+            .attr("data-weight-high", (d) => ((d.view.connectionCount ?? 0) >= 3 ? "true" : "false"))
+            .text((d) => {
+                const label = d.view.label ?? "";
+                return label.length > 16 ? label.slice(0, 15) + "…" : label;
+            });
 
         let ticks = 0;
         sim.on("tick", () => {

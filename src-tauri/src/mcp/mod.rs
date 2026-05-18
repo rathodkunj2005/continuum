@@ -2632,10 +2632,11 @@ async fn run_fndr_namespace_search(
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
     let started = std::time::Instant::now();
-    let args: FndrSearchToolArgs = serde_json::from_value(arguments).map_err(|err| JsonRpcError {
-        code: -32602,
-        message: format!("Invalid fndr.search args: {err}"),
-    })?;
+    let args: FndrSearchToolArgs =
+        serde_json::from_value(arguments).map_err(|err| JsonRpcError {
+            code: -32602,
+            message: format!("Invalid fndr.search args: {err}"),
+        })?;
     let answer = crate::context_runtime::run_query(
         &app_state,
         &args.query,
@@ -2648,7 +2649,9 @@ async fn run_fndr_namespace_search(
         "fndr.mcp.search.ms",
         started.elapsed().as_millis() as u64,
     );
-    Ok(tool_success(serde_json::to_value(&answer).unwrap_or_default()))
+    Ok(tool_success(
+        serde_json::to_value(&answer).unwrap_or_default(),
+    ))
 }
 
 async fn run_fndr_namespace_answer(
@@ -2656,10 +2659,11 @@ async fn run_fndr_namespace_answer(
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
     let started = std::time::Instant::now();
-    let args: FndrSearchToolArgs = serde_json::from_value(arguments).map_err(|err| JsonRpcError {
-        code: -32602,
-        message: format!("Invalid fndr.answer args: {err}"),
-    })?;
+    let args: FndrSearchToolArgs =
+        serde_json::from_value(arguments).map_err(|err| JsonRpcError {
+            code: -32602,
+            message: format!("Invalid fndr.answer args: {err}"),
+        })?;
     let answer = crate::context_runtime::run_query(
         &app_state,
         &args.query,
@@ -2672,7 +2676,9 @@ async fn run_fndr_namespace_answer(
         "fndr.mcp.answer.ms",
         started.elapsed().as_millis() as u64,
     );
-    Ok(tool_success(serde_json::to_value(&answer).unwrap_or_default()))
+    Ok(tool_success(
+        serde_json::to_value(&answer).unwrap_or_default(),
+    ))
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -2691,10 +2697,11 @@ async fn run_fndr_namespace_build_context_pack(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrBuildContextPackArgs = serde_json::from_value(arguments).map_err(|err| JsonRpcError {
-        code: -32602,
-        message: format!("Invalid fndr.build_context_pack args: {err}"),
-    })?;
+    let args: FndrBuildContextPackArgs =
+        serde_json::from_value(arguments).map_err(|err| JsonRpcError {
+            code: -32602,
+            message: format!("Invalid fndr.build_context_pack args: {err}"),
+        })?;
     let request = crate::context_runtime::ContextRequest {
         query: args.query,
         session_id: args.session_id,
@@ -2706,7 +2713,9 @@ async fn run_fndr_namespace_build_context_pack(
     let pack = crate::context_runtime::build_context_pack(&app_state, request)
         .await
         .map_err(internal_tool_error)?;
-    Ok(tool_success(serde_json::to_value(&pack).unwrap_or_default()))
+    Ok(tool_success(
+        serde_json::to_value(&pack).unwrap_or_default(),
+    ))
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -2790,11 +2799,13 @@ async fn run_fndr_namespace_timeline(
         .map_err(internal_tool_error)?;
     let entries: Vec<_> = events
         .into_iter()
-        .map(|e| json!({
-            "memory_id": e.memory_id,
-            "timestamp": e.end_time,
-            "title": e.title,
-        }))
+        .map(|e| {
+            json!({
+                "memory_id": e.memory_id,
+                "timestamp": e.end_time,
+                "title": e.title,
+            })
+        })
         .collect();
     Ok(tool_success(json!({ "entries": entries })))
 }
@@ -2817,10 +2828,11 @@ async fn run_fndr_namespace_open_target(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrOpenTargetArgs = serde_json::from_value(arguments).map_err(|err| JsonRpcError {
-        code: -32602,
-        message: format!("Invalid fndr.open_target args: {err}"),
-    })?;
+    let args: FndrOpenTargetArgs =
+        serde_json::from_value(arguments).map_err(|err| JsonRpcError {
+            code: -32602,
+            message: format!("Invalid fndr.open_target args: {err}"),
+        })?;
     let Some(record) = app_state
         .store
         .get_memory_by_id(&args.memory_id)
@@ -3291,8 +3303,8 @@ async fn run_agent_rate_result(
     app_state: Arc<AppState>,
     args: RateResultRequest,
 ) -> Result<Value, JsonRpcError> {
-    let feedback = append_feedback(app_state.app_data_dir.as_path(), args)
-        .map_err(internal_tool_error)?;
+    let feedback =
+        append_feedback(app_state.app_data_dir.as_path(), args).map_err(internal_tool_error)?;
     Ok(tool_success(json!({
         "feedback": feedback,
         "ranking_mutated": false,

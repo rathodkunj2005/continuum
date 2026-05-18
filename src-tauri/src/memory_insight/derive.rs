@@ -85,9 +85,8 @@ fn coherent_what_happened_from_metadata(record: &MemoryRecord) -> String {
         .map(|s| s.as_str())
         .collect();
 
-    let win_is_meaningful = !win.is_empty()
-        && win.to_ascii_lowercase() != app.to_ascii_lowercase()
-        && win.len() <= 120;
+    let win_is_meaningful =
+        !win.is_empty() && win.to_ascii_lowercase() != app.to_ascii_lowercase() && win.len() <= 120;
 
     // Preferred shape: "You {intent} {window_title}" — concrete, specific,
     // does NOT mention the app name (the app chip already shows that).
@@ -140,10 +139,16 @@ fn coherent_why_mattered_from_metadata(record: &MemoryRecord) -> String {
         return d.chars().take(MAX_WHY_CHARS).collect();
     }
     if let Some(e) = record.errors.iter().find(|s| !s.trim().is_empty()) {
-        return format!("Encountered error: {}", e.chars().take(MAX_WHY_CHARS - 20).collect::<String>());
+        return format!(
+            "Encountered error: {}",
+            e.chars().take(MAX_WHY_CHARS - 20).collect::<String>()
+        );
     }
     if let Some(b) = record.blockers.iter().find(|s| !s.trim().is_empty()) {
-        return format!("Blocked on: {}", b.chars().take(MAX_WHY_CHARS - 12).collect::<String>());
+        return format!(
+            "Blocked on: {}",
+            b.chars().take(MAX_WHY_CHARS - 12).collect::<String>()
+        );
     }
 
     // Use memory_context first sentence ONLY if it's a real narrative
@@ -176,7 +181,11 @@ fn coherent_why_mattered_from_metadata(record: &MemoryRecord) -> String {
     if !entities.is_empty() {
         let activity = record.activity_type.trim();
         if !activity.is_empty() && activity != "unknown" {
-            return format!("{} involving {}.", capitalize_first(activity), entities.join(", "));
+            return format!(
+                "{} involving {}.",
+                capitalize_first(activity),
+                entities.join(", ")
+            );
         }
     }
 
@@ -325,16 +334,28 @@ fn apply_fluff_strip(record: &mut MemoryRecord) {
     let project = record.project.clone();
 
     if !record.insight_what_happened.is_empty() {
-        record.insight_what_happened =
-            crate::memory_insight::fluff::strip_fluff(&record.insight_what_happened, &app, &project, &domain);
+        record.insight_what_happened = crate::memory_insight::fluff::strip_fluff(
+            &record.insight_what_happened,
+            &app,
+            &project,
+            &domain,
+        );
     }
     if !record.insight_why_mattered.is_empty() {
-        record.insight_why_mattered =
-            crate::memory_insight::fluff::strip_fluff(&record.insight_why_mattered, &app, &project, &domain);
+        record.insight_why_mattered = crate::memory_insight::fluff::strip_fluff(
+            &record.insight_why_mattered,
+            &app,
+            &project,
+            &domain,
+        );
     }
     if !record.insight_what_changed.is_empty() {
-        record.insight_what_changed =
-            crate::memory_insight::fluff::strip_fluff(&record.insight_what_changed, &app, &project, &domain);
+        record.insight_what_changed = crate::memory_insight::fluff::strip_fluff(
+            &record.insight_what_changed,
+            &app,
+            &project,
+            &domain,
+        );
     }
 }
 
@@ -351,12 +372,20 @@ mod tests {
 
     #[test]
     fn is_template_catches_filename_patterns() {
-        assert!(is_template_summary("Screen capture (visual): Claude_1778938598807.png. Claude"));
+        assert!(is_template_summary(
+            "Screen capture (visual): Claude_1778938598807.png. Claude"
+        ));
         assert!(is_template_summary("Captured recent activity at 08:30 AM"));
-        assert!(is_template_summary("URL-only surface capture for x.com at 12:00 PM"));
+        assert!(is_template_summary(
+            "URL-only surface capture for x.com at 12:00 PM"
+        ));
         assert!(is_template_summary(""));
-        assert!(!is_template_summary("You watched the IPL match on Willow TV"));
-        assert!(!is_template_summary("Reviewed authentication PR for security correctness"));
+        assert!(!is_template_summary(
+            "You watched the IPL match on Willow TV"
+        ));
+        assert!(!is_template_summary(
+            "Reviewed authentication PR for security correctness"
+        ));
     }
 
     #[test]
@@ -372,7 +401,9 @@ mod tests {
             r.insight_what_happened
         );
         assert!(
-            !r.insight_what_happened.to_lowercase().contains("screen capture"),
+            !r.insight_what_happened
+                .to_lowercase()
+                .contains("screen capture"),
             "template leaked: {}",
             r.insight_what_happened
         );
@@ -422,7 +453,11 @@ mod tests {
         r.clean_text = "irrelevant noisy OCR text that shouldnt appear in why_mattered".to_string();
         r.decisions = vec!["Switched to JWT for stateless auth".to_string()];
         derive_insight_for_record(&mut r);
-        assert!(r.insight_why_mattered.contains("JWT"), "got: {}", r.insight_why_mattered);
+        assert!(
+            r.insight_why_mattered.contains("JWT"),
+            "got: {}",
+            r.insight_why_mattered
+        );
     }
 
     #[test]
@@ -468,12 +503,15 @@ mod tests {
         let mut r = base();
         r.app_name = "Google Chrome".to_string();
         // LLM produced fluff-heavy output with repeated app name
-        r.insight_what_happened =
-            "Google Chrome — Google Chrome news article on AI".to_string();
+        r.insight_what_happened = "Google Chrome — Google Chrome news article on AI".to_string();
         derive_insight_for_record(&mut r);
         // App name should appear at most once
         let count = r.insight_what_happened.matches("Google Chrome").count();
-        assert_eq!(count, 1, "expected one app mention, got: {}", r.insight_what_happened);
+        assert_eq!(
+            count, 1,
+            "expected one app mention, got: {}",
+            r.insight_what_happened
+        );
     }
 
     #[test]
@@ -482,7 +520,9 @@ mod tests {
         r.insight_what_happened = "the user is debugging a Rust borrow error".to_string();
         derive_insight_for_record(&mut r);
         assert!(
-            !r.insight_what_happened.to_lowercase().starts_with("the user"),
+            !r.insight_what_happened
+                .to_lowercase()
+                .starts_with("the user"),
             "the user prefix leaked: {}",
             r.insight_what_happened
         );

@@ -3073,10 +3073,7 @@ pub async fn run_query(
                 evidence,
                 cards,
                 verify_outcome: outcome,
-                surfacing_reasons: fused
-                    .iter()
-                    .map(|h| h.surfacing_reason.clone())
-                    .collect(),
+                surfacing_reasons: fused.iter().map(|h| h.surfacing_reason.clone()).collect(),
             }
         }
         ComposeMode::Answer => {

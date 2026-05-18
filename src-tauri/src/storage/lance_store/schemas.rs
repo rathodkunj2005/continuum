@@ -570,10 +570,7 @@ pub fn memories_v3_schema() -> Schema {
         Field::new("raw_screenshot_stored", DataType::Boolean, false),
         Field::new(
             "embedding",
-            DataType::FixedSizeList(
-                Arc::new(Field::new("item", DataType::Float32, true)),
-                256,
-            ),
+            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), 256),
             false,
         ),
         Field::new("content_hash", DataType::Utf8, false),

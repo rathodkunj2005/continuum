@@ -15,8 +15,9 @@ import {
 import "./MemoryCardsPanel.css";
 import { InsightLayers } from "./InsightLayers";
 import { KnowledgeGraph } from "./KnowledgeGraph";
-import { SurfacingReason } from "./SurfacingReason";
 import { GRAPH_SIM_MAX_TICKS, useGraph } from "./useGraph";
+import { MemoryCard as MemoryCardComponent } from "./MemoryCard";
+import { ExpandedMemoryCard } from "./ExpandedMemoryCard";
 
 const VAULT_BROWSE_STORAGE_KEY = "fndr.memoryVault.browseMode";
 
@@ -90,62 +91,6 @@ function normalizeText(value: string | undefined | null): string {
         .trim();
 }
 
-function hasReadableCharacters(value: string): boolean {
-    return /[\p{L}\p{N}]/u.test(value);
-}
-
-function pickReadable(...candidates: Array<string | undefined | null>): string {
-    for (const candidate of candidates) {
-        const cleaned = normalizeText(candidate);
-        if (cleaned && hasReadableCharacters(cleaned)) {
-            return cleaned;
-        }
-    }
-    return "";
-}
-
-function fallbackTitle(card: MemoryCard): string {
-    const windowTitle = normalizeText(card.window_title);
-    const title = normalizeText(card.title);
-    const lowerWindow = windowTitle.toLowerCase();
-    const lowerApp = card.app_name.toLowerCase();
-    const genericWindow = !windowTitle
-        || lowerWindow === lowerApp
-        || includesAny(lowerWindow, ["new tab", "dashboard", "home", "settings"]);
-
-    if (!genericWindow && (title.endsWith("...") || !title)) {
-        return windowTitle;
-    }
-
-    return pickReadable(card.title, card.window_title)
-        || `Memory in ${card.app_name}`;
-}
-
-function fallbackSummary(card: MemoryCard): string {
-    const raw = pickReadable(card.summary, card.raw_snippets[0], card.window_title)
-        || `Captured context in ${card.app_name}.`;
-    return raw
-        .replace(/^\s*(then|and then|after that|next)\s*[,:-]?\s+/i, "")
-        .replace(/\.\s*(then|and then|after that|next)\s+/gi, ". ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-function includesAny(haystack: string, needles: string[]): boolean {
-    return needles.some((needle) => haystack.includes(needle));
-}
-
-function getActivityIcon(activityType?: string): string {
-    switch (activityType) {
-        case "coding": return "💻";
-        case "browsing": return "🌐";
-        case "communication": return "💬";
-        case "docs": return "📝";
-        case "design": return "🎨";
-        default: return "";
-    }
-}
-
 function matchesFilters(
     card: MemoryCard,
     timeFilter: TimeFilter,
@@ -205,36 +150,6 @@ function matchesFilters(
     return true;
 }
 
-function isContinuityCard(card: MemoryCard): boolean {
-    return Boolean(card.continuity) || card.source_count > 1 || Boolean(card.continuation_of);
-}
-
-const MEMORY_BODY_TRUNCATE_CHARS = 360;
-
-function memoryBodyText(card: MemoryCard): string {
-    const raw = normalizeText(card.internal_context) || fallbackSummary(card);
-    return raw
-        .replace(/^Continues from\s+\S+(?::[^\n]*)?\n?/m, "")
-        .replace(/^Reopen:\s+\S+\s*\n?/m, "")
-        .trim();
-}
-
-function cardCopy(
-    card: MemoryCard
-): {
-    title: string;
-    summary: string;
-    body: string;
-    continuity: boolean;
-} {
-    const title = fallbackTitle(card);
-    const continuity = isContinuityCard(card);
-    const summary = fallbackSummary(card);
-    const body = memoryBodyText(card) || summary;
-
-    return { title, summary, body, continuity };
-}
-
 async function handleReopen(memoryId: string) {
     try {
         const opened = await reopenMemory(memoryId);
@@ -244,25 +159,6 @@ async function handleReopen(memoryId: string) {
     } catch (err) {
         console.warn("Reopen command failed", err);
     }
-}
-
-function formatDay(timestamp: number): string {
-    const date = new Date(timestamp);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-        return "Today";
-    }
-    if (date.toDateString() === yesterday.toDateString()) {
-        return "Yesterday";
-    }
-    return date.toLocaleDateString(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-    });
 }
 
 export function MemoryCardsPanel({
@@ -313,14 +209,15 @@ export function MemoryCardsPanel({
     const [perspectiveFilter, setPerspectiveFilter] = useState<PerspectiveFilter>(PERSPECTIVE_FILTER_ALL);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [openDebugIds, setOpenDebugIds] = useState<Set<string>>(new Set());
-    const [debugById, setDebugById] = useState<Record<string, MemoryDebugInspector>>({});
-    const [debugLoadingId, setDebugLoadingId] = useState<string | null>(null);
+    const [debugById, setDebugById] = useState<Record<string, MemoryDebugInspector | null>>({});
+    const [, setDebugLoadingId] = useState<string | null>(null);
     // Image-to-image (CLIP) similar-screens state, keyed by seed card id.
     const [openSimilarIds, setOpenSimilarIds] = useState<Set<string>>(new Set());
     const [similarById, setSimilarById] = useState<Record<string, SearchResult[]>>({});
-    const [similarLoadingId, setSimilarLoadingId] = useState<string | null>(null);
+    const [, setSimilarLoadingId] = useState<string | null>(null);
     const [similarErrorById, setSimilarErrorById] = useState<Record<string, string>>({});
-    const [expandedBodyIds, setExpandedBodyIds] = useState<Set<string>>(new Set());
+    /** Currently-expanded card id (one modal at a time). */
+    const [openExpandedId, setOpenExpandedId] = useState<string | null>(null);
 
     const isVaultFeature = feature === "vault";
     const isGraphFeature = feature === "graph";
@@ -348,18 +245,6 @@ export function MemoryCardsPanel({
             /* ignore */
         }
     }, [browseMode, feature]);
-
-    const toggleExpandedBody = (memoryId: string) => {
-        setExpandedBodyIds((previous) => {
-            const next = new Set(previous);
-            if (next.has(memoryId)) {
-                next.delete(memoryId);
-            } else {
-                next.add(memoryId);
-            }
-            return next;
-        });
-    };
 
     const selectableApps = useMemo(() => {
         return appNames
@@ -459,16 +344,6 @@ export function MemoryCardsPanel({
             setGraphNodeFilter("");
         }
     }, [isVisible]);
-
-    const memoryIdsInGraph = useMemo(() => {
-        const next = new Set<string>();
-        for (const n of subgraph?.nodes ?? []) {
-            for (const mid of n.source_memory_ids ?? []) {
-                next.add(mid);
-            }
-        }
-        return next;
-    }, [subgraph]);
 
     const filteredGraphNodes = useMemo(() => {
         const q = graphNodeFilter.trim().toLowerCase();
@@ -608,8 +483,10 @@ export function MemoryCardsPanel({
                     ...previous,
                     [memoryId]: debug,
                 }));
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Unable to load memory debug details.");
+            } catch {
+                // Debug details are optional — don't surface as a panel-level error.
+                // The expanded modal will simply show no debug section.
+                setDebugById((previous) => ({ ...previous, [memoryId]: null }));
             } finally {
                 setDebugLoadingId(null);
             }
@@ -986,210 +863,18 @@ export function MemoryCardsPanel({
 
                 {filteredCards.length > 0 && (
                     <div className="memory-cards-stream">
-                        {filteredCards.slice(0, MAX_RENDERED_CARDS).map((card) => {
-                            const { body } = cardCopy(card);
-                            const expanded = expandedBodyIds.has(card.id);
-                            const truncated = body.length > MEMORY_BODY_TRUNCATE_CHARS;
-                            const displayBody = !expanded && truncated
-                                ? `${body.slice(0, MEMORY_BODY_TRUNCATE_CHARS).trimEnd()}…`
-                                : body;
-                            const reopenTarget = card.reopen_target?.trim();
-                            const continuationId = card.continuation_of?.trim();
-
-                            return (
-                                <article
-                                    key={card.id}
-                                    id={`memory-card-${card.id}`}
-                                    className="result-card memory-browse-card"
-                                >
-                                    <div className="result-meta memory-browse-meta">
-                                        <div className="memory-browse-meta-main">
-                                            <span className="result-app">
-                                                {getActivityIcon(card.activity_type) && (
-                                                    <span className="memory-activity-icon" title={card.activity_type}>
-                                                        {getActivityIcon(card.activity_type)}
-                                                    </span>
-                                                )}
-                                                {card.app_name}
-                                            </span>
-                                            <span className="result-time">
-                                                {formatDay(card.timestamp)} ·{" "}
-                                                {new Date(card.timestamp).toLocaleTimeString(undefined, {
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                })}
-                                            </span>
-                                            {card.source_count > 1 && (
-                                                <span className="memory-source-count" title={`Composed from ${card.source_count} captures`}>
-                                                    {card.source_count} captures
-                                                </span>
-                                            )}
-                                            {card.session_duration_mins !== undefined && card.session_duration_mins > 0 && (
-                                                <span className="memory-duration" title="Session duration">
-                                                    {card.session_duration_mins}m
-                                                </span>
-                                            )}
-                                            {card.timeline_action_class &&
-                                                card.timeline_action_class !== "other" && (
-                                                    <span
-                                                        className="memory-action-class-chip"
-                                                        title="Timeline action (content-derived)"
-                                                    >
-                                                        {card.timeline_action_class}
-                                                    </span>
-                                                )}
-                                            {((!isVaultFeature && memoryIdsInGraph.has(card.id)) || (card.insight_kg_node_count ?? 0) > 0) && (
-                                                <span
-                                                    className="memory-graph-badge"
-                                                    title="Referenced by at least one insight graph entity"
-                                                >
-                                                    Graph
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="memory-card-actions">
-                                            <button
-                                                className="ui-action-btn memory-delete-btn"
-                                                onClick={(e) => { e.stopPropagation(); void handleToggleDebug(card.id); }}
-                                                disabled={debugLoadingId === card.id}
-                                                aria-label="Toggle memory debug details"
-                                                title="Inspect memory debug data"
-                                            >
-                                                {debugLoadingId === card.id ? "Loading..." : openDebugIds.has(card.id) ? "Hide Debug" : "Debug"}
-                                            </button>
-                                            <button
-                                                className="ui-action-btn memory-delete-btn"
-                                                onClick={(e) => { e.stopPropagation(); void handleToggleVisuallySimilar(card.id); }}
-                                                disabled={similarLoadingId === card.id}
-                                                aria-label="Find visually similar screens"
-                                                title="Find visually similar screens (CLIP image embedding)"
-                                            >
-                                                {similarLoadingId === card.id
-                                                    ? "Loading..."
-                                                    : openSimilarIds.has(card.id)
-                                                        ? "Hide similar"
-                                                        : "Find similar"}
-                                            </button>
-                                            <button
-                                                className="ui-action-btn memory-delete-btn"
-                                                onClick={(e) => { e.stopPropagation(); void handleDeleteCard(card.id); }}
-                                                disabled={deletingId === card.id}
-                                                aria-label="Delete memory card"
-                                                title="Delete this memory"
-                                            >
-                                                {deletingId === card.id ? "Deleting..." : "Delete"}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="memory-browse-content">
-                                        {card.surfacing_reason && (
-                                            <SurfacingReason reason={card.surfacing_reason} />
-                                        )}
-                                        <div className="memory-browse-summary memory-browse-summary-primary">
-                                            {displayBody}
-                                            {truncated && (
-                                                <button
-                                                    type="button"
-                                                    className="memory-body-expand"
-                                                    onClick={() => toggleExpandedBody(card.id)}
-                                                >
-                                                    {expanded ? "Show less" : "Show more"}
-                                                </button>
-                                            )}
-                                        </div>
-                                        {(reopenTarget || continuationId) && (
-                                            <div className="memory-browse-affordances">
-                                                {reopenTarget && (
-                                                    <button
-                                                        type="button"
-                                                        className="memory-reopen-anchor"
-                                                        onClick={() => { void handleReopen(card.id); }}
-                                                        title={reopenTarget}
-                                                    >
-                                                        Reopen
-                                                    </button>
-                                                )}
-                                                {continuationId && (
-                                                    <span
-                                                        className="memory-continuation-chip"
-                                                        title={`Continues from ${continuationId}`}
-                                                    >
-                                                        Continues from earlier capture
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                        {card.files_touched && card.files_touched.length > 0 && (
-                                            <div className="memory-browse-files">
-                                                {card.files_touched.slice(0, 4).map((f) => (
-                                                    <span key={f} className="memory-file-chip" title={f}>{f}</span>
-                                                ))}
-                                            </div>
-                                        )}
-                                        <InsightLayers
-                                            card={card}
-                                            evalUi={openDebugIds.has(card.id)}
-                                        />
-                                        {openDebugIds.has(card.id) && (
-                                            <div className="memory-debug-drawer">
-                                                <pre>
-{JSON.stringify(debugById[card.id] ?? { memory_id: card.id, status: "loading" }, null, 2)}
-                                                </pre>
-                                            </div>
-                                        )}
-                                        {openSimilarIds.has(card.id) && (
-                                            <div className="memory-similar-drawer">
-                                                <div className="memory-similar-heading">
-                                                    Visually similar screens
-                                                </div>
-                                                {similarErrorById[card.id] && (
-                                                    <p
-                                                        className="memory-similar-empty"
-                                                        role="alert"
-                                                    >
-                                                        {similarErrorById[card.id]}
-                                                    </p>
-                                                )}
-                                                {!similarErrorById[card.id]
-                                                    && (similarById[card.id]?.length ?? 0) === 0 && (
-                                                        <p className="memory-similar-empty">
-                                                            No visually similar screens yet. Older
-                                                            captures may pre-date the CLIP image
-                                                            embedding wiring.
-                                                        </p>
-                                                    )}
-                                                {!similarErrorById[card.id]
-                                                    && (similarById[card.id]?.length ?? 0) > 0 && (
-                                                        <ul className="memory-similar-list">
-                                                            {similarById[card.id]!.map((hit) => (
-                                                                <li
-                                                                    key={hit.id}
-                                                                    className="memory-similar-item"
-                                                                >
-                                                                    <div className="memory-similar-meta">
-                                                                        <span className="memory-similar-app">
-                                                                            {hit.app_name}
-                                                                        </span>
-                                                                        <span className="memory-similar-time">
-                                                                            {new Date(hit.timestamp).toLocaleString()}
-                                                                        </span>
-                                                                        <span className="memory-similar-score">
-                                                                            {(hit.score * 100).toFixed(0)}%
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="memory-similar-title">
-                                                                        {hit.window_title || hit.snippet || hit.text.slice(0, 120)}
-                                                                    </div>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </article>
-                            );
-                        })}
+                        {filteredCards.slice(0, MAX_RENDERED_CARDS).map((card) => (
+                            <MemoryCardComponent
+                                key={card.id}
+                                card={card}
+                                variant="compact"
+                                onOpen={(c) => {
+                                    setOpenExpandedId(c.id);
+                                    void handleToggleDebug(c.id);
+                                }}
+                                threadCountHint={card.insight_kg_node_count}
+                            />
+                        ))}
                     </div>
                 )}
                 </>
@@ -1222,7 +907,7 @@ export function MemoryCardsPanel({
                         {(subgraph?.nodes?.length ?? 0) > 0 && (
                             <div className="memory-graph-stage">
                                 <KnowledgeGraph
-                                    height={420}
+                                    height="100%"
                                     maxSimulationTicks={GRAPH_SIM_MAX_TICKS}
                                     nodes={vizGraphNodes}
                                     edges={filteredGraphEdges}
@@ -1316,6 +1001,90 @@ export function MemoryCardsPanel({
                     </div>
                 )}
             </div>
+
+            {(() => {
+                if (!openExpandedId) return null;
+                const expandedCard = cards.find((c) => c.id === openExpandedId);
+                if (!expandedCard) return null;
+                const debugOpen = openDebugIds.has(expandedCard.id);
+                const similarOpen = openSimilarIds.has(expandedCard.id);
+                const debugSlot = debugOpen ? (
+                    <div className="memory-debug-drawer">
+                        <pre>
+{JSON.stringify(
+    debugById[expandedCard.id] ?? { memory_id: expandedCard.id, status: "loading" },
+    null,
+    2,
+)}
+                        </pre>
+                    </div>
+                ) : null;
+                const similarSlot = similarOpen ? (
+                    <div className="memory-similar-drawer">
+                        <div className="memory-similar-heading">Visually similar screens</div>
+                        {similarErrorById[expandedCard.id] && (
+                            <p className="memory-similar-empty" role="alert">
+                                {similarErrorById[expandedCard.id]}
+                            </p>
+                        )}
+                        {!similarErrorById[expandedCard.id]
+                            && (similarById[expandedCard.id]?.length ?? 0) === 0 && (
+                                <p className="memory-similar-empty">
+                                    No visually similar screens yet. Older captures may pre-date
+                                    the CLIP image embedding wiring.
+                                </p>
+                            )}
+                        {!similarErrorById[expandedCard.id]
+                            && (similarById[expandedCard.id]?.length ?? 0) > 0 && (
+                                <ul className="memory-similar-list">
+                                    {similarById[expandedCard.id]!.map((hit) => (
+                                        <li key={hit.id} className="memory-similar-item">
+                                            <div className="memory-similar-meta">
+                                                <span className="memory-similar-app">{hit.app_name}</span>
+                                                <span className="memory-similar-time">
+                                                    {new Date(hit.timestamp).toLocaleString()}
+                                                </span>
+                                                <span className="memory-similar-score">
+                                                    {(hit.score * 100).toFixed(0)}%
+                                                </span>
+                                            </div>
+                                            <div className="memory-similar-title">
+                                                {hit.window_title || hit.snippet || hit.text.slice(0, 120)}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                    </div>
+                ) : null;
+                return (
+                    <ExpandedMemoryCard
+                        card={expandedCard}
+                        insightsSlot={
+                            <>
+                                <InsightLayers card={expandedCard} evalUi={debugOpen} />
+                                <div className="fndr-emc-extra-actions">
+                                    <button
+                                        type="button"
+                                        className="ui-action-btn"
+                                        onClick={() => void handleToggleVisuallySimilar(expandedCard.id)}
+                                    >
+                                        {similarOpen ? "Hide similar" : "Find similar screens"}
+                                    </button>
+                                </div>
+                            </>
+                        }
+                        debugSlot={debugSlot}
+                        similarSlot={similarSlot}
+                        onClose={() => setOpenExpandedId(null)}
+                        onDelete={(id) => {
+                            void handleDeleteCard(id);
+                            setOpenExpandedId(null);
+                        }}
+                        onReopen={(c) => void handleReopen(c.id)}
+                    />
+                );
+            })()}
         </div>
     );
 }

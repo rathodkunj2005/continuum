@@ -1067,7 +1067,14 @@ pub(super) fn extract_str_list(col: &Option<arrow_array::ListArray>, i: usize) -
             .cloned()
         {
             return (0..values.len())
-                .map(|j| values.value(j).to_string())
+                .filter_map(|j| {
+                    let value = values.value(j).trim();
+                    if value.is_empty() {
+                        None
+                    } else {
+                        Some(value.to_string())
+                    }
+                })
                 .collect();
         }
     }

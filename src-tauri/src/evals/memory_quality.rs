@@ -140,10 +140,7 @@ fn parse_judge_output(raw: &str) -> (f32, String) {
 
 /// Run one synthetic capture through the pipeline and judge it.
 /// Pure function — does not touch storage or capture loops.
-pub async fn evaluate_capture(
-    engine: &InferenceEngine,
-    capture: &SyntheticCapture,
-) -> EvalResult {
+pub async fn evaluate_capture(engine: &InferenceEngine, capture: &SyntheticCapture) -> EvalResult {
     use crate::inference::insight_from_ocr_only;
     use crate::memory_insight::derive_insight_for_record;
     use crate::storage::MemoryRecord;
@@ -213,10 +210,7 @@ pub async fn evaluate_capture(
             &record.insight_what_happened,
             &capture.app_name,
         ),
-        what_happened_word_count: record
-            .insight_what_happened
-            .split_whitespace()
-            .count(),
+        what_happened_word_count: record.insight_what_happened.split_whitespace().count(),
     }
 }
 
@@ -226,7 +220,8 @@ mod tests {
 
     #[test]
     fn parse_judge_output_extracts_score_and_reason() {
-        let (s, r) = parse_judge_output("score: 0.85 | reason: specific named artifact and clear outcome.");
+        let (s, r) =
+            parse_judge_output("score: 0.85 | reason: specific named artifact and clear outcome.");
         assert!((s - 0.85).abs() < 1e-3, "got {s}");
         assert!(r.contains("specific"), "got: {r}");
     }
@@ -255,7 +250,9 @@ mod tests {
 
     #[test]
     fn has_filename_pattern_detects_timestamped_png() {
-        assert!(has_filename_pattern("Screen capture (visual): Claude_1778938598807.png"));
+        assert!(has_filename_pattern(
+            "Screen capture (visual): Claude_1778938598807.png"
+        ));
         assert!(!has_filename_pattern("You reviewed the PR"));
     }
 

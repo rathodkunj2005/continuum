@@ -129,7 +129,10 @@ pub fn append_skill_draft(app_data_dir: &Path, draft: &AgentSkillCandidate) -> R
     Ok(())
 }
 
-pub fn list_skill_drafts(app_data_dir: &Path, limit: usize) -> Result<Vec<AgentSkillCandidate>, String> {
+pub fn list_skill_drafts(
+    app_data_dir: &Path,
+    limit: usize,
+) -> Result<Vec<AgentSkillCandidate>, String> {
     let path = agent_dir(app_data_dir).join(SKILL_DRAFTS_FILE);
     if !path.exists() {
         return Ok(Vec::new());
@@ -142,7 +145,9 @@ pub fn list_skill_drafts(app_data_dir: &Path, limit: usize) -> Result<Vec<AgentS
         if line.trim().is_empty() {
             continue;
         }
-        rows.push(serde_json::from_str::<AgentSkillCandidate>(&line).map_err(|err| err.to_string())?);
+        rows.push(
+            serde_json::from_str::<AgentSkillCandidate>(&line).map_err(|err| err.to_string())?,
+        );
     }
     rows.reverse();
     if limit > 0 && rows.len() > limit {
@@ -158,9 +163,15 @@ fn infer_category(goal: &str, output: &str) -> AgentSkillCategory {
         .any(|term| text.contains(term))
     {
         AgentSkillCategory::Development
-    } else if ["write", "draft", "status", "update"].iter().any(|term| text.contains(term)) {
+    } else if ["write", "draft", "status", "update"]
+        .iter()
+        .any(|term| text.contains(term))
+    {
         AgentSkillCategory::Writing
-    } else if ["research", "find", "compare"].iter().any(|term| text.contains(term)) {
+    } else if ["research", "find", "compare"]
+        .iter()
+        .any(|term| text.contains(term))
+    {
         AgentSkillCategory::Research
     } else {
         AgentSkillCategory::Other

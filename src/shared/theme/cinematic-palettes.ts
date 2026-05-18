@@ -8,6 +8,10 @@ export interface CinematicPalette {
     shades: [string, string, string, string, string, string, string];
     dark: PaletteTokens;
     light: PaletteTokens;
+    aurora: {
+        dark:  { bg: [number, number, number]; mid: [number, number, number]; acc: [number, number, number] };
+        light: { bg: [number, number, number]; mid: [number, number, number]; acc: [number, number, number] };
+    };
 }
 
 interface PaletteTokens {
@@ -57,6 +61,10 @@ export const PALETTES = {
             accentMuted: "#c4621e",
             accentSubtle: "#e8dfc8",
         },
+        aurora: {
+            dark:  { bg: [0.102, 0.078, 0.063], mid: [0.769, 0.659, 0.471], acc: [0.831, 0.627, 0.290] },
+            light: { bg: [0.949, 0.918, 0.847], mid: [0.353, 0.290, 0.227], acc: [0.639, 0.353, 0.118] },
+        },
     },
     matrix: {
         name: "The Matrix",
@@ -89,6 +97,10 @@ export const PALETTES = {
             accent: "#1a7a1a",
             accentMuted: "#2d9a2d",
             accentSubtle: "#e8f8e8",
+        },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.302, 0.604, 0.302], acc: [0.000, 1.000, 0.255] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.200, 0.400, 0.200], acc: [0.102, 0.478, 0.102] },
         },
     },
     bladeRunner2049: {
@@ -123,6 +135,10 @@ export const PALETTES = {
             accentMuted: "#d48e20",
             accentSubtle: "#fdf5e6",
         },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.545, 0.412, 0.078], acc: [0.961, 0.651, 0.137] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.420, 0.314, 0.063], acc: [0.769, 0.478, 0.063] },
+        },
     },
     madMaxFuryRoad: {
         name: "Mad Max: Fury Road",
@@ -155,6 +171,10 @@ export const PALETTES = {
             accent: "#1a6a8a",
             accentMuted: "#2a7a9a",
             accentSubtle: "#e8f4f8",
+        },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.659, 0.471, 0.251], acc: [0.165, 0.604, 0.749] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.420, 0.247, 0.082], acc: [0.102, 0.416, 0.541] },
         },
     },
     her: {
@@ -189,6 +209,10 @@ export const PALETTES = {
             accentMuted: "#d84838",
             accentSubtle: "#fdf0ec",
         },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.659, 0.471, 0.376], acc: [0.910, 0.325, 0.247] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.420, 0.247, 0.180], acc: [0.753, 0.220, 0.157] },
+        },
     },
     moonlight: {
         name: "Moonlight",
@@ -221,6 +245,10 @@ export const PALETTES = {
             accent: "#c07820",
             accentMuted: "#d08830",
             accentSubtle: "#fdf8ef",
+        },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.145, 0.478, 0.541], acc: [0.910, 0.627, 0.251] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.102, 0.290, 0.353], acc: [0.753, 0.471, 0.125] },
         },
     },
     grandBudapestHotel: {
@@ -255,6 +283,10 @@ export const PALETTES = {
             accentMuted: "#c8a020",
             accentSubtle: "#fdfaed",
         },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.710, 0.141, 0.361], acc: [0.961, 0.784, 0.259] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.420, 0.188, 0.306], acc: [0.722, 0.565, 0.063] },
+        },
     },
     drive: {
         name: "Drive",
@@ -287,6 +319,10 @@ export const PALETTES = {
             accent: "#cc1058",
             accentMuted: "#e01a6a",
             accentSubtle: "#fff0f5",
+        },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.549, 0.063, 0.188], acc: [1.000, 0.176, 0.420] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.353, 0.039, 0.102], acc: [0.800, 0.063, 0.345] },
         },
     },
     amelie: {
@@ -321,6 +357,10 @@ export const PALETTES = {
             accentMuted: "#d8ac20",
             accentSubtle: "#fdf8e8",
         },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.302, 0.541, 0.302], acc: [0.961, 0.753, 0.157] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.180, 0.353, 0.188], acc: [0.784, 0.612, 0.094] },
+        },
     },
     noCountryForOldMen: {
         name: "No Country for Old Men",
@@ -353,6 +393,10 @@ export const PALETTES = {
             accent: "#a01818",
             accentMuted: "#b82020",
             accentSubtle: "#fdf4f4",
+        },
+        aurora: {
+            dark:  { bg: [0.000, 0.000, 0.000], mid: [0.549, 0.471, 0.345], acc: [0.769, 0.125, 0.125] },
+            light: { bg: [1.000, 1.000, 1.000], mid: [0.290, 0.227, 0.149], acc: [0.627, 0.094, 0.094] },
         },
     },
     fndrDark: {
@@ -387,6 +431,10 @@ export const PALETTES = {
             accentMuted: "#ffffff",
             accentSubtle: "rgba(255, 255, 255, 0.1)",
         },
+        aurora: {
+            dark:  { bg: [0.039, 0.039, 0.039], mid: [0.471, 0.471, 0.510], acc: [0.953, 0.953, 0.945] },
+            light: { bg: [0.039, 0.039, 0.039], mid: [0.471, 0.471, 0.510], acc: [0.953, 0.953, 0.945] },
+        },
     },
     fndrLight: {
         name: "Lumen",
@@ -420,12 +468,73 @@ export const PALETTES = {
             accentMuted: "#000000",
             accentSubtle: "rgba(0, 0, 0, 0.06)",
         },
+        aurora: {
+            dark:  { bg: [0.961, 0.961, 0.969], mid: [0.333, 0.333, 0.376], acc: [0.102, 0.102, 0.102] },
+            light: { bg: [0.961, 0.961, 0.969], mid: [0.333, 0.333, 0.376], acc: [0.102, 0.102, 0.102] },
+        },
     },
 } as const satisfies Record<string, CinematicPalette>;
 
 export type PaletteKey = keyof typeof PALETTES;
 
 const STYLE_TAG_ID = "cinematic-palette-vars";
+
+type RgbTriple = [number, number, number];
+
+/** Parse #rrggbb to linear 0–1 RGB for WebGL / CSS injection. */
+export function hexToRgb(hex: string): RgbTriple {
+    const h = hex.trim().replace("#", "");
+    const n = Number.parseInt(h, 16);
+    if (Number.isNaN(n) || h.length < 6) {
+        return [0, 0, 0];
+    }
+    return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+/** WCAG relative luminance for linear 0–1 RGB. */
+export function relativeLuminance(rgb: RgbTriple): number {
+    const lin = rgb.map((c) =>
+        c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+    ) as RgbTriple;
+    return lin[0] * 0.2126 + lin[1] * 0.7152 + lin[2] * 0.0722;
+}
+
+/** Mean of three linear RGB triples (cinematic swatches 1–3 void). */
+export function linearRgbMix3(a: RgbTriple, b: RgbTriple, c: RgbTriple): RgbTriple {
+    return [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
+}
+
+/** Exact cinematic swatch by index (0–6), same hex as the palette picker. */
+export function getPaletteShadeRgb(paletteKey: PaletteKey, index: number): RgbTriple {
+    const shades = PALETTES[paletteKey].shades;
+    const hex = shades[Math.max(0, Math.min(shades.length - 1, index))];
+    return hexToRgb(hex);
+}
+
+/** Readable ink for hero copy and OS chrome on the motion wallpaper. */
+export function getWallpaperInkColors(
+    paletteKey: PaletteKey,
+    mode: PaletteMode = "dark"
+): {
+    primary: string;
+    secondary: string;
+    fieldLuminance: number;
+} {
+    const palette = PALETTES[paletteKey];
+    const tokens = palette[mode];
+    const { bg } = getWallpaperAuroraColors(paletteKey, mode);
+    const anchorLum = relativeLuminance(bg);
+    return {
+        primary: tokens.textPrimary,
+        secondary: tokens.textSecondary,
+        fieldLuminance: anchorLum,
+    };
+}
+
+/** Wallpaper field triple: void + saturated primary glow. */
+export function getWallpaperFieldColors(paletteKey: PaletteKey, mode: PaletteMode = "dark") {
+    return getWallpaperAuroraColors(paletteKey, mode);
+}
 
 export function isPaletteKey(value: string | null): value is PaletteKey {
     return Boolean(value && value in PALETTES);
@@ -435,6 +544,8 @@ export function applyPalette(paletteKey: PaletteKey, mode: PaletteMode = "dark",
     const palette = PALETTES[paletteKey];
     const tokens = palette[mode];
     const [d1, d2, d3, d4, s1, s2, accent] = palette.shades;
+    const aurWall = getWallpaperAuroraColors(paletteKey, mode);
+    const wallInk = getWallpaperInkColors(paletteKey, mode);
 
     const css = `
 ${selector} {
@@ -458,6 +569,20 @@ ${selector} {
   --cp-accent-raw: ${accent};
   --cp-active-palette: "${paletteKey}";
   --cp-active-mode: "${mode}";
+  --cp-wall-text-primary: ${wallInk.primary};
+  --cp-wall-text-secondary: ${wallInk.secondary};
+  --cp-wall-bg: ${d1};
+  --cp-wall-mid: ${d4};
+  --cp-wall-acc: ${accent};
+  --cp-aurora-bg-r: ${aurWall.bg[0]};
+  --cp-aurora-bg-g: ${aurWall.bg[1]};
+  --cp-aurora-bg-b: ${aurWall.bg[2]};
+  --cp-aurora-mid-r: ${aurWall.mid[0]};
+  --cp-aurora-mid-g: ${aurWall.mid[1]};
+  --cp-aurora-mid-b: ${aurWall.mid[2]};
+  --cp-aurora-acc-r: ${aurWall.acc[0]};
+  --cp-aurora-acc-g: ${aurWall.acc[1]};
+  --cp-aurora-acc-b: ${aurWall.acc[2]};
 }`.trim();
 
     let tag = document.getElementById(STYLE_TAG_ID);
@@ -496,6 +621,35 @@ export function getPaletteTokens(paletteKey: PaletteKey, mode: PaletteMode = "da
         "--cp-secondary-1": s1,
         "--cp-secondary-2": s2,
         "--cp-accent-raw": accent,
+    };
+}
+
+export function getAuroraColors(
+    paletteKey: PaletteKey,
+    mode: PaletteMode
+): { bg: [number, number, number]; mid: [number, number, number]; acc: [number, number, number] } {
+    return PALETTES[paletteKey].aurora[mode];
+}
+
+/**
+ * Wallpaper shader triple — exact cinematic swatches (same hex as the picker):
+ *   void = mean(shades 1–3), fog = shade 4, pop = shade 7 (accent).
+ */
+export function getWallpaperAuroraColors(paletteKey: PaletteKey, mode: PaletteMode = "dark") {
+    const [d1, d2, d3, d4, , , accent] = PALETTES[paletteKey].shades;
+    const mid = hexToRgb(d4);
+    const acc = hexToRgb(accent);
+    if (mode === "light") {
+        return {
+            bg: hexToRgb(PALETTES[paletteKey].light.bg),
+            mid,
+            acc,
+        };
+    }
+    return {
+        bg: linearRgbMix3(hexToRgb(d1), hexToRgb(d2), hexToRgb(d3)),
+        mid,
+        acc,
     };
 }
 

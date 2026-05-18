@@ -145,8 +145,8 @@ pub async fn synthesize_vision_insight(
     engine: &crate::inference::InferenceEngine,
 ) -> SynthesizedVisionMemory {
     // Only synthesize when VLM produced real pixel-based content.
-    let has_content = !insight.summary_detailed.trim().is_empty()
-        || !insight.summary_short.trim().is_empty();
+    let has_content =
+        !insight.summary_detailed.trim().is_empty() || !insight.summary_short.trim().is_empty();
     let is_fallback = matches!(
         insight.model_id.as_str(),
         "ocr_only" | "llm_ocr_grounded" | ""
@@ -449,7 +449,13 @@ fn build_summary_from_entities(
 
     if !insight.entities.is_empty() {
         // Lead with top 2 entities
-        let entity_preview = insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(" & ");
+        let entity_preview = insight
+            .entities
+            .iter()
+            .take(2)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" & ");
         if let Some(wt) = window_title {
             let wt_snippet = wt.chars().take(50).collect::<String>();
             format!("{}: {} — {}", entity_preview, action_verb, wt_snippet)
@@ -484,7 +490,13 @@ fn build_semantic_narrative(
         if !wt_clean.is_empty() && wt_clean.len() <= 100 {
             // Window_title is the primary signal; extract entities from it and add summary
             if !insight.entities.is_empty() {
-                let entity_preview = insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+                let entity_preview = insight
+                    .entities
+                    .iter()
+                    .take(2)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 format!("{}. Involves: {}", wt_clean, entity_preview)
             } else {
                 // Just window_title, no extracted entities
@@ -505,9 +517,21 @@ fn build_semantic_narrative(
 /// Uses action verb extraction for richer, more semantic narratives.
 fn build_entity_first_narrative(insight: &ImageSemanticInsight) -> String {
     let entities_display = if !insight.entities.is_empty() {
-        insight.entities.iter().take(2).cloned().collect::<Vec<_>>().join(" + ")
+        insight
+            .entities
+            .iter()
+            .take(2)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" + ")
     } else if !insight.people_roles.is_empty() {
-        insight.people_roles.iter().take(1).cloned().collect::<Vec<_>>().join(", ")
+        insight
+            .people_roles
+            .iter()
+            .take(1)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
     } else {
         "Activity".to_string()
     };
@@ -1076,10 +1100,8 @@ impl MtmdVlmRuntime {
     fn load(app_data_dir: &Path) -> Result<Self, String> {
         // Load Qwen3-VL 2B — the single supported MTMD model.
         let (model_path, mmproj, model_family) = {
-            let qwen_model =
-                models::resolve_model(Some("qwen3-vl-2b"), Some(app_data_dir)).ok_or_else(
-                    || "No MTMD model found: install Qwen3-VL-2B".to_string(),
-                )?;
+            let qwen_model = models::resolve_model(Some("qwen3-vl-2b"), Some(app_data_dir))
+                .ok_or_else(|| "No MTMD model found: install Qwen3-VL-2B".to_string())?;
             if let Err(e) = models::validate_qwen3_vl_2b_main_gguf_file(&qwen_model.path) {
                 return Err(format!("Qwen3-VL-2B main GGUF invalid: {e}"));
             }

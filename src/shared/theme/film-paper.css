@@ -3,32 +3,114 @@
    The --cp-* vars (bg, accent, fg) come from applyPalette("film").
    Tokens here are brand atmospherics (halation, eases, fonts,
    font-family) and live in :root because they're palette-invariant.
+
+   Immersive design system tokens (--bg/--fg/--accent semantic vars
+   and the type/spacing scale) are scoped to .fndr-immersive-root so
+   they do not collide with the existing app's --bg-primary/--accent
+   tokens in app/styles/index.css.
    ============================================================= */
 
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Cutive+Mono&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Cutive+Mono&family=Inter:wght@300;400;500&display=swap");
 
 :root {
+    /* Brand fonts */
     --film-font-display: "Cormorant Garamond", "Times New Roman", serif;
     --film-font-body: "EB Garamond", Georgia, serif;
+    --film-font-ui: "Inter", system-ui, -apple-system, sans-serif;
     --film-font-mono: "Cutive Mono", "Courier New", ui-monospace, monospace;
 
+    /* Futuristic OS chrome — circular glass controls + pill inputs */
+    --fndr-os-glass-size: 44px;
+    --fndr-os-pill-height: 58px;
+    --fndr-os-pill-radius: 29px;
+
+    /* Motion — easing */
     --film-ease-shutter: cubic-bezier(0.22, 1, 0.36, 1);
     --film-ease-develop: cubic-bezier(0.65, 0, 0.35, 1);
     --film-ease-iris: cubic-bezier(0.34, 1.56, 0.64, 1);
 
+    /* Motion — duration */
     --film-dur-fast: 180ms;
     --film-dur-base: 320ms;
     --film-dur-hover: 220ms;
     --film-dur-slow: 680ms;
+    --film-dur-cinema: 1200ms;
 
+    /* Mono/stamp letter tracking */
     --film-track-label: 0.16em;
     --film-track-stamp: 0.24em;
 
+    /* Brand radii (kept separate from app-wide --radius-* in index.css
+       which uses larger 16/22/28px values for the existing UI). */
     --film-radius-xs: 2px;
     --film-radius-sm: 4px;
     --film-radius-md: 8px;
     --film-radius-lg: 12px;
     --film-radius-pill: 999px;
+
+    /* Old Film palette — raw brand values (palette-invariant, safe at :root) */
+    --film-bg: #1a1410;
+    --film-bg-2: #221915;
+    --film-bg-3: #2a2018;
+    --film-bg-4: #352a20;
+
+    --film-paper: #e8dfc8;
+    --film-paper-2: #c4a878;
+    --film-paper-3: #8a7758;
+    --film-paper-4: #5a4a3a;
+
+    --film-amber: #d4a04a;
+    --film-amber-2: #e8b85a;
+    --film-amber-3: #a37a30;
+    --film-red: #c4521e;
+    --film-red-2: #d96838;
+
+    /* Archival Paper palette — raw light brand values */
+    --paper-bg: #f4ede0;
+    --paper-bg-2: #ece2cf;
+    --paper-bg-3: #e0d3b8;
+    --paper-bg-4: #d4c4a3;
+
+    --paper-ink: #2a2520;
+    --paper-ink-2: #4a3f30;
+    --paper-ink-3: #6a5a48;
+    --paper-ink-4: #8a7860;
+
+    --paper-amber: #b8842e;
+    --paper-amber-2: #d49a3a;
+    --paper-amber-3: #8a6322;
+
+    /* Hairlines — additional steps; existing --hairline is set in index.css */
+    --film-hairline: rgba(232, 223, 200, 0.08);
+    --film-hairline-2: rgba(232, 223, 200, 0.14);
+    --film-hairline-strong: rgba(232, 223, 200, 0.22);
+    --paper-hairline: rgba(42, 37, 32, 0.08);
+    --paper-hairline-2: rgba(42, 37, 32, 0.14);
+    --paper-hairline-strong: rgba(42, 37, 32, 0.22);
+
+    /* Type scale */
+    --t-display-1: 72px;
+    --t-display-2: 56px;
+    --t-h1: 40px;
+    --t-h2: 28px;
+    --t-h3: 22px;
+    --t-body-lg: 18px;
+    --t-body: 16px;
+    --t-body-sm: 14px;
+    --t-label: 11px;
+    --t-micro: 10px;
+
+    /* Spacing scale */
+    --s-1: 4px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+    --s-5: 24px;
+    --s-6: 32px;
+    --s-7: 48px;
+    --s-8: 64px;
+    --s-9: 96px;
+    --s-10: 128px;
 }
 
 /* Halation derives from --cp-accent so it follows whichever palette is active. */
@@ -39,6 +121,102 @@
     --film-halation-strong: 0 0 0 1px color-mix(in srgb, var(--cp-accent) 45%, transparent),
         0 0 28px -2px color-mix(in srgb, var(--cp-accent) 55%, transparent),
         0 0 64px -8px color-mix(in srgb, var(--cp-accent) 35%, transparent);
+
+    /* Halation pinned to amber — used by the immersive scroll mode where
+       the archival aesthetic should always be amber regardless of palette. */
+    --halation: 0 0 24px -2px rgba(212, 160, 74, 0.45),
+        0 0 48px -8px rgba(212, 160, 74, 0.28);
+    --halation-soft: 0 0 16px -4px rgba(212, 160, 74, 0.30);
+    --halation-strong: 0 0 0 1px rgba(212, 160, 74, 0.45),
+        0 0 28px -2px rgba(212, 160, 74, 0.55),
+        0 0 64px -8px rgba(212, 160, 74, 0.35);
+}
+
+/* =============================================================
+   Semantic FNDR design-system tokens at :root.
+
+   --bg / --fg / --accent forward to the active cinematic palette
+   (--cp-*), which applyPalette() injects on :root. The --film-* /
+   --paper-* literals above remain brand references for the "film"
+   palette definition and static helpers; they must not override
+   user-selected palettes.
+
+   The .fndr-immersive-root block in ScrollModeShell.css repeats
+   this mapping for immersive isolation.
+   ============================================================= */
+:root,
+:root[data-theme="film"],
+:root[data-theme="dark"],
+:root[data-theme="paper"],
+:root[data-theme="light"] {
+    /* 60% dominant — fall back to Old Film when --cp-* not yet injected */
+    --bg: var(--cp-bg, var(--film-bg));
+    --bg-2: var(--cp-surface, var(--film-bg-2));
+    --bg-3: var(--cp-surface-raised, var(--film-bg-3));
+    --bg-4: var(--cp-surface-raised, var(--film-bg-4));
+
+    /* 30% secondary */
+    --fg: var(--cp-text-primary, var(--film-paper));
+    --fg-2: var(--cp-text-secondary, var(--film-paper-2));
+    --fg-3: var(--cp-text-secondary, var(--film-paper-3));
+    --fg-4: var(--cp-text-secondary, var(--film-paper-4));
+
+    /* 10% accent */
+    --accent: var(--cp-accent, var(--film-amber));
+    --accent-2: var(--cp-accent-muted, var(--film-amber-2));
+    --accent-3: var(--cp-accent-subtle, var(--film-amber-3));
+    --alarm: var(--film-red);
+    --alarm-2: var(--film-red-2);
+
+    /* Hairlines */
+    --hairline: var(--cp-border, var(--film-hairline));
+    --hairline-2: var(--cp-border, var(--film-hairline-2));
+    --hairline-strong: var(--cp-border-strong, var(--film-hairline-strong));
+
+    /* Immersive-local radius aliases (kept for backward-compat with
+       the slice-3 immersive components — they reference --i-radius-*). */
+    --i-radius-xs: var(--film-radius-xs);
+    --i-radius-sm: var(--film-radius-sm);
+    --i-radius-md: var(--film-radius-md);
+    --i-radius-lg: var(--film-radius-lg);
+    --i-radius-pill: var(--film-radius-pill);
+
+    /* CSS transition helpers (token-driven) */
+    --transition-fast-i: all var(--film-dur-fast) var(--film-ease-shutter);
+    --transition-base-i: all var(--film-dur-base) var(--film-ease-shutter);
+    --transition-slow-i: all var(--film-dur-slow) var(--film-ease-shutter);
+
+    /* Font roles — referenced everywhere via --font-display / body / mono. */
+    --font-display: var(--film-font-display);
+    --font-body: var(--film-font-body);
+    --font-mono: var(--film-font-mono);
+}
+
+.fndr-immersive-root {
+    background: transparent;
+    color: var(--fg);
+    font-family: var(--font-body);
+}
+
+/* Reduced-motion default for the immersive scope. The motion hook
+   does the JS-side disabling; this ensures CSS-only animations also
+   respect the user's preference. */
+@media (prefers-reduced-motion: reduce) {
+    .fndr-immersive-root {
+        --film-dur-fast: 0ms;
+        --film-dur-base: 0ms;
+        --film-dur-hover: 0ms;
+        --film-dur-slow: 0ms;
+        --film-dur-cinema: 0ms;
+    }
+    .fndr-immersive-root *,
+    .fndr-immersive-root *::before,
+    .fndr-immersive-root *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* Film grain helper — opt in by adding `.film-grain` to a positioned element. */

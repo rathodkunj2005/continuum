@@ -78,8 +78,10 @@ pub fn resolve_qwen3_vl_2b_mmproj(app_data_dir: Option<&Path>) -> Option<PathBuf
 }
 
 pub fn qwen3_vl_2b_fully_available(app_data_dir: Option<&Path>) -> bool {
-    is_model_available(crate::inference::model_config::MULTIMODAL_MODEL_ID, app_data_dir)
-        && resolve_qwen3_vl_2b_mmproj(app_data_dir).is_some()
+    is_model_available(
+        crate::inference::model_config::MULTIMODAL_MODEL_ID,
+        app_data_dir,
+    ) && resolve_qwen3_vl_2b_mmproj(app_data_dir).is_some()
 }
 
 /// Whether a pixel MTMD runtime can load for the selected model tier.
@@ -221,8 +223,7 @@ mod tests {
         let expected_path = model_dir.join("Qwen3VL-2B-Instruct-Q4_K_M.gguf");
         std::fs::write(&expected_path, b"test").unwrap();
 
-        let resolved =
-            resolve_model(Some("qwen3-vl-2b"), Some(temp_dir.as_path())).unwrap();
+        let resolved = resolve_model(Some("qwen3-vl-2b"), Some(temp_dir.as_path())).unwrap();
 
         assert_eq!(resolved.definition.id, "qwen3-vl-2b");
         assert_eq!(resolved.path, expected_path);

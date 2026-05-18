@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET_DIR_DEFAULT="$HOME/Library/Application Support/com.fndr.FNDR/models"
+TARGET_DIR_DEFAULT="$HOME/Library/Application Support/com.fndr.app/models"
 TARGET_DIR="${1:-$TARGET_DIR_DEFAULT}"
 MODEL_PATH="$TARGET_DIR/all-MiniLM-L6-v2.onnx"
 TOKENIZER_PATH="$TARGET_DIR/tokenizer.json"

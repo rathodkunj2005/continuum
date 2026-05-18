@@ -1,4 +1,4 @@
-use super::actions::{AgentAction, AgentActionKind, ActionResult};
+use super::actions::{ActionResult, AgentAction, AgentActionKind};
 use std::time::Instant;
 
 /// Commands that are safe to execute (read-only)
@@ -10,10 +10,21 @@ fn is_blocked(cmd: &str, args: &[&str]) -> Option<String> {
 
     // Block dangerous patterns in the full command string
     let blocked_patterns = [
-        "rm", "sudo", "chmod", "chown", "curl", "wget",
-        "npm install", "brew install", "cargo install",
-        "git commit", "git push", "git reset", "git clean",
-        "git rebase", "git checkout --",
+        "rm",
+        "sudo",
+        "chmod",
+        "chown",
+        "curl",
+        "wget",
+        "npm install",
+        "brew install",
+        "cargo install",
+        "git commit",
+        "git push",
+        "git reset",
+        "git clean",
+        "git rebase",
+        "git checkout --",
     ];
     for pat in &blocked_patterns {
         if full.contains(pat) {
@@ -68,7 +79,11 @@ pub fn validate_command(cmd: &str, args: &[&str]) -> Result<(), String> {
 }
 
 /// Execute a validated safe command with a timeout. Returns ActionResult.
-pub async fn execute_safe_command(cmd: &str, args: &[&str], timeout_secs: u64) -> Result<ActionResult, String> {
+pub async fn execute_safe_command(
+    cmd: &str,
+    args: &[&str],
+    timeout_secs: u64,
+) -> Result<ActionResult, String> {
     use tokio::process::Command;
     use tokio::time::{timeout, Duration};
 
@@ -98,7 +113,11 @@ pub async fn execute_safe_command(cmd: &str, args: &[&str], timeout_secs: u64) -
     Ok(ActionResult {
         success,
         output: truncated,
-        error: if success { None } else { Some("Command exited with non-zero status".to_string()) },
+        error: if success {
+            None
+        } else {
+            Some("Command exited with non-zero status".to_string())
+        },
         duration_ms: start.elapsed().as_millis() as u64,
     })
 }
@@ -117,7 +136,11 @@ pub async fn execute_action(action: &AgentAction) -> Result<ActionResult, String
                 .input
                 .get("args")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
                 .unwrap_or_default();
 
             let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();

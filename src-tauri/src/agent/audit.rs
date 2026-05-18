@@ -470,7 +470,9 @@ fn qualitative_keyword_signal(query: &str, summary: &str) -> String {
 }
 
 fn qualitative_recency(timestamp: i64) -> String {
-    let age_ms = chrono::Utc::now().timestamp_millis().saturating_sub(timestamp);
+    let age_ms = chrono::Utc::now()
+        .timestamp_millis()
+        .saturating_sub(timestamp);
     let hours = age_ms / 3_600_000;
     if hours < 1 {
         "Seen within the last hour.".to_string()
@@ -518,8 +520,7 @@ mod tests {
         };
 
         append_agent_audit_record(&dir, &record).expect("append audit");
-        let rows = list_agent_audit_runs(&dir, 10, Some(AgentMode::Ask), None)
-            .expect("list audit");
+        let rows = list_agent_audit_runs(&dir, 10, Some(AgentMode::Ask), None).expect("list audit");
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].run_id, "run-1");

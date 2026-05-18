@@ -51,7 +51,7 @@
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.02);
     transition: background 0.2s, border-color 0.2s;
@@ -127,7 +127,7 @@
     font-size: 0.72rem;
     font-weight: 600;
     padding: 4px 10px;
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
     letter-spacing: 0.02em;
 }
 
@@ -289,7 +289,7 @@
     max-width: 320px;
     background: rgba(30, 22, 14, 0.95);
     border: 1px solid rgba(230, 150, 60, 0.4);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     padding: 14px 16px;
     display: flex;
     flex-direction: column;

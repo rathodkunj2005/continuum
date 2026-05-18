@@ -1,0 +1,286 @@
+/* =============================================================
+   MemoryCard — canonical card surface used everywhere.
+   Variants: compact / preview / expanded / immersive.
+   Atoms: DossierCorners, Stamp, Pill, Button. Tokens from
+   film-paper.css.
+   ============================================================= */
+
+.fndr-mc {
+    position: relative;
+    background: var(--bg-3);
+    color: var(--fg);
+    font-family: var(--font-body);
+    transition: border-color var(--film-dur-base) var(--film-ease-shutter),
+        box-shadow var(--film-dur-base) var(--film-ease-shutter),
+        transform var(--film-dur-base) var(--film-ease-shutter);
+    overflow: hidden;
+}
+
+/* ── shared sub-elements (preview / expanded / immersive) ───── */
+.fndr-mc-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.fndr-mc-frame-no {
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    line-height: 1;
+    letter-spacing: var(--film-track-label);
+    color: var(--fg-3);
+    text-transform: uppercase;
+}
+
+.fndr-mc-ts {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    line-height: 1;
+    color: var(--fg-3);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+}
+
+.fndr-mc-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: -0.005em;
+    color: var(--fg);
+    margin: 0 0 8px 0;
+}
+
+.fndr-mc-preview {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--fg-2);
+    margin: 0;
+    max-width: 64ch;
+}
+
+.fndr-mc-source {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 11px;
+    color: var(--fg-3);
+    margin-top: 8px;
+}
+
+.fndr-mc-threads {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.fndr-mc-threads li {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 9px;
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 4px 8px;
+    border-radius: 999px;
+    opacity: 0.82;
+}
+
+/* ── PREVIEW variant ──────────────────────────────────────── */
+.fndr-mc--preview {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-medium);
+    padding: 22px 24px;
+    cursor: pointer;
+}
+
+.fndr-mc--preview .fndr-mc-preview {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.fndr-mc--preview:hover {
+    border-color: var(--hairline-strong);
+    box-shadow: var(--shadow-medium), var(--halation-soft);
+    transform: translateY(-1px);
+}
+
+.fndr-mc--preview:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ── COMPACT variant ───────────────────────────────────────── */
+.fndr-mc--compact {
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr) minmax(0, 220px) 84px 36px;
+    align-items: center;
+    gap: 14px;
+    min-height: 60px;
+    padding: 0 18px 0 22px;
+    border-bottom: 1px solid var(--hairline);
+    cursor: pointer;
+    background: transparent;
+    color: var(--fg);
+    transition: background var(--film-dur-fast) var(--film-ease-shutter);
+}
+
+.fndr-mc--compact .fndr-mc-bar {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: transparent;
+    box-shadow: none;
+    transition: background var(--film-dur-fast) var(--film-ease-shutter),
+        box-shadow var(--film-dur-fast) var(--film-ease-shutter);
+}
+
+.fndr-mc--compact:hover,
+.fndr-mc--compact:focus-visible {
+    background: var(--bg-3);
+    outline: none;
+}
+
+.fndr-mc--compact:hover .fndr-mc-bar,
+.fndr-mc--compact:focus-visible .fndr-mc-bar {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+}
+
+.fndr-mc-c-frame {
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    letter-spacing: var(--film-track-label);
+    color: var(--fg-3);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.fndr-mc-c-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1.25;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.fndr-mc-c-source {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 11px;
+    color: var(--fg-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.fndr-mc-c-time {
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    color: var(--fg-3);
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.fndr-mc-c-threads {
+    font-family: var(--font-mono);
+    font-size: var(--t-micro);
+    color: var(--accent);
+    letter-spacing: var(--film-track-label);
+    text-align: right;
+    opacity: 0.85;
+}
+
+/* ── EXPANDED variant ──────────────────────────────────────── */
+.fndr-mc--expanded {
+    background: var(--bg-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-medium);
+    padding: 28px 32px;
+    cursor: default;
+}
+
+.fndr-mc--expanded .fndr-mc-preview {
+    font-size: 14px;
+    max-width: 78ch;
+}
+
+.fndr-mc-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 14px 0 0;
+}
+
+.fndr-mc-slot {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+}
+
+.fndr-mc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+}
+
+/* ── IMMERSIVE variant (scroll hero) ───────────────────────── */
+.fndr-mc--immersive {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    padding: 36px 40px;
+    background: color-mix(in srgb, var(--bg-3) 85%, transparent);
+    box-shadow: var(--shadow-strong), var(--halation-soft);
+    animation: fndrMcDrift 7s ease-in-out infinite alternate;
+}
+
+.fndr-mc--immersive .fndr-mc-title {
+    font-size: var(--t-h1);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+}
+
+.fndr-mc--immersive .fndr-mc-preview {
+    font-size: var(--t-body-lg);
+    max-width: 72ch;
+}
+
+@keyframes fndrMcDrift {
+    0%   { transform: translate(0, 0); }
+    50%  { transform: translate(1px, -1px); }
+    100% { transform: translate(0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fndr-mc--immersive {
+        animation: none;
+    }
+}

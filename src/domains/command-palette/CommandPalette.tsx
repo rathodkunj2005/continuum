@@ -504,7 +504,7 @@ export function CommandPalette({ isOpen, onClose, selectedMemory, context }: Com
                     <input
                         ref={inputRef}
                         className="cp-input"
-                        placeholder={selectedMemory ? `Actions for "${selectedMemory.title.slice(0, 40)}…"` : "Type a command…"}
+                        placeholder={selectedMemory ? `Actions for "${selectedMemory.title.slice(0, 40)}…"` : "find a memory"}
                         value={query}
                         onChange={(e) => { setQuery(e.target.value); setActiveIdx(0); }}
                     />
@@ -586,9 +586,12 @@ export function CommandPalette({ isOpen, onClose, selectedMemory, context }: Com
                 )}
 
                 <div className="cp-footer">
-                    <span><kbd>↑↓</kbd> navigate</span>
-                    <span><kbd>↵</kbd> select</span>
-                    <span><kbd>esc</kbd> close</span>
+                    <div className="cp-footer-nav">
+                        <span><kbd>↑↓</kbd> navigate</span>
+                        <span><kbd>↵</kbd> open</span>
+                        <span><kbd>esc</kbd> close</span>
+                    </div>
+                    <span className="cp-footer-local">Local Only</span>
                 </div>
             </div>
         </div>
