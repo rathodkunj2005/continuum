@@ -154,7 +154,7 @@
 
 .panel-section {
     background: transparent;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     padding: 14px;
     margin-bottom: 10px;
     border: 1px solid var(--border);
@@ -347,7 +347,7 @@
     min-height: 58px;
     padding: 10px 12px;
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: var(--surface);
     color: var(--text-primary);
     cursor: pointer;
@@ -806,7 +806,7 @@
     position: relative;
     height: 40px;
     padding: 0 16px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--surface-translucent);
     backdrop-filter: blur(12px) saturate(115%);

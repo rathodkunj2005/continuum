@@ -1,28 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
     EvidencePack,
-    MemoryCard,
+    MemoryCard as MemoryCardData,
 } from "../../shared/ipc/tauri";
 import { fndrGetMemorySubgraph, fndrGetRelatedMemories } from "../../shared/ipc/tauri";
 import { CopyForAgentButton } from "./CopyForAgentButton";
 import { SurfacingReason } from "./SurfacingReason";
+import { MemoryCard } from "./MemoryCard";
+import "./ExpandedMemoryCard.css";
 
 interface Props {
-    card: MemoryCard;
+    card: MemoryCardData;
     evidence?: EvidencePack | null;
+    /** Optional slots — passed straight through to <MemoryCard variant="expanded">. */
+    insightsSlot?: ReactNode;
+    debugSlot?: ReactNode;
+    similarSlot?: ReactNode;
     onClose: () => void;
+    onDelete?: (id: string) => void;
+    onOpenInGraph?: (card: MemoryCardData) => void;
+    onReopen?: (card: MemoryCardData) => void;
+    onResearch?: (card: MemoryCardData) => void;
 }
 
 /**
- * Phase 5 — expanded view of a memory card. Shows the underlying evidence
- * (files / decisions / commands / errors / todos / urls), a subgraph
- * placeholder, and quick actions (Open, Related, Copy for Agent).
+ * Modal shell around `<MemoryCard variant="expanded">`. The card itself
+ * handles dossier corners, frame strip, provenance, threads, and action
+ * buttons; this component supplies the modal scrim and stitches in the
+ * dynamically-loaded extras (related memories, subgraph, evidence pack,
+ * insight layers).
  */
-export function ExpandedMemoryCard({ card, evidence, onClose }: Props) {
-    const [related, setRelated] = useState<MemoryCard[]>([]);
-    const [subgraph, setSubgraph] = useState<{ node_count: number; edge_count: number } | null>(
-        null,
-    );
+export function ExpandedMemoryCard({
+    card,
+    evidence,
+    insightsSlot,
+    debugSlot,
+    similarSlot,
+    onClose,
+    onDelete,
+    onOpenInGraph,
+    onReopen,
+    onResearch,
+}: Props) {
+    const [related, setRelated] = useState<MemoryCardData[]>([]);
+    const [subgraph, setSubgraph] = useState<{ node_count: number; edge_count: number } | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -30,104 +51,128 @@ export function ExpandedMemoryCard({ card, evidence, onClose }: Props) {
             if (!cancelled) setRelated(cards);
         });
         void fndrGetMemorySubgraph([card.id], 2).then((sub) => {
-            if (!cancelled) setSubgraph({ node_count: sub.node_count, edge_count: sub.edge_count });
+            if (!cancelled)
+                setSubgraph({ node_count: sub.node_count, edge_count: sub.edge_count });
         });
         return () => {
             cancelled = true;
         };
     }, [card.id]);
 
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [onClose]);
+
+    const reasonNode = card.surfacing_reason ? (
+        <SurfacingReason reason={card.surfacing_reason} />
+    ) : undefined;
+
+    const evidenceNode =
+        evidence ? (
+            <section>
+                <h4 className="fndr-emc-section-heading">Evidence</h4>
+                <EvidenceList label="Files" items={evidence.files.map((f) => f.path)} />
+                <EvidenceList
+                    label="Decisions"
+                    items={evidence.decisions.map((d) => d.decision)}
+                />
+                <EvidenceList
+                    label="Commands"
+                    items={evidence.commands.map((c) => c.command)}
+                />
+                <EvidenceList label="Errors" items={evidence.errors.map((e) => e.error)} />
+                <EvidenceList label="Todos" items={evidence.todos.map((t) => t.task)} />
+                <EvidenceList label="URLs" items={evidence.urls.map((u) => u.url)} />
+            </section>
+        ) : undefined;
+
+    const subgraphNode = (
+        <section>
+            <h4 className="fndr-emc-section-heading">Subgraph</h4>
+            <p className="fndr-emc-meta" data-testid="fndr-subgraph-summary">
+                {subgraph
+                    ? `${subgraph.node_count} nodes · ${subgraph.edge_count} edges`
+                    : "Loading subgraph…"}
+            </p>
+        </section>
+    );
+
+    const relatedNode =
+        related.length > 0 ? (
+            <section>
+                <h4 className="fndr-emc-section-heading">Related memories</h4>
+                <ul className="fndr-emc-related">
+                    {related.map((r) => (
+                        <li key={r.id}>{r.title}</li>
+                    ))}
+                </ul>
+            </section>
+        ) : undefined;
+
+    const combinedInsights = (
+        <>
+            {reasonNode}
+            {insightsSlot}
+        </>
+    );
+
+    const combinedEvidence = (
+        <>
+            {evidenceNode}
+            {subgraphNode}
+            {relatedNode}
+        </>
+    );
+
     return (
         <div
             role="dialog"
             aria-label={`Expanded memory: ${card.title}`}
-            style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.45)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 200,
-            }}
+            className="fndr-emc-overlay"
             onClick={onClose}
         >
             <div
+                className="fndr-emc-shell"
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                    background: "#FAF9F6",
-                    color: "#3E2723",
-                    width: "min(720px, 92vw)",
-                    maxHeight: "82vh",
-                    overflowY: "auto",
-                    borderRadius: 12,
-                    padding: 24,
-                    boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
-                }}
             >
-                <header style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <h2 style={{ margin: 0, fontSize: 18 }}>{card.title}</h2>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close"
-                        style={{ background: "transparent", border: "none", fontSize: 18, cursor: "pointer" }}
-                    >
-                        ×
-                    </button>
-                </header>
-                {card.surfacing_reason && <SurfacingReason reason={card.surfacing_reason} />}
-                <p style={{ marginTop: 12 }}>{card.summary}</p>
-                {evidence && (
-                    <section style={{ marginTop: 16 }}>
-                        <h3 style={{ fontSize: 13, opacity: 0.7 }}>Evidence</h3>
-                        <EvidenceList label="Files" items={evidence.files.map((f) => f.path)} />
-                        <EvidenceList
-                            label="Decisions"
-                            items={evidence.decisions.map((d) => d.decision)}
-                        />
-                        <EvidenceList
-                            label="Commands"
-                            items={evidence.commands.map((c) => c.command)}
-                        />
-                        <EvidenceList label="Errors" items={evidence.errors.map((e) => e.error)} />
-                        <EvidenceList label="Todos" items={evidence.todos.map((t) => t.task)} />
-                        <EvidenceList label="URLs" items={evidence.urls.map((u) => u.url)} />
-                    </section>
-                )}
-                <section style={{ marginTop: 16 }}>
-                    <h3 style={{ fontSize: 13, opacity: 0.7 }}>Subgraph</h3>
-                    <p style={{ fontSize: 12 }} data-testid="fndr-subgraph-summary">
-                        {subgraph
-                            ? `${subgraph.node_count} nodes · ${subgraph.edge_count} edges`
-                            : "Loading subgraph…"}
-                    </p>
-                </section>
-                {related.length > 0 && (
-                    <section style={{ marginTop: 16 }}>
-                        <h3 style={{ fontSize: 13, opacity: 0.7 }}>Related memories</h3>
-                        <ul style={{ paddingLeft: 18, margin: 0 }}>
-                            {related.map((r) => (
-                                <li key={r.id} style={{ marginBottom: 4 }}>
-                                    {r.title}
-                                </li>
-                            ))}
-                        </ul>
-                    </section>
-                )}
-                <footer style={{ marginTop: 20, display: "flex", gap: 8 }}>
-                    {card.reopen_target && (
-                        <a
-                            href={card.reopen_target}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={primaryButtonStyle}
-                        >
-                            Open
-                        </a>
-                    )}
-                    <CopyForAgentButton query={card.title} />
-                </footer>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="fndr-emc-close"
+                >
+                    ×
+                </button>
+                <MemoryCard
+                    card={card}
+                    variant="expanded"
+                    insightsSlot={combinedInsights}
+                    evidenceSlot={combinedEvidence}
+                    relatedSlot={
+                        <div className="fndr-emc-extra-actions">
+                            <CopyForAgentButton query={card.title} />
+                        </div>
+                    }
+                    footerSlot={
+                        debugSlot || similarSlot ? (
+                            <div className="fndr-emc-drawers">
+                                {debugSlot}
+                                {similarSlot}
+                            </div>
+                        ) : null
+                    }
+                    onDelete={onDelete}
+                    onOpenInGraph={onOpenInGraph}
+                    onReopen={onReopen}
+                    onResearch={onResearch}
+                />
             </div>
         </div>
     );
@@ -136,22 +181,12 @@ export function ExpandedMemoryCard({ card, evidence, onClose }: Props) {
 function EvidenceList({ label, items }: { label: string; items: string[] }) {
     if (items.length === 0) return null;
     return (
-        <div style={{ marginBottom: 8 }}>
-            <strong style={{ fontSize: 12 }}>{label}:</strong>{" "}
-            <span style={{ fontSize: 12 }}>{items.slice(0, 5).join(", ")}</span>
+        <div className="fndr-emc-evidence-row">
+            <strong>{label}:</strong>{" "}
+            <span>{items.slice(0, 5).join(", ")}</span>
             {items.length > 5 && (
-                <span style={{ fontSize: 11, opacity: 0.6 }}> +{items.length - 5} more</span>
+                <span className="fndr-emc-evidence-more"> +{items.length - 5} more</span>
             )}
         </div>
     );
 }
-
-const primaryButtonStyle: React.CSSProperties = {
-    padding: "8px 14px",
-    background: "#E65100",
-    color: "#FAF9F6",
-    borderRadius: 8,
-    textDecoration: "none",
-    border: "none",
-    fontSize: 13,
-};

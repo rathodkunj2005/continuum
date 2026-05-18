@@ -1,0 +1,122 @@
+/* ── Slice 7b — Privacy scene ──────────────────────────────────────────── */
+.fndr-privacy-scene {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 clamp(24px, 6vw, 80px);
+}
+
+.fndr-privacy-scene-inner {
+    width: min(840px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.fndr-privacy-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin: 0;
+}
+
+.fndr-privacy-heading {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: clamp(28px, 3.5vw, 46px);
+    font-weight: 400;
+    color: var(--fg);
+    margin: 0;
+}
+
+.fndr-privacy-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+@media (max-width: 640px) {
+    .fndr-privacy-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.fndr-privacy-col {
+    background: color-mix(in srgb, var(--bg-2) 80%, transparent);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Stamp */
+.fndr-privacy-stamp {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid;
+    width: fit-content;
+    transform: rotate(-1.5deg);
+}
+
+.fndr-privacy-stamp--developed {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.fndr-privacy-stamp--alarm {
+    color: rgba(248, 100, 100, 0.9);
+    border-color: rgba(248, 100, 100, 0.3);
+    background: rgba(248, 100, 100, 0.08);
+}
+
+.fndr-privacy-stamp--amber {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    opacity: 0.8;
+}
+
+.fndr-privacy-col-title {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--fg);
+    margin: 0;
+}
+
+.fndr-privacy-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.fndr-privacy-list li {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--fg-2);
+    padding-left: 12px;
+    position: relative;
+}
+
+.fndr-privacy-list li::before {
+    content: "·";
+    position: absolute;
+    left: 2px;
+    color: var(--accent);
+}

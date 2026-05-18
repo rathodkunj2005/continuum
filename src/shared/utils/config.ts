@@ -8,6 +8,8 @@ export const STORAGE_KEYS = {
     palette: "fndr-palette",
     automations: "fndr-automations",
     searchHistory: "fndr-search-history",
+    /** Selected top-level shell mode: "immersive" (scroll experience) or "work" (productive). */
+    appMode: "fndr_app_mode",
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

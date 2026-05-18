@@ -1,87 +1,108 @@
 @import "../../shared/theme/film-paper.css";
+@import "../../shared/components/atoms/atoms.css";
+
+/* =============================================================
+   FNDR — global theme tokens (v2 handoff).
+
+   The film-paper.css import above defines the FNDR design-system
+   tokens (--bg, --fg, --accent, --font-display/body/mono, --t-*,
+   --s-*). This file maps the existing app's legacy tokens
+   (--bg-primary, --text-primary, --radius-md, etc.) onto those new
+   values so every component picks up the warm-film aesthetic
+   without each file having to be rewritten by hand.
+   ============================================================= */
 
 :root {
-    --font-ui: "Iowan Old Style", "Baskerville", "Palatino Linotype", "Times New Roman", serif;
-    --font-primary: var(--font-ui);
-    --bg-primary: var(--cp-bg, #0a0a0a);
-    --surface: var(--cp-surface, #111111);
-    --surface-elevated: var(--cp-surface-raised, #151515);
-    --border: var(--cp-border, #232323);
-    --border-strong: var(--cp-border-strong, #34343a);
-    --bg-secondary: var(--surface);
-    --bg-tertiary: var(--surface-elevated);
-    --text-primary: var(--cp-text-primary, #f3f3f1);
-    --text-secondary: var(--cp-text-secondary, #a1a1aa);
-    --text-inverse: var(--cp-text-inverse, #0a0a0a);
-    --text-muted: #6b7280;
-    --accent: var(--cp-accent, #f3f3f1);
-    --accent-hover: var(--cp-accent-muted, #ffffff);
-    --accent-light: var(--cp-accent-subtle, rgba(255, 255, 255, 0.1));
-    --danger: color-mix(in srgb, var(--cp-accent-raw, #f3f3f1) 72%, var(--cp-secondary-1, #444444));
-    --danger-light: color-mix(in srgb, var(--danger) 16%, transparent);
-    --success: var(--cp-secondary-2, #cccccc);
-    --success-light: color-mix(in srgb, var(--success) 16%, transparent);
-    --page-bg:
-        radial-gradient(ellipse 78% 58% at 50% 42%, color-mix(in srgb, var(--cp-dominant-4, #232323) 36%, transparent), transparent 70%),
-        radial-gradient(ellipse 58% 42% at 20% 18%, color-mix(in srgb, var(--cp-secondary-1, #6b7280) 24%, transparent), transparent 68%),
-        radial-gradient(ellipse 46% 34% at 82% 72%, color-mix(in srgb, var(--cp-accent-raw, #f3f3f1) 16%, transparent), transparent 68%),
-        linear-gradient(135deg, var(--cp-dominant-1, var(--bg-primary)), var(--cp-bg, var(--bg-primary)) 52%, var(--cp-dominant-2, var(--surface)));
-    --surface-translucent: color-mix(in srgb, var(--surface) 78%, transparent);
-    --surface-hover: color-mix(in srgb, var(--surface-elevated) 82%, var(--accent-light));
-    --shadow-color: color-mix(in srgb, var(--cp-dominant-1, #000000) 70%, transparent);
-    --hairline: color-mix(in srgb, var(--border) 82%, transparent);
-    --focus-ring: color-mix(in srgb, var(--accent) 48%, transparent);
-    --radius-sm: 16px;
-    --radius-md: 22px;
-    --radius-lg: 28px;
-    --radius-full: 999px;
-    --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.2);
-    --shadow-medium: 0 8px 22px rgba(0, 0, 0, 0.3);
-    --shadow-strong: 0 14px 32px rgba(0, 0, 0, 0.35);
-    --transition-fast: 0.15s ease;
-    --transition-normal: 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-    --transition-slow: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Body font is EB Garamond; --font-ui retained as an alias so any
+       straggler reference still resolves. */
+    --font-ui: var(--font-body);
+    --font-primary: var(--font-body);
 
-    /* Panel Design System - Syncing with Search Bar & Todo Page */
-    --panel-bg: var(--cp-bg, #0a0a0a);
+    /* Map legacy semantic names onto the new --bg / --fg / --accent. */
+    --bg-primary: var(--bg);
+    --surface: var(--bg-2);
+    --surface-elevated: var(--bg-3);
+    --border: var(--hairline-2);
+    --border-strong: var(--hairline-strong);
+    --bg-secondary: var(--bg-2);
+    --bg-tertiary: var(--bg-3);
+    --text-primary: var(--fg);
+    --text-secondary: var(--fg-2);
+    --text-inverse: var(--bg);
+    --text-muted: var(--fg-3);
+
+    --accent-hover: var(--accent-2);
+    --accent-light: color-mix(in srgb, var(--accent) 16%, transparent);
+    --danger: var(--alarm);
+    --danger-light: color-mix(in srgb, var(--alarm) 18%, transparent);
+    --success: var(--accent-3);
+    --success-light: color-mix(in srgb, var(--accent-3) 16%, transparent);
+
+    /* Page background — subtle warm vignette behind the aurora wallpaper.
+       Mostly transparent now so the WebGL canvas reads through. */
+    --page-bg:
+        radial-gradient(ellipse 78% 58% at 50% 42%, color-mix(in srgb, var(--bg-3) 28%, transparent), transparent 70%),
+        linear-gradient(135deg, var(--bg) 0%, var(--bg-2) 100%);
+
+    --surface-translucent: color-mix(in srgb, var(--bg-2) 70%, transparent);
+    --surface-hover: var(--bg-4);
+    --shadow-color: rgba(0, 0, 0, 0.45);
+    --focus-ring: color-mix(in srgb, var(--accent) 48%, transparent);
+
+    /* Radii — dropped to FNDR archival scale (was 16 / 22 / 28). */
+    --radius-sm: var(--film-radius-sm);   /* 4px */
+    --radius-md: var(--film-radius-md);   /* 8px */
+    --radius-lg: var(--film-radius-lg);   /* 12px */
+    --radius-full: var(--film-radius-pill);
+
+    --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.30);
+    --shadow-medium: 0 8px 22px rgba(0, 0, 0, 0.40);
+    --shadow-strong: 0 14px 32px rgba(0, 0, 0, 0.50);
+
+    /* Transition aliases — kept for components that reference these names. */
+    --transition-fast: var(--film-dur-fast) var(--film-ease-shutter);
+    --transition-normal: var(--film-dur-base) var(--film-ease-shutter);
+    --transition-slow: var(--film-dur-slow) var(--film-ease-shutter);
+
+    --panel-bg: var(--bg);
     --panel-backdrop: none;
     --header-border: 1px solid var(--hairline);
 }
 
-/* ===== Light Theme ===== */
-[data-theme="light"] {
-    --bg-primary: var(--cp-bg, #f5f5f7);
-    --surface: var(--cp-surface, #ffffff);
-    --surface-elevated: var(--cp-surface-raised, #f0f0f2);
-    --border: var(--cp-border, #d8d8dc);
-    --border-strong: var(--cp-border-strong, #b8b8c0);
-    --bg-secondary: var(--surface);
-    --bg-tertiary: var(--surface-elevated);
-    --text-primary: var(--cp-text-primary, #1a1a1a);
-    --text-secondary: var(--cp-text-secondary, #555560);
-    --text-inverse: var(--cp-text-inverse, #ffffff);
-    --text-muted: #8e8e93;
-    --accent: var(--cp-accent, #1a1a1a);
-    --accent-hover: var(--cp-accent-muted, #000000);
-    --accent-light: var(--cp-accent-subtle, rgba(0, 0, 0, 0.06));
-    --danger: color-mix(in srgb, var(--cp-accent-raw, #1a1a1a) 70%, var(--cp-secondary-1, #999999));
-    --danger-light: color-mix(in srgb, var(--danger) 14%, transparent);
-    --success: var(--cp-secondary-2, #555555);
-    --success-light: color-mix(in srgb, var(--success) 14%, transparent);
+/* ===== Light Theme (legacy alias) =====
+   The new canonical light mode is [data-theme="paper"] (see film-paper.css).
+   This [data-theme="light"] block keeps existing toggle code working by
+   forwarding to the same paper palette. */
+[data-theme="light"],
+[data-theme="paper"] {
+    --bg-primary: var(--bg);
+    --surface: var(--bg-2);
+    --surface-elevated: var(--bg-3);
+    --border: var(--hairline-2);
+    --border-strong: var(--hairline-strong);
+    --bg-secondary: var(--bg-2);
+    --bg-tertiary: var(--bg-3);
+    --text-primary: var(--fg);
+    --text-secondary: var(--fg-2);
+    --text-inverse: var(--bg);
+    --text-muted: var(--fg-3);
+    --accent-hover: var(--accent-2);
+    --accent-light: color-mix(in srgb, var(--accent) 14%, transparent);
+    --danger: var(--alarm);
+    --danger-light: color-mix(in srgb, var(--alarm) 14%, transparent);
+    --success: var(--accent-3);
+    --success-light: color-mix(in srgb, var(--accent-3) 14%, transparent);
     --page-bg:
-        radial-gradient(ellipse 80% 58% at 50% 42%, color-mix(in srgb, var(--cp-dominant-4, #d8d8dc) 30%, transparent), transparent 70%),
-        radial-gradient(ellipse 58% 42% at 18% 16%, color-mix(in srgb, var(--cp-secondary-1, #8e8e93) 20%, transparent), transparent 68%),
-        radial-gradient(ellipse 46% 34% at 84% 74%, color-mix(in srgb, var(--cp-accent-raw, #1a1a1a) 14%, transparent), transparent 68%),
-        linear-gradient(135deg, var(--cp-surface, var(--surface)), var(--cp-bg, var(--bg-primary)) 54%, var(--cp-dominant-4, var(--surface-elevated)));
-    --surface-translucent: color-mix(in srgb, var(--surface) 82%, transparent);
-    --surface-hover: color-mix(in srgb, var(--surface-elevated) 88%, var(--accent-light));
-    --shadow-color: color-mix(in srgb, var(--cp-dominant-4, #000000) 20%, transparent);
-    --hairline: color-mix(in srgb, var(--border) 86%, transparent);
+        radial-gradient(ellipse 80% 58% at 50% 42%, color-mix(in srgb, var(--bg-3) 30%, transparent), transparent 70%),
+        linear-gradient(135deg, var(--bg) 0%, var(--bg-2) 100%);
+    --surface-translucent: color-mix(in srgb, var(--bg-2) 82%, transparent);
+    --surface-hover: var(--bg-4);
+    --shadow-color: rgba(42, 37, 32, 0.18);
     --focus-ring: color-mix(in srgb, var(--accent) 38%, transparent);
-    --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.06);
-    --shadow-medium: 0 8px 22px rgba(0, 0, 0, 0.08);
-    --shadow-strong: 0 14px 32px rgba(0, 0, 0, 0.1);
-    --panel-bg: var(--cp-bg, #f8f8fa);
+    --shadow-soft: 0 2px 6px rgba(42, 37, 32, 0.10);
+    --shadow-medium: 0 8px 22px rgba(42, 37, 32, 0.12);
+    --shadow-strong: 0 14px 32px rgba(42, 37, 32, 0.16);
+    --panel-bg: var(--bg);
     --header-border: 1px solid var(--hairline);
 }
 
@@ -142,12 +163,22 @@ body,
 }
 
 body {
-    font-family: var(--font-ui);
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--fg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     line-height: 1.5;
+    font-size: var(--t-body);
+}
+
+/* Display-font headings — Cormorant Garamond. Components that need
+   the body font on a heading can opt out via `font-family: inherit`. */
+h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
 }
 
 input,
@@ -206,12 +237,13 @@ kbd {
     gap: 8px;
     height: 36px;
     padding: 0 14px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--surface-translucent);
     backdrop-filter: blur(12px) saturate(115%);
     -webkit-backdrop-filter: blur(12px) saturate(115%);
     color: var(--text-secondary);
+    font-family: var(--font-body);
     font-size: 13px;
     font-weight: 500;
     line-height: 1;

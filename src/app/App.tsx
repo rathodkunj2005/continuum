@@ -31,9 +31,45 @@ import {
     getFunGreeting,
 } from "@/shared/ipc/tauri";
 import { getOnboardingState, saveOnboardingState, type OnboardingState } from "@/shared/ipc/onboarding";
-import { ShaderWallpaper } from "@/shared/components/ShaderWallpaper";
+import { AuroraWallpaper, type AuroraPageId } from "@/shared/components/AuroraWallpaper";
 import { EVAL_UI } from "@/shared/utils/eval-ui";
+import { StatusBar } from "@/shared/components/StatusBar";
 import "./styles/App.css";
+
+/** Map the currently active panel + search state onto one of the 8
+ *  aurora wallpaper presets. Each panel surfaces a different aurora
+ *  character (graph = stormy, darkroom = quiet, frames = star-dense, …). */
+function getWallpaperPage(activePanel: PanelKey | null, hasQuery: boolean): AuroraPageId {
+    if (hasQuery) return "search";
+    switch (activePanel) {
+        case "memoryCards":
+        case "stats":
+        case "glassesImport":
+        case "searchHistory":
+            return "frames";
+        case "knowledgeGraph":
+            return "graph";
+        case "agent":
+        case "research":
+        case "automation":
+        case "quickSkills":
+            return "smart";
+        case "focusMode":
+        case "focusSession":
+        case "pipeline":
+        case "engineMetrics":
+            return "darkroom";
+        case "todo":
+            return "pinned";
+        case "dailySummary":
+        case "meeting":
+        case "timeTracking":
+            return "timeline";
+        case null:
+        default:
+            return "home";
+    }
+}
 
 function formatHomeDate(now: Date): string {
     const weekday = now.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
@@ -515,9 +551,11 @@ function App() {
         );
     }
 
+    const wallpaperPage = getWallpaperPage(activePanel, query.trim().length > 0);
+
     return (
-        <div className="app">
-            <ShaderWallpaper shader="chromatic-leak" className="app-shader-wallpaper" />
+        <div className="app film-grain">
+            <AuroraWallpaper page={wallpaperPage} className="app-aurora-wallpaper" />
             {!EVAL_UI && (
                 <button
                     className="ui-action-btn sidebar-toggle"
@@ -559,16 +597,7 @@ function App() {
 
             {!EVAL_UI && (
                 <aside className={`left-sidebar ${isSidebarOpen ? "open" : ""}`}>
-                    <div className="sidebar-brand">
-                        <button
-                            className="sidebar-collapse-btn"
-                            onClick={() => setIsSidebarOpen(false)}
-                            aria-label="Close sidebar"
-                            title="Close sidebar"
-                        >
-                            ✕
-                        </button>
-                    </div>
+                    <div className="sidebar-brand"></div>
 
                     {SIDEBAR_GROUPS.map((group) => (
                         <div key={group.label} className="sidebar-group sidebar-actions">
@@ -600,6 +629,22 @@ function App() {
                         >
                             Cmd+K Palette
                         </button>
+                    </div>
+
+                    <div className="sidebar-reel-footer">
+                        <div className="sidebar-reel-meta">
+                            <span className="sidebar-reel-date">
+                                {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}
+                            </span>
+                            {status?.frames_captured != null && (
+                                <span className="sidebar-reel-frames">
+                                    {String(status.frames_captured).padStart(4, "0")} FR
+                                </span>
+                            )}
+                        </div>
+                        <div className="sidebar-reel-strip" aria-hidden="true">
+                            <div className="sidebar-reel-inner" />
+                        </div>
                     </div>
                 </aside>
             )}
@@ -687,6 +732,8 @@ function App() {
                     onOpenMemoryById={handleOpenMemoryById}
                 />
             )}
+
+            {!EVAL_UI && <StatusBar status={status} />}
         </div>
     );
 }

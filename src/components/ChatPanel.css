@@ -23,7 +23,7 @@
     height: min(680px, 88vh);
     background: #111;
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 18px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     animation: chatSlideUp 0.22s ease-out;
     box-shadow: 0 24px 80px rgba(0,0,0,0.6);
@@ -149,7 +149,7 @@
 
 .chat-bubble {
     padding: 10px 14px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     font-size: 0.88rem;
     line-height: 1.55;
     white-space: pre-wrap;

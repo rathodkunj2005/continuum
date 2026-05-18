@@ -1,0 +1,95 @@
+/* ── Slice 7a — Agent context scene ────────────────────────────────────── */
+.fndr-agent-scene {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 clamp(24px, 6vw, 80px);
+}
+
+.fndr-agent-scene-inner {
+    width: min(680px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.fndr-agent-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin: 0;
+}
+
+.fndr-agent-heading {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: clamp(28px, 3.5vw, 46px);
+    font-weight: 400;
+    color: var(--fg);
+    margin: 0;
+}
+
+.fndr-agent-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.fndr-agent-skeleton-card {
+    height: 60px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-3);
+    margin-bottom: 4px;
+    animation: fndrAgentPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes fndrAgentPulse {
+    0%, 100% { opacity: 0.4; }
+    50%       { opacity: 0.7; }
+}
+
+.fndr-agent-empty {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--fg-3);
+    margin: 0;
+}
+
+/* Tool trace */
+.fndr-agent-trace {
+    border-top: 1px solid var(--hairline);
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.fndr-agent-trace-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin: 0 0 6px;
+}
+
+.fndr-agent-trace-line {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-2);
+    margin: 0;
+    padding-left: 12px;
+    position: relative;
+}
+
+.fndr-agent-trace-line::before {
+    content: "›";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+}

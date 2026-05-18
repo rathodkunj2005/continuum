@@ -107,7 +107,7 @@
     width: min(860px, calc(100vw - 32px));
     background: #0d0d0d;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 22px;
+    border-radius: var(--radius-lg);
     box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     overflow: hidden;
     animation: popupSpring 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -280,7 +280,7 @@
     scroll-snap-align: start;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
     padding: 14px;
     cursor: pointer;
     text-align: left;
@@ -484,7 +484,7 @@
 /* ── Mobile ── */
 @media (max-width: 768px) {
     .briefing-popup {
-        border-radius: 18px 18px 0 0;
+        border-radius: var(--radius-lg) 18px 0 0;
         position: fixed;
         bottom: 0;
         left: 0;

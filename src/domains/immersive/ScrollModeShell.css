@@ -1,0 +1,192 @@
+/* =============================================================
+   FNDR Immersive Scroll — root layout.
+
+   The immersive root sits above the rest of the app. It owns its
+   own scroll container so existing fixed-position chrome (sidebar,
+   panels) cannot bleed in. Tokens are read from .fndr-immersive-root
+   in film-paper.css.
+   ============================================================= */
+
+.fndr-immersive-root {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--film-font-body);
+    z-index: 10;
+}
+
+/* Per-section Aurora wallpaper — sits behind all content */
+.fndr-immersive-wallpaper {
+    position: fixed !important;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.fndr-immersive-scroll {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(212, 160, 74, 0.35) transparent;
+    z-index: 1;
+}
+
+.fndr-immersive-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.fndr-immersive-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.fndr-immersive-scroll::-webkit-scrollbar-thumb {
+    background: rgba(212, 160, 74, 0.30);
+    border-radius: 999px;
+}
+.fndr-immersive-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 160, 74, 0.55);
+}
+
+/* Section wrapper — every section uses this base. */
+.fndr-section {
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+    padding: var(--s-7) var(--s-7) var(--s-7) calc(var(--s-7) + 48px);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.fndr-section--auto {
+    min-height: auto;
+}
+
+.fndr-section--short {
+    min-height: 60vh;
+}
+
+/* Section vignette — radial darkening to focus the eye. */
+.fndr-section::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        ellipse at 50% 40%,
+        var(--bg-2) 0%,
+        var(--bg) 60%,
+        #0e0a07 100%
+    );
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Mono label — used at the top of every section ("REEL 0421", "CAPTURE PIPELINE", etc.) */
+.fndr-mono-label {
+    font-family: var(--film-font-mono);
+    font-size: var(--t-micro);
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 var(--s-3) 0;
+}
+
+/* Section title — display font, scaled to section role. */
+.fndr-section-title {
+    font-family: var(--film-font-display);
+    font-weight: 500;
+    font-size: var(--t-h1);
+    line-height: 1.05;
+    color: var(--fg);
+    margin: 0 0 var(--s-5) 0;
+    letter-spacing: -0.01em;
+}
+
+.fndr-section-title em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 400;
+}
+
+.fndr-section-subtitle {
+    font-family: var(--film-font-body);
+    font-size: var(--t-body-lg);
+    font-style: italic;
+    color: var(--fg-2);
+    margin: 0 0 var(--s-6) 0;
+    max-width: 60ch;
+}
+
+/* Placeholder section style — visible only on early slices. */
+.fndr-section-placeholder {
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+}
+
+.fndr-section-placeholder .fndr-section-placeholder-card {
+    border: 1px dashed var(--hairline-strong);
+    border-radius: var(--i-radius-md);
+    padding: var(--s-6);
+    max-width: 540px;
+    color: var(--fg-3);
+    font-family: var(--film-font-mono);
+    font-size: var(--t-body-sm);
+    letter-spacing: var(--film-track-label);
+}
+
+/* Buttons — primary (amber filled) + ghost (hairline outline). */
+.fndr-btn {
+    --btn-bg: transparent;
+    --btn-fg: var(--fg);
+    --btn-border: var(--hairline-strong);
+    --btn-shadow: none;
+    appearance: none;
+    border: 1px solid var(--btn-border);
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    box-shadow: var(--btn-shadow);
+    padding: 12px 22px;
+    font-family: var(--film-font-mono);
+    font-size: var(--t-label);
+    text-transform: uppercase;
+    letter-spacing: var(--film-track-stamp);
+    border-radius: var(--i-radius-sm);
+    cursor: pointer;
+    transition: var(--transition-fast-i);
+}
+.fndr-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: var(--halation-soft);
+}
+.fndr-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.fndr-btn--primary {
+    --btn-bg: var(--accent);
+    --btn-fg: var(--bg);
+    --btn-border: var(--accent);
+    --btn-shadow: var(--halation-soft);
+}
+.fndr-btn--primary:hover {
+    --btn-bg: var(--accent-2);
+    --btn-border: var(--accent-2);
+    color: var(--bg);
+    box-shadow: var(--halation);
+}
+
+/* Common row helper. */
+.fndr-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+}

@@ -51,7 +51,7 @@
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
     font-size: 0.7rem;
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     color: var(--text-muted);
     letter-spacing: 0.02em;
 }
@@ -205,7 +205,7 @@
 
 .ap-card {
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.025);
     padding: 16px;
 }
@@ -220,7 +220,7 @@
 .ap-card-subtitle {
     font-size: 0.74rem;
     color: var(--text-muted);
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     margin-top: 2px;
 }
 
@@ -306,7 +306,7 @@
 .ap-metric-detail {
     font-size: 0.7rem;
     color: var(--text-muted);
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -432,7 +432,7 @@
 .ap-ollama-banner-sub {
     font-size: 0.74rem;
     color: rgba(198, 245, 232, 0.65);
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     margin-top: 2px;
 }
 
@@ -575,7 +575,7 @@
 .ap-provider-tab-status {
     font-size: 0.68rem;
     color: var(--text-muted);
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
 }
 
 /* Provider note ---------------------------------------------------------- */
@@ -653,7 +653,7 @@
     border-radius: 9px;
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     color: rgba(200, 220, 200, 0.85);
     margin-bottom: 14px;
@@ -719,7 +719,7 @@
 
 .ap-gateway-url {
     font-size: 0.7rem;
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
     color: var(--text-muted);
 }
 
@@ -966,7 +966,7 @@
     gap: 18px;
     padding: 18px;
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     background:
         linear-gradient(135deg, rgba(109, 106, 255, 0.08) 0%, transparent 60%),
         rgba(255, 255, 255, 0.02);

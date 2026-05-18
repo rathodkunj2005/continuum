@@ -1,0 +1,115 @@
+/* ── Slice 5 — Search scene ────────────────────────────────────────────── */
+.fndr-search-scene {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 clamp(24px, 6vw, 80px);
+}
+
+.fndr-search-scene-inner {
+    width: min(680px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.fndr-search-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin: 0;
+}
+
+.fndr-search-heading {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: clamp(36px, 5vw, 58px);
+    font-weight: 400;
+    color: var(--fg);
+    margin: 0;
+    line-height: 1.1;
+}
+
+.fndr-search-field-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--hairline-strong);
+    padding-bottom: 10px;
+}
+
+.fndr-search-field {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--fg);
+    caret-color: var(--accent);
+}
+
+.fndr-search-field::placeholder {
+    color: var(--fg-3);
+}
+
+.fndr-search-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--hairline-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: fndrSearchSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes fndrSearchSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Intent chips */
+.fndr-search-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.fndr-search-chip {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+}
+
+/* Results */
+.fndr-search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 60px;
+}
+
+.fndr-search-result-row {
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.fndr-search-empty {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--fg-3);
+    text-align: center;
+    margin: 24px 0 0;
+}

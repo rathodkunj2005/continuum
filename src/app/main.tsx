@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import { AppShell } from "./AppShell";
 import { STORAGE_KEYS } from "@/shared/utils/config";
 import { applyPalette, isPaletteKey, type PaletteMode } from "@/shared/theme/cinematic-palettes";
 import "./styles/index.css";
@@ -14,6 +14,6 @@ applyPalette(isPaletteKey(storedPalette) ? storedPalette : "film", theme);
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-        <App />
+        <AppShell />
     </React.StrictMode>
 );
