@@ -20,7 +20,8 @@ import "./KnowledgeGraph.css";
 export interface KnowledgeGraphProps {
     nodes: InsightGraphNode[];
     edges: InsightGraphEdge[];
-    height?: number;
+    /** Numeric height in pixels, or a CSS string like "100%". Defaults to 480. */
+    height?: number | string;
     onNodeClick?: (node: InsightGraphNode) => void;
     selectedNodeId?: string | null;
     pathNodeIds?: readonly string[] | null;
@@ -187,7 +188,7 @@ export function KnowledgeGraph({
                     ref={canvasRef}
                     view={view}
                     width={0}
-                    height={height}
+                    height={typeof height === "number" ? height : 0}
                     selectedId={effectiveSelectedId}
                     hoveredId={hoveredId}
                     neighborhoodIds={neighborhoodIds}

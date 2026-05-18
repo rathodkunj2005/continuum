@@ -209,7 +209,7 @@ export function MemoryCardsPanel({
     const [perspectiveFilter, setPerspectiveFilter] = useState<PerspectiveFilter>(PERSPECTIVE_FILTER_ALL);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [openDebugIds, setOpenDebugIds] = useState<Set<string>>(new Set());
-    const [debugById, setDebugById] = useState<Record<string, MemoryDebugInspector>>({});
+    const [debugById, setDebugById] = useState<Record<string, MemoryDebugInspector | null>>({});
     const [, setDebugLoadingId] = useState<string | null>(null);
     // Image-to-image (CLIP) similar-screens state, keyed by seed card id.
     const [openSimilarIds, setOpenSimilarIds] = useState<Set<string>>(new Set());
@@ -483,8 +483,10 @@ export function MemoryCardsPanel({
                     ...previous,
                     [memoryId]: debug,
                 }));
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Unable to load memory debug details.");
+            } catch {
+                // Debug details are optional — don't surface as a panel-level error.
+                // The expanded modal will simply show no debug section.
+                setDebugById((previous) => ({ ...previous, [memoryId]: null }));
             } finally {
                 setDebugLoadingId(null);
             }
@@ -905,7 +907,7 @@ export function MemoryCardsPanel({
                         {(subgraph?.nodes?.length ?? 0) > 0 && (
                             <div className="memory-graph-stage">
                                 <KnowledgeGraph
-                                    height={420}
+                                    height="100%"
                                     maxSimulationTicks={GRAPH_SIM_MAX_TICKS}
                                     nodes={vizGraphNodes}
                                     edges={filteredGraphEdges}

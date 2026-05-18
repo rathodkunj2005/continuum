@@ -253,7 +253,9 @@ export function ControlPanel({
         }
     }, [isAppearanceOpen, isOpen]);
 
-    // Apply theme to document root
+    // Apply theme to document root.
+    // film-paper.css now responds to both "dark"/"film" (dark mode) and
+    // "light"/"paper" (light mode) so we can set the label as-is.
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
         localStorage.setItem(STORAGE_KEYS.theme, theme);

@@ -138,8 +138,11 @@
    The .fndr-immersive-root selector is retained as an alias so
    immersive components can still scope-override safely.
    ============================================================= */
+/* "dark" is the legacy UI-facing label; "film" is the canonical CSS name.
+   Both trigger the same dark film tokens. */
 :root,
-:root[data-theme="film"] {
+:root[data-theme="film"],
+:root[data-theme="dark"] {
     /* 60% dominant */
     --bg: var(--film-bg);
     --bg-2: var(--film-bg-2);
@@ -183,9 +186,10 @@
     --font-mono: var(--film-font-mono);
 }
 
-/* Paper variant — light archival mode. Toggle with
-   document.documentElement.dataset.theme = "paper". */
-:root[data-theme="paper"] {
+/* Paper variant — light archival mode.
+   "light" is the legacy UI-facing label; "paper" is the canonical CSS name. */
+:root[data-theme="paper"],
+:root[data-theme="light"] {
     --bg: var(--paper-bg);
     --bg-2: var(--paper-bg-2);
     --bg-3: var(--paper-bg-3);
