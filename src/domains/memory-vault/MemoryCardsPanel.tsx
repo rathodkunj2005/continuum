@@ -916,6 +916,8 @@ export function MemoryCardsPanel({
                                     selectedNodeId={selectedGraphNode?.id ?? null}
                                     pathNodeIds={pathHighlightIds}
                                     highlightNodeIds={hubHighlightIds}
+                                    showLegend={false}
+                                    showSidePanel={false}
                                 />
                                 {selectedGraphNode && (
                                     <aside className="memory-graph-detail" aria-label="Graph node detail">
