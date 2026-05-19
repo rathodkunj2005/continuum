@@ -36,9 +36,8 @@ export const GraphLabels: React.FC<GraphLabelsProps> = ({
   const hoveredNodeId = useGraphStore((s) => s.hoveredNodeId)
   const showLabels = useGraphStore((s) => s.showLabels)
 
-  if (!showLabels) return null
-
-  // Compute labels with strict discipline — very sparse
+  // Compute labels unconditionally to keep hook order stable across renders.
+  // The early `return null` below skips rendering but does not skip the hook.
   const labels = useMemo(() => {
     const result: Label[] = []
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]))
@@ -119,6 +118,9 @@ export const GraphLabels: React.FC<GraphLabelsProps> = ({
 
     return result.slice(0, maxLabels)
   }, [selectedNodeId, hoveredNodeId, nodePositions, communities, graphData.nodes])
+
+  // Safe to early-return AFTER all hooks have run.
+  if (!showLabels) return null
 
   return (
     <div className="absolute inset-0 pointer-events-none">
