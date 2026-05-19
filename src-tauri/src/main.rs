@@ -697,6 +697,11 @@ fn main() {
             ipc::commands::import_meta_glasses_photo,
             ipc::commands::models_cleanup_dry_run,
             ipc::commands::models_cleanup_confirm,
+            // Graph projection layer for 3D visualization
+            fndr_lib::graph::projection_commands::get_memory_graph_atlas,
+            fndr_lib::graph::projection_commands::get_memory_graph_context,
+            fndr_lib::graph::projection_commands::get_graph_node_neighborhood,
+            fndr_lib::graph::projection_commands::get_graph_communities,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
