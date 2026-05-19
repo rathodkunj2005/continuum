@@ -17,6 +17,7 @@ import { KnowledgeGraph } from "./KnowledgeGraph";
 import { GRAPH_SIM_MAX_TICKS, useGraph } from "./useGraph";
 import { MemoryCard as MemoryCardComponent } from "./MemoryCard";
 import { ExpandedMemoryCard } from "./ExpandedMemoryCard";
+import { KnowledgeGraph3D } from "@/features/graph/components";
 
 const VAULT_BROWSE_STORAGE_KEY = "fndr.memoryVault.browseMode";
 
@@ -179,6 +180,7 @@ export function MemoryCardsPanel({
         }
         return readStoredBrowseMode();
     });
+    const [use3DGraph, setUse3DGraph] = useState(false);
     const [selectedGraphNode, setSelectedGraphNode] = useState<GraphNode | null>(null);
     const [graphNodeDetail, setGraphNodeDetail] = useState<GraphNode | null>(null);
     const [graphDetailLoading, setGraphDetailLoading] = useState(false);
@@ -733,20 +735,44 @@ export function MemoryCardsPanel({
                             </div>
                         )}
                         {(subgraph?.nodes?.length ?? 0) > 0 && (
-                            <div className="memory-graph-stage">
-                                <KnowledgeGraph
-                                    height="100%"
-                                    maxSimulationTicks={GRAPH_SIM_MAX_TICKS}
-                                    nodes={vizGraphNodes}
-                                    edges={subgraph?.edges ?? []}
-                                    louvainByNodeId={louvainByNodeId}
-                                    onNodeClick={(n) => void handleGraphNodeClick(n)}
-                                    selectedNodeId={selectedGraphNode?.id ?? null}
-                                    pathNodeIds={pathHighlightIds}
-                                    highlightNodeIds={hubHighlightIds}
-                                    showLegend={false}
-                                    showSidePanel={false}
-                                />
+                            <div className="memory-graph-stage" style={{ position: "relative" }}>
+                                {/* 2D/3D toggle button */}
+                                <div style={{ position: "absolute", top: 10, right: 10, zIndex: 20 }}>
+                                    <button
+                                        type="button"
+                                        className="ui-action-btn"
+                                        onClick={() => setUse3DGraph(!use3DGraph)}
+                                        style={{
+                                            backgroundColor: use3DGraph ? "#0066cc" : "transparent",
+                                            border: "1px solid #444",
+                                            padding: "6px 12px",
+                                            fontSize: "12px",
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        {use3DGraph ? "📊 2D" : "🎨 3D"}
+                                    </button>
+                                </div>
+
+                                {!use3DGraph ? (
+                                    <KnowledgeGraph
+                                        height="100%"
+                                        maxSimulationTicks={GRAPH_SIM_MAX_TICKS}
+                                        nodes={vizGraphNodes}
+                                        edges={subgraph?.edges ?? []}
+                                        louvainByNodeId={louvainByNodeId}
+                                        onNodeClick={(n) => void handleGraphNodeClick(n)}
+                                        selectedNodeId={selectedGraphNode?.id ?? null}
+                                        pathNodeIds={pathHighlightIds}
+                                        highlightNodeIds={hubHighlightIds}
+                                        showLegend={false}
+                                        showSidePanel={false}
+                                    />
+                                ) : (
+                                    <KnowledgeGraph3D
+                                        onClose={() => setUse3DGraph(false)}
+                                    />
+                                )}
                                 {selectedGraphNode && (
                                     <aside className="memory-graph-detail" aria-label="Graph node detail">
                                         <div className="memory-graph-detail-header">

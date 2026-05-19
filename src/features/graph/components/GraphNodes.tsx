@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback } from "react"
 import * as THREE from "three"
-import type { GraphData, NodeType } from "../types"
+import type { GraphData } from "../types"
 import { useGraphStore } from "../state/graphStore"
 import { getNodeGeometry } from "../rendering/geometries"
 import { createNodeMaterial, createGlowMaterial } from "../rendering/materials"
@@ -36,7 +36,6 @@ function NodeMesh({
   isHovered,
 }: any) {
   const meshRef = React.useRef<THREE.Mesh>(null)
-  const glowRef = React.useRef<THREE.Mesh>(null)
 
   const size = useMemo(() => getNodeSize(node), [node])
   const glowIntensity = useMemo(() => getNodeGlowIntensity(node), [node])

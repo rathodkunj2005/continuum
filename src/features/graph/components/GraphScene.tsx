@@ -16,17 +16,24 @@ interface GraphSceneProps {
 function SceneContent({ graphData }: GraphSceneProps) {
   const { camera } = useThree()
   const controlsRef = useRef<any>(null)
+  const hasMountedRef = useRef(false)
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId)
 
-  // Compute layout once
+  // Compute layout once — only changes when graphData actually changes
   const layout = useMemo(() => {
+    console.debug("[GraphScene] Layout recompute")
     const communities = computeCommunityAnchors(graphData.communities)
     const nodePositions = computeLocalNodePositions(graphData.nodes, communities)
     return { communities, nodePositions }
   }, [graphData.nodes, graphData.communities])
 
-  // Reset camera position
+  // Initialize camera position ONLY on first mount — do not reset on layout changes
   useEffect(() => {
+    if (hasMountedRef.current) return
+
+    console.debug("[GraphScene] Canvas mounted, initializing camera")
+    hasMountedRef.current = true
+
     const bounds = new THREE.Box3()
 
     // Add all community anchors to bounds
@@ -36,7 +43,7 @@ function SceneContent({ graphData }: GraphSceneProps) {
       )
     })
 
-    // Add padding
+    // Add padding to frame all communities
     const size = bounds.getSize(new THREE.Vector3())
     const maxDim = Math.max(size.x, size.y, size.z)
     const fov = (camera as THREE.PerspectiveCamera).fov * (Math.PI / 180)
@@ -50,11 +57,15 @@ function SceneContent({ graphData }: GraphSceneProps) {
       controlsRef.current.target.set(0, 0, 0)
       controlsRef.current.update()
     }
-  }, [camera, layout.communities])
+  }, []) // Only run once on mount
 
-  // Focus on selected node
+  // Focus on selected node when explicitly selected (not on hover)
+  // Use ref to avoid triggering on layout/nodePositions changes
+  const selectedNodeRef = useRef<string | null>(null)
   useEffect(() => {
-    if (selectedNodeId && controlsRef.current) {
+    if (selectedNodeId && selectedNodeId !== selectedNodeRef.current && controlsRef.current) {
+      selectedNodeRef.current = selectedNodeId
+      console.debug("[GraphScene] Focusing selected node:", selectedNodeId)
       const nodeLayout = layout.nodePositions.find((n) => n.nodeId === selectedNodeId)
       if (nodeLayout) {
         // Smooth camera transition to selected node
@@ -64,6 +75,8 @@ function SceneContent({ graphData }: GraphSceneProps) {
         )
         controlsRef.current.update()
       }
+    } else if (!selectedNodeId) {
+      selectedNodeRef.current = null
     }
   }, [selectedNodeId, layout.nodePositions])
 

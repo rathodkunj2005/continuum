@@ -9,7 +9,6 @@ export interface DepthAdjustment {
 
 export function computeNodeDepths(graph: GraphData): DepthAdjustment[] {
   const adjustments: DepthAdjustment[] = []
-  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]))
 
   // Sort by relevance score (if available) or importance
   const sortedNodes = [...graph.nodes].sort((a, b) => {
@@ -51,7 +50,6 @@ export function computeNodeDepths(graph: GraphData): DepthAdjustment[] {
 }
 
 export function applyDepthToNode(
-  node: GraphNode,
   adjustment: DepthAdjustment,
   baseZ: number
 ): number {

@@ -67,8 +67,6 @@ export function createLabelMaterial(texture: THREE.CanvasTexture): THREE.MeshBas
 export function createGlowMaterial(color: string, intensity: number): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
     color,
-    emissive: color,
-    emissiveIntensity: intensity,
     transparent: true,
     opacity: 0.3 * intensity,
     fog: false,

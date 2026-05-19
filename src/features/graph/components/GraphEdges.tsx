@@ -63,10 +63,15 @@ export const GraphEdges: React.FC<GraphEdgesProps> = ({ graphData, nodePositions
     return new Map(nodePositions.map((p) => [p.nodeId, p.position]))
   }, [nodePositions])
 
-  // Select visible edges with filtering
+  // Select visible edges with very conservative filtering
   const visibleEdges = useMemo(() => {
-    const selectedSet = selectedNodeId ? new Set([selectedNodeId]) : new Set<string>()
-    return selectVisibleEdges(graphData.edges, selectedSet, enabledEdgeTypes)
+    // Only show edges for selected/hovered nodes to avoid visual noise
+    const selectedSet = new Set<string>()
+    if (selectedNodeId) selectedSet.add(selectedNodeId)
+
+    // Very sparse default: only show selected node edges, max 8 total
+    const maxEdges = selectedNodeId ? 8 : 0
+    return selectVisibleEdges(graphData.edges, selectedSet, enabledEdgeTypes, maxEdges)
   }, [graphData.edges, selectedNodeId, enabledEdgeTypes])
 
   // Filter to only edges with valid positions

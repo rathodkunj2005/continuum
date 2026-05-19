@@ -21,6 +21,16 @@ export const KnowledgeGraph3D: React.FC<KnowledgeGraph3DProps> = ({ onClose }) =
   const setLoading = useGraphStore((s) => s.setLoading)
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId)
   const hoveredNodeId = useGraphStore((s) => s.hoveredNodeId)
+  const enabledNodeTypes = useGraphStore((s) => s.enabledNodeTypes)
+  const enabledEdgeTypes = useGraphStore((s) => s.enabledEdgeTypes)
+
+  // Track mount/unmount
+  useEffect(() => {
+    console.debug("[KnowledgeGraph3D] 🎬 Component mounted")
+    return () => {
+      console.debug("[KnowledgeGraph3D] 🎬 Component unmounted")
+    }
+  }, [])
 
   // Load initial graph data
   useEffect(() => {
@@ -130,12 +140,50 @@ export const KnowledgeGraph3D: React.FC<KnowledgeGraph3DProps> = ({ onClose }) =
 
         {/* Dev diagnostics */}
         {typeof window !== "undefined" && (
-          <div className="absolute bottom-4 right-4 bg-slate-900 bg-opacity-90 p-2 rounded text-xs text-slate-400 font-mono">
-            <div>Nodes: {graphData.nodes.length}</div>
-            <div>Edges: {graphData.edges.length}</div>
-            <div>Communities: {graphData.communities.length}</div>
-            <div>Mode: {mode}</div>
-            {selectedNodeId && <div>Selected: {selectedNodeId.slice(0, 8)}</div>}
+          <div className="absolute bottom-4 right-4 bg-slate-900 bg-opacity-95 border border-slate-700 p-3 rounded text-xs text-slate-300 font-mono max-w-xs">
+            <div className="font-bold text-slate-100 mb-2">📊 Graph Diagnostics</div>
+            <div className="space-y-1">
+              <div>
+                <span className="text-slate-500">Data Source:</span>{" "}
+                <span className="text-cyan-400">
+                  {graphData.nodes.length > 0 ? "backend_graph" : "empty"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">Mode:</span> <span className="text-blue-400">{mode}</span>
+              </div>
+              <div className="border-t border-slate-700 pt-1 mt-1">
+                <div>
+                  <span className="text-slate-500">Nodes:</span> {graphData.nodes.length}
+                </div>
+                <div>
+                  <span className="text-slate-500">Total Edges:</span> {graphData.edges.length}
+                </div>
+                <div>
+                  <span className="text-slate-500">Communities:</span> {graphData.communities.length}
+                </div>
+              </div>
+              <div className="border-t border-slate-700 pt-1 mt-1">
+                <div>
+                  <span className="text-slate-500">Node Filters:</span> {enabledNodeTypes.size}/3
+                </div>
+                <div>
+                  <span className="text-slate-500">Edge Filters:</span> {enabledEdgeTypes.size}/7
+                </div>
+              </div>
+              {selectedNodeId && (
+                <div className="border-t border-slate-700 pt-1 mt-1">
+                  <div>
+                    <span className="text-slate-500">Selected:</span> {selectedNodeId.slice(0, 8)}
+                  </div>
+                </div>
+              )}
+              {hoveredNodeId && (
+                <div>
+                  <span className="text-slate-500">Hovered:</span> {hoveredNodeId.slice(0, 8)}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

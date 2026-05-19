@@ -57,7 +57,6 @@ export function computeLocalNodePositions(
 // Simple force-directed layout for nodes within a community
 export function simulateLocalForces(
   layouts: NodeLayout[],
-  nodes: Map<string, GraphNode>,
   edges: { source: string; target: string; weight: number }[],
   iterations: number = 20
 ): NodeLayout[] {

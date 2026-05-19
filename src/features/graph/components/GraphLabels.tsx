@@ -1,7 +1,8 @@
 import React, { useMemo } from "react"
 import type { GraphNode, GraphCommunity } from "../types"
 import { useGraphStore } from "../state/graphStore"
-import { LABEL_CONFIG, COMMUNITY_COLORS } from "../constants"
+import { COMMUNITY_COLORS } from "../constants"
+import { getNodeDisplayTitle } from "../utils/displayTitle"
 
 interface NodeLayout {
   nodeId: string
@@ -17,56 +18,13 @@ interface Label {
   position: { x: number; y: number; z: number }
   color: string
   isSelected: boolean
-  type: "community" | "node"
+  isCommunity: boolean
 }
 
 interface GraphLabelsProps {
-  graphData: { nodes: GraphNode[]; edges: any[] }
+  graphData: { nodes: GraphNode[] }
   nodePositions: NodeLayout[]
   communities: GraphCommunity[]
-}
-
-function LabelElement({
-  label,
-  screenPosition,
-}: {
-  label: Label
-  screenPosition: [number, number] | null
-}) {
-  if (!screenPosition) return null
-
-  const [x, y] = screenPosition
-
-  return (
-    <div
-      key={label.id}
-      style={{
-        position: "absolute",
-        left: `${x}px`,
-        top: `${y}px`,
-        pointerEvents: "none",
-        transform: "translate(-50%, -50%)",
-        zIndex: label.isSelected ? 100 : 50,
-      }}
-      className="whitespace-nowrap"
-    >
-      <div
-        className={`px-2 py-1 rounded text-xs font-medium ${
-          label.isSelected ? "opacity-100 scale-105" : "opacity-75"
-        } transition-all`}
-        style={{
-          backgroundColor: "rgba(10, 14, 39, 0.9)",
-          color: label.color,
-          border: `1px solid ${label.color}40`,
-          maxWidth: "120px",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {label.text}
-      </div>
-    </div>
-  )
 }
 
 export const GraphLabels: React.FC<GraphLabelsProps> = ({
@@ -80,104 +38,123 @@ export const GraphLabels: React.FC<GraphLabelsProps> = ({
 
   if (!showLabels) return null
 
-  // Compute labels with strict discipline
+  // Compute labels with strict discipline — very sparse
   const labels = useMemo(() => {
     const result: Label[] = []
     const nodeMap = new Map(graphData.nodes.map((n) => [n.id, n]))
+    const maxLabels = 10 // Very aggressive cap
 
-    // 1. Community labels (always shown)
-    communities.forEach((community) => {
+    // 1. Community labels (always shown, up to 5)
+    communities.slice(0, 5).forEach((community) => {
       result.push({
         id: `community-${community.id}`,
         text: community.label,
         position: community.anchor,
-        color: COMMUNITY_COLORS[community.label] || "#CCCCCC",
+        color: COMMUNITY_COLORS[community.label] || "#D4AF37", // Muted gold default
         isSelected: false,
-        type: "community",
+        isCommunity: true,
       })
     })
 
     // 2. Selected node label
-    if (selectedNodeId) {
+    if (selectedNodeId && result.length < maxLabels) {
       const selectedNode = nodeMap.get(selectedNodeId)
       const selectedPos = nodePositions.find((p) => p.nodeId === selectedNodeId)
       if (selectedNode && selectedPos) {
+        const displayTitle = getNodeDisplayTitle(selectedNode)
         result.push({
           id: `node-${selectedNodeId}`,
-          text:
-            selectedNode.title.length > LABEL_CONFIG.truncateLength
-              ? selectedNode.title.substring(0, LABEL_CONFIG.truncateLength) + "…"
-              : selectedNode.title,
+          text: displayTitle.length > 32 ? displayTitle.substring(0, 32) + "…" : displayTitle,
           position: selectedPos.position,
-          color: "#FFFFFF",
+          color: "#F5F5DC", // Off-white
           isSelected: true,
-          type: "node",
+          isCommunity: false,
         })
       }
     }
 
     // 3. Hovered node label (only if different from selected)
-    if (hoveredNodeId && hoveredNodeId !== selectedNodeId) {
+    if (hoveredNodeId && hoveredNodeId !== selectedNodeId && result.length < maxLabels) {
       const hoveredNode = nodeMap.get(hoveredNodeId)
       const hoveredPos = nodePositions.find((p) => p.nodeId === hoveredNodeId)
       if (hoveredNode && hoveredPos) {
+        const displayTitle = getNodeDisplayTitle(hoveredNode)
         result.push({
           id: `node-${hoveredNodeId}`,
-          text:
-            hoveredNode.title.length > LABEL_CONFIG.truncateLength
-              ? hoveredNode.title.substring(0, LABEL_CONFIG.truncateLength) + "…"
-              : hoveredNode.title,
+          text: displayTitle.length > 32 ? displayTitle.substring(0, 32) + "…" : displayTitle,
           position: hoveredPos.position,
-          color: "#FFFF99",
+          color: "#FFD700", // Bright gold for hover
           isSelected: false,
-          type: "node",
+          isCommunity: false,
         })
       }
     }
 
-    // 4. Top important nodes (up to limit, excluding selected/hovered)
+    // 4. Very few top important nodes (max 2-3 total, already have community + selected)
     const importantNodes = graphData.nodes
       .filter(
         (n) =>
           n.id !== selectedNodeId &&
           n.id !== hoveredNodeId &&
           n.importance_score &&
-          n.importance_score > 0.7
+          n.importance_score > 0.8
       )
       .sort((a, b) => (b.importance_score ?? 0) - (a.importance_score ?? 0))
-      .slice(0, LABEL_CONFIG.topImportanceShown)
+      .slice(0, Math.max(0, maxLabels - result.length - 1))
 
     importantNodes.forEach((node) => {
       const pos = nodePositions.find((p) => p.nodeId === node.id)
-      if (pos && result.length < LABEL_CONFIG.maxLabelsVisible) {
+      if (pos && result.length < maxLabels) {
+        const displayTitle = getNodeDisplayTitle(node)
         result.push({
           id: `node-${node.id}`,
-          text:
-            node.title.length > LABEL_CONFIG.truncateLength
-              ? node.title.substring(0, LABEL_CONFIG.truncateLength) + "…"
-              : node.title,
+          text: displayTitle.length > 28 ? displayTitle.substring(0, 28) + "…" : displayTitle,
           position: pos.position,
-          color: "#AAAAFF",
+          color: "#B8B8B8", // Dim off-white
           isSelected: false,
-          type: "node",
+          isCommunity: false,
         })
       }
     })
 
-    return result.slice(0, LABEL_CONFIG.maxLabelsVisible)
-  }, [
-    selectedNodeId,
-    hoveredNodeId,
-    nodePositions,
-    communities,
-    graphData.nodes,
-    showLabels,
-  ])
+    return result.slice(0, maxLabels)
+  }, [selectedNodeId, hoveredNodeId, nodePositions, communities, graphData.nodes])
 
   return (
     <div className="absolute inset-0 pointer-events-none">
       {labels.map((label) => (
-        <LabelElement key={label.id} label={label} screenPosition={null} />
+        <div
+          key={label.id}
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            pointerEvents: "none",
+            transform: "translate(-50%, -50%)",
+            zIndex: label.isSelected ? 100 : label.isCommunity ? 60 : 50,
+          }}
+          className="whitespace-nowrap"
+        >
+          <div
+            style={{
+              padding: label.isCommunity ? "4px 8px" : "2px 6px",
+              borderRadius: "4px",
+              fontSize: label.isCommunity ? "12px" : "11px",
+              fontWeight: label.isCommunity ? "600" : "500",
+              color: label.color,
+              backgroundColor: "rgba(10, 14, 39, 0.92)",
+              border: `1px solid ${label.color}40`,
+              maxWidth: "140px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              opacity: label.isSelected ? 1 : 0.8,
+              transition: "opacity 150ms",
+              fontFamily: "system-ui, -apple-system, sans-serif",
+            }}
+          >
+            {label.text}
+          </div>
+        </div>
       ))}
     </div>
   )

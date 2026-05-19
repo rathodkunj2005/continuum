@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React from "react"
 import { KnowledgeGraph3D } from "../components/KnowledgeGraph3D"
 
 interface MemoryVaultGraph3DViewProps {
@@ -19,7 +19,7 @@ export const MemoryVaultGraph3DView: React.FC<MemoryVaultGraph3DViewProps> = ({
   return (
     <div className="memory-graph-layout">
       <div className="memory-graph-stage" style={{ height: "100%" }}>
-        <KnowledgeGraph3D onClose={onClose} initialMode="atlas" />
+        <KnowledgeGraph3D onClose={onClose} />
       </div>
     </div>
   )

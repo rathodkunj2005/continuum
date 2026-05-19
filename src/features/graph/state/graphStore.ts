@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { devtools } from "zustand/middleware"
 import type { GraphUIState, NodeType, EdgeType } from "../types"
+import { NodeType as NT, EdgeType as ET } from "../types"
 
 interface GraphStoreActions {
   setMode: (mode: "context" | "atlas") => void
@@ -26,8 +27,8 @@ export const useGraphStore = create<GraphUIState & GraphStoreActions>()(
       hoveredNodeId: null,
       expandedNodeIds: new Set(),
       selectedCommunityIds: new Set(),
-      enabledNodeTypes: new Set(["memory", "entity", "community"]),
-      enabledEdgeTypes: new Set(["semantic_similarity", "explicit_reference", "same_project", "temporal_adjacency"]),
+      enabledNodeTypes: new Set([NT.Memory, NT.Entity, NT.Community]),
+      enabledEdgeTypes: new Set([ET.SemanticSimilarity, ET.ExplicitReference, ET.SameProject, ET.TemporalAdjacency]),
       zoomLevel: 1,
       isLoading: false,
       error: null,
