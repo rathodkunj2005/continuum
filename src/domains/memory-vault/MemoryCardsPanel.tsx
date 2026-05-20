@@ -17,7 +17,7 @@ import { KnowledgeGraph } from "./KnowledgeGraph";
 import { GRAPH_SIM_MAX_TICKS, useGraph } from "./useGraph";
 import { MemoryCard as MemoryCardComponent } from "./MemoryCard";
 import { ExpandedMemoryCard } from "./ExpandedMemoryCard";
-import { KnowledgeGraph3D } from "@/features/graph/components";
+import { KnowledgeGraph3D, GraphErrorBoundary } from "@/features/graph/components";
 
 const VAULT_BROWSE_STORAGE_KEY = "fndr.memoryVault.browseMode";
 
@@ -804,11 +804,16 @@ export function MemoryCardsPanel({
                                         showSidePanel={false}
                                     />
                                 ) : (
-                                    <KnowledgeGraph3D
-                                        onClose={() => setUse3DGraph(false)}
-                                        subgraph={subgraph}
-                                        louvain={louvainByNodeId}
-                                    />
+                                    <GraphErrorBoundary
+                                        onReset={() => setUse3DGraph(false)}
+                                        fallbackMessage="3D graph failed to render. Switch back to 2D and check the console."
+                                    >
+                                        <KnowledgeGraph3D
+                                            onClose={() => setUse3DGraph(false)}
+                                            subgraph={subgraph}
+                                            louvain={louvainByNodeId}
+                                        />
+                                    </GraphErrorBoundary>
                                 )}
                                 {selectedGraphNode && (
                                     <aside className="memory-graph-detail" aria-label="Graph node detail">

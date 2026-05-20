@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import type { InsightGraphSubgraph } from "@/shared/ipc/tauri"
 import { graphDataAdapter } from "../data/adapter"
 import { normalizeInsightGraph } from "../data/normalizeInsightGraph"
@@ -52,6 +52,19 @@ export const KnowledgeGraph3D: React.FC<KnowledgeGraph3DProps> = ({
     return `${subgraph.nodes.length}:${subgraph.edges.length}:${subgraph.cluster_0_name ?? ""}`
   }, [subgraph])
 
+  // Keep refs in sync with unstable object props so we can read them inside effects
+  // without triggering re-runs when the parent re-renders.
+  const subgraphRef = useRef<InsightGraphSubgraph | null>(null)
+  const louvainRef = useRef<Record<string, number> | null>(null)
+
+  useEffect(() => {
+    subgraphRef.current = subgraph ?? null
+  }, [subgraph])
+
+  useEffect(() => {
+    louvainRef.current = louvain ?? null
+  }, [louvain])
+
   // Load graph data — priority: bridged subgraph > backend atlas command > error
   useEffect(() => {
     let cancelled = false
@@ -61,8 +74,8 @@ export const KnowledgeGraph3D: React.FC<KnowledgeGraph3DProps> = ({
       setError(null)
 
       // Priority 1: bridged 2D subgraph
-      if (subgraph && subgraph.nodes.length > 0) {
-        const data = normalizeInsightGraph(subgraph, louvain ?? null)
+      if (subgraphRef.current && subgraphRef.current.nodes.length > 0) {
+        const data = normalizeInsightGraph(subgraphRef.current, louvainRef.current)
         if (cancelled) return
         console.debug(
           `[KnowledgeGraph3D] data source: bridged 2D subgraph ${data.nodes.length} nodes`
@@ -103,7 +116,7 @@ export const KnowledgeGraph3D: React.FC<KnowledgeGraph3DProps> = ({
     return () => {
       cancelled = true
     }
-  }, [subgraphKey, subgraph, louvain, mode, setLoading])
+  }, [subgraphKey, mode, setLoading])
 
   const handleModeChange = useCallback(
     (newMode: "atlas" | "context") => {
