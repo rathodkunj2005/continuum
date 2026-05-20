@@ -80,7 +80,7 @@ export function MemoryCard({
         .filter(Boolean)
         .join(" ");
 
-    // Compact — single row, no preview, click to expand.
+    // Compact — single row (wide) / two rows (narrow container), click to expand.
     if (variant === "compact") {
         return (
             <motion.article
@@ -110,9 +110,26 @@ export function MemoryCard({
                         </span>
                     ) : null}
                 </div>
-                <span className="fndr-mc-c-source">
-                    <em>{card.app_name}</em>
-                </span>
+                {/* source area: app name + activity/files chips */}
+                <div className="fndr-mc-c-source" aria-label="app and context">
+                    <em className="fndr-mc-c-source-app">{card.app_name}</em>
+                    {card.activity_type && card.activity_type !== "other" && (
+                        <span className="fndr-mc-c-chip fndr-mc-c-chip--activity" aria-label={`activity: ${card.activity_type}`}>
+                            {card.activity_type}
+                        </span>
+                    )}
+                    {Array.isArray(card.files_touched) && card.files_touched.length > 0 && (
+                        <span
+                            className="fndr-mc-c-chip fndr-mc-c-chip--files"
+                            title={card.files_touched.join("\n")}
+                            aria-label={`${card.files_touched.length} file${card.files_touched.length !== 1 ? "s" : ""}`}
+                        >
+                            {card.files_touched.length === 1
+                                ? card.files_touched[0].split("/").pop() ?? card.files_touched[0]
+                                : `${card.files_touched.length} files`}
+                        </span>
+                    )}
+                </div>
                 <span className="fndr-mc-c-time">
                     <span className="fndr-mc-c-day">{dayLabel}</span>
                     <span className="fndr-mc-c-clock">{timeLabel}</span>

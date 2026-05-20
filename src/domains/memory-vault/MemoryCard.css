@@ -124,10 +124,14 @@
 }
 
 /* ── COMPACT variant ───────────────────────────────────────── */
-/* Grid columns: FRAME · TITLE · SOURCE · TIME · ROUTE · THREADS */
+/* Wide layout (default):
+   grid-template-areas: "frame main  source time route threads"
+   Grid columns: FRAME · TITLE/PREVIEW · SOURCE · TIME · ROUTE · THREADS */
 .fndr-mc--compact {
     display: grid;
     grid-template-columns: 78px minmax(0, 1fr) minmax(0, 220px) 110px 22px 36px;
+    grid-template-rows: auto;
+    grid-template-areas: "frame main source time route threads";
     align-items: center;
     gap: 14px;
     min-height: 68px;
@@ -138,9 +142,10 @@
     color: var(--fg);
     transition: background var(--film-dur-fast) var(--film-ease-shutter);
 }
-/* Narrow viewports — collapse the SOURCE column to give the title room to
-   breathe. Long second-brain titles ("Why we abandoned BM25-only retrieval")
-   need that space more than the app-name does. */
+
+/* Mid viewports — collapse SOURCE column to give title more room (viewport-based
+   fallback for cases where container queries are not supported, and for the
+   intermediate 560–960px range where source still crowds the title). */
 @media (max-width: 960px) {
     .fndr-mc--compact {
         grid-template-columns: 78px minmax(0, 1fr) 0 110px 22px 36px;
@@ -151,9 +156,49 @@
     }
 }
 
+/* Narrow container (≤ 560px) — two-row layout (declared AFTER the media query
+   so container-based overrides take precedence in the cascade):
+   row 1: frame · main(title+preview) · time
+   row 2: source · route · threads (+ activity/files chips)
+   Source is revealed again in row 2 where it has dedicated space. */
+@container memory-stream (max-width: 560px) {
+    .fndr-mc--compact {
+        grid-template-columns: 78px minmax(0, 1fr) 88px;
+        grid-template-rows: auto auto;
+        grid-template-areas:
+            "frame main  time"
+            "source route threads";
+        gap: 6px 10px;
+        min-height: auto;
+        padding: 10px 12px 10px 18px;
+        align-items: start;
+    }
+    /* In two-row layout, align the bar along both rows */
+    .fndr-mc--compact .fndr-mc-bar {
+        top: 6px;
+        bottom: 6px;
+    }
+    /* row 2 items align center within their cells */
+    .fndr-mc--compact .fndr-mc-c-source,
+    .fndr-mc--compact .fndr-mc-c-route,
+    .fndr-mc--compact .fndr-mc-c-threads {
+        align-self: center;
+    }
+    /* source visible in row 2 — overrides the @media hide above */
+    .fndr-mc--compact .fndr-mc-c-source {
+        display: flex;
+    }
+    /* time stacks at top-right in row 1 */
+    .fndr-mc--compact .fndr-mc-c-time {
+        align-self: start;
+        text-align: right;
+    }
+}
+
 /* Surfacing-reason glyph — one-letter signal for *why* this row came back.
    Empty span reserves the grid slot so rows align even when reason is absent. */
 .fndr-mc-c-route {
+    grid-area: route;
     font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 600;
@@ -226,15 +271,18 @@
 }
 
 .fndr-mc-c-frame {
+    grid-area: frame;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
     letter-spacing: var(--film-track-label);
     color: var(--fg-3);
     text-transform: uppercase;
     white-space: nowrap;
+    min-width: 0;
 }
 
 .fndr-mc-c-main {
+    grid-area: main;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -267,6 +315,16 @@
 }
 
 .fndr-mc-c-source {
+    grid-area: source;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.fndr-mc-c-source-app {
     font-family: var(--font-body);
     font-style: italic;
     font-size: 11px;
@@ -274,10 +332,44 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex-shrink: 1;
     min-width: 0;
 }
 
+/* Activity-type and files-touched chips in the compact source cell */
+.fndr-mc-c-chip {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90px;
+    border-radius: 999px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+}
+
+.fndr-mc-c-chip--activity {
+    color: var(--fg-2);
+    background: var(--hairline);
+    border: 1px solid var(--hairline-2);
+}
+
+.fndr-mc-c-chip--files {
+    color: var(--fg-3);
+    background: transparent;
+    border: 1px solid var(--hairline-strong);
+    max-width: 110px;
+    /* Files chip can shrink when space is very tight */
+    flex-shrink: 1;
+}
+
 .fndr-mc-c-time {
+    grid-area: time;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
     color: var(--fg-3);
@@ -290,6 +382,7 @@
     gap: 2px;
     align-items: flex-end;
     line-height: 1.1;
+    min-width: 0;
 }
 .fndr-mc-c-day {
     font-weight: 500;
@@ -300,12 +393,17 @@
 }
 
 .fndr-mc-c-threads {
+    grid-area: threads;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
     color: var(--accent);
     letter-spacing: var(--film-track-label);
     text-align: right;
     opacity: 0.85;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ── EXPANDED variant ──────────────────────────────────────── */
