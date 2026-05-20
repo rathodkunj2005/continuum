@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { AppPanels } from "./AppPanels";
 import { BiometricLockScreen } from "./BiometricLockScreen";
+import { HomeHero } from "./HomeHero";
 import type { AppToast } from "./types";
 import { SearchBar } from "@/domains/search/SearchBar";
 import { Timeline } from "@/domains/timeline/Timeline";
@@ -33,13 +34,6 @@ import {
 import { getOnboardingState, saveOnboardingState, type OnboardingState } from "@/shared/ipc/onboarding";
 import { EVAL_UI } from "@/shared/utils/eval-ui";
 import "./styles/App.css";
-
-function formatHomeDate(now: Date): string {
-    const weekday = now.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
-    const month = now.toLocaleDateString(undefined, { month: "long" }).toUpperCase();
-    const day = now.toLocaleDateString(undefined, { day: "numeric" });
-    return `${weekday} · ${month} ${day}`;
-}
 
 function nextToastId(): string {
     return createClientId("fndr-toast");
@@ -147,21 +141,8 @@ function App() {
     }, []);
 
     const isFocusMode = !query.trim();
-    const homeDateLabel = useMemo(() => formatHomeDate(now), [now]);
 
-    const [homeGreeting, setHomeGreeting] = useState("Loading...");
-    const homeGreetingLine1 = useMemo(() => {
-        const suffix = "Let's dive into your memories.";
-        const trimmed = homeGreeting.trim();
-        const withoutSuffix = trimmed.endsWith(suffix)
-            ? trimmed.slice(0, -suffix.length).trim()
-            : trimmed;
-        const exclamationIndex = withoutSuffix.indexOf("!");
-        if (exclamationIndex >= 0) {
-            return withoutSuffix.slice(0, exclamationIndex + 1).trim();
-        }
-        return withoutSuffix;
-    }, [homeGreeting]);
+    const [homeGreeting, setHomeGreeting] = useState("");
 
     // Fetch the fun animated greeting anytime they log in or the name changes
     useEffect(() => {
@@ -619,11 +600,17 @@ function App() {
             <main className={`app-main ${isFocusMode ? "search-centered" : ""}`}>
                 {isFocusMode ? (
                     <div className="home-hero-stage">
-                        <header className="home-focus-header">
-                            <p className="home-date-context">{homeDateLabel}</p>
-                            <h1 className="home-greeting-primary">{homeGreetingLine1}</h1>
-                            <p className="home-greeting-sub">Let&apos;s dive into your memories.</p>
-                        </header>
+                        <HomeHero
+                            userName={displayName}
+                            now={now}
+                            greeting={homeGreeting}
+                            onHeroSearch={(q) => {
+                                setQueryDraft(q);
+                                void handleSearchSubmit(q);
+                            }}
+                            onEnterReel={() => { /* handled by search submit in focus mode */ }}
+                            onEnterWorkMode={() => setActivePanel("focusMode")}
+                        />
                         <section className={`search-shell ${query.trim() ? "is-active" : ""}`}>
                             <SearchBar
                                 value={queryDraft}
