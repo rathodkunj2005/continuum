@@ -491,6 +491,14 @@ export function hexToRgb(hex: string): RgbTriple {
     return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
+/** Convert 0–1 linear RGB triple back to a #rrggbb hex string. */
+export function rgbToHex(rgb: RgbTriple): string {
+    const r = Math.round(Math.max(0, Math.min(1, rgb[0])) * 255);
+    const g = Math.round(Math.max(0, Math.min(1, rgb[1])) * 255);
+    const b = Math.round(Math.max(0, Math.min(1, rgb[2])) * 255);
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
 /** WCAG relative luminance for linear 0–1 RGB. */
 export function relativeLuminance(rgb: RgbTriple): number {
     const lin = rgb.map((c) =>
@@ -571,9 +579,9 @@ ${selector} {
   --cp-active-mode: "${mode}";
   --cp-wall-text-primary: ${wallInk.primary};
   --cp-wall-text-secondary: ${wallInk.secondary};
-  --cp-wall-bg: ${d1};
-  --cp-wall-mid: ${d4};
-  --cp-wall-acc: ${accent};
+  --cp-wall-bg: ${rgbToHex(aurWall.bg)};
+  --cp-wall-mid: ${rgbToHex(aurWall.mid)};
+  --cp-wall-acc: ${rgbToHex(aurWall.acc)};
   --cp-aurora-bg-r: ${aurWall.bg[0]};
   --cp-aurora-bg-g: ${aurWall.bg[1]};
   --cp-aurora-bg-b: ${aurWall.bg[2]};
@@ -632,25 +640,12 @@ export function getAuroraColors(
 }
 
 /**
- * Wallpaper shader triple — exact cinematic swatches (same hex as the picker):
- *   void = mean(shades 1–3), fog = shade 4, pop = shade 7 (accent).
+ * Wallpaper shader triple — cinematic aurora values tuned per palette/mode.
+ * Delegates to the palette's aurora table so dark and light modes both render
+ * correctly against the active background.
  */
 export function getWallpaperAuroraColors(paletteKey: PaletteKey, mode: PaletteMode = "dark") {
-    const [d1, d2, d3, d4, , , accent] = PALETTES[paletteKey].shades;
-    const mid = hexToRgb(d4);
-    const acc = hexToRgb(accent);
-    if (mode === "light") {
-        return {
-            bg: hexToRgb(PALETTES[paletteKey].light.bg),
-            mid,
-            acc,
-        };
-    }
-    return {
-        bg: linearRgbMix3(hexToRgb(d1), hexToRgb(d2), hexToRgb(d3)),
-        mid,
-        acc,
-    };
+    return PALETTES[paletteKey].aurora[mode];
 }
 
 export function listPalettes() {

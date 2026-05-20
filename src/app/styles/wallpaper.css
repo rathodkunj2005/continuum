@@ -29,7 +29,7 @@
         ),
         radial-gradient(
             ellipse 90% 70% at 48% 50%,
-            color-mix(in srgb, var(--cp-wall-mid, var(--cp-dominant-4)) 40%, transparent),
+            color-mix(in srgb, var(--cp-wall-mid, var(--cp-surface-raised)) 40%, transparent),
             transparent 72%
         ),
         var(--cp-wall-bg, var(--cp-bg));

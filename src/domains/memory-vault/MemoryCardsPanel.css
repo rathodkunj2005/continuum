@@ -65,9 +65,9 @@
     min-width: 190px;
     max-width: 45vw;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: linear-gradient(180deg, rgba(18, 20, 24, 0.95), rgba(9, 10, 12, 0.95));
-    color: var(--text-primary);
+    border: 1px solid var(--hairline-2);
+    background: var(--bg-3);
+    color: var(--fg);
     padding: 8px 34px 8px 12px;
     font-size: 13px;
     appearance: none;
@@ -76,7 +76,7 @@
 }
 
 .memory-cards-filter select:focus {
-    border-color: rgba(160, 160, 160, 0.45);
+    border-color: var(--accent);
 }
 
 .memory-cards-filter-arrow {
@@ -84,7 +84,7 @@
     right: 10px;
     width: 11px;
     height: 11px;
-    color: rgba(255, 255, 255, 0.52);
+    color: var(--fg-3);
     pointer-events: none;
 }
 
@@ -327,19 +327,19 @@
 
 .memory-browse-card:hover {
     transform: none;
-    border-color: rgba(255, 255, 255, 0.14);
+    border-color: var(--hairline-strong);
 }
 
 .memory-browse-card.expanded {
-    border-color: rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--hairline-strong);
+    background: var(--bg-3);
 }
 
 .memory-source-count {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.38);
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--fg-3);
+    background: var(--hairline);
+    border: 1px solid var(--hairline-2);
     border-radius: 999px;
     padding: 1px 7px;
     white-space: nowrap;
@@ -348,7 +348,7 @@
 .memory-expand-details {
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 1px solid var(--hairline);
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -356,12 +356,12 @@
 
 .memory-browse-link {
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.74);
+    color: var(--fg-2);
     text-decoration: none;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--hairline-2);
     border-radius: 9px;
     padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: transparent;
     transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
     white-space: nowrap;
     overflow: hidden;
@@ -370,9 +370,9 @@
 }
 
 .memory-browse-link:hover {
-    border-color: rgba(255, 255, 255, 0.22);
-    color: rgba(255, 255, 255, 0.92);
-    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--hairline-strong);
+    color: var(--fg);
+    background: var(--hairline);
 }
 
 .memory-expand-extra-chips {
@@ -389,15 +389,15 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--fg-4);
 }
 
 .memory-snippet-item {
     font-size: 0.82rem;
     line-height: 1.55;
-    color: rgba(255, 255, 255, 0.55);
-    background: rgba(255, 255, 255, 0.03);
-    border-left: 2px solid rgba(255, 255, 255, 0.1);
+    color: var(--fg-3);
+    background: var(--hairline);
+    border-left: 2px solid var(--hairline-2);
     padding: 6px 10px;
     border-radius: 0 6px 6px 0;
     word-break: break-word;
@@ -429,7 +429,7 @@
     font-size: 1.05rem;
     font-weight: 600;
     line-height: 1.4;
-    color: rgba(255, 255, 255, 0.96);
+    color: var(--fg);
     white-space: normal;
     word-break: break-word;
 }
@@ -448,7 +448,7 @@
     margin-top: 2px;
     font-size: 0.94rem;
     line-height: 1.6;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--fg-2);
     white-space: normal;
     word-break: break-word;
     overflow: visible;
@@ -468,7 +468,7 @@
     font-size: 1.05rem;
     font-weight: 600;
     line-height: 1.4;
-    color: rgba(255, 255, 255, 0.96);
+    color: var(--fg);
     margin-top: 0;
 }
 
@@ -477,7 +477,7 @@
     margin-top: 2px;
     font-size: 0.98rem;
     line-height: 1.65;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
     white-space: normal;
     word-break: break-word;
 }
@@ -494,9 +494,9 @@
 .memory-browse-site {
     margin-top: 0;
     font-size: 0.78rem;
-    color: #aaaaaa;
-    background: rgba(160, 160, 160, 0.12);
-    border: 1px solid rgba(160, 160, 160, 0.34);
+    color: var(--fg-3);
+    background: var(--hairline);
+    border: 1px solid var(--hairline-strong);
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
@@ -524,7 +524,7 @@
     margin-left: auto;
     border: 0;
     background: transparent;
-    color: rgba(214, 214, 214, 0.86);
+    color: var(--fg-2);
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -533,21 +533,21 @@
 }
 
 .memory-browse-expand:hover {
-    color: #ffffff;
+    color: var(--fg);
 }
 
 .memory-delete-btn {
     padding: 4px 9px;
     font-size: 11px;
-    color: #cccccc;
-    border-color: rgba(100, 100, 100, 0.45);
-    background: rgba(100, 100, 100, 0.12);
+    color: var(--fg-2);
+    border-color: var(--hairline-strong);
+    background: var(--hairline);
     flex-shrink: 0;
 }
 
 .memory-delete-btn:hover:not(:disabled) {
-    border-color: rgba(100, 100, 100, 0.62);
-    background: rgba(100, 100, 100, 0.18);
+    border-color: var(--hairline-strong);
+    background: var(--bg-3);
 }
 
 .memory-delete-btn:disabled {
@@ -578,21 +578,7 @@
 }
 
 /* ===== Light Theme ===== */
-[data-theme="light"] .memory-browse-card.expanded {
-    border-color: rgba(0, 0, 0, 0.18);
-    background: rgba(0, 0, 0, 0.02);
-}
-
-[data-theme="light"] .memory-source-count {
-    color: rgba(0, 0, 0, 0.4);
-    background: rgba(0, 0, 0, 0.05);
-    border-color: rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .memory-expand-details {
-    border-top-color: rgba(0, 0, 0, 0.07);
-}
-
+/* `.memory-browse-url` uses a semantic blue link color in light mode */
 [data-theme="light"] .memory-browse-url {
     color: #2060c0;
     background: rgba(30, 100, 200, 0.05);
@@ -601,69 +587,4 @@
 
 [data-theme="light"] .memory-browse-url:hover {
     background: rgba(30, 100, 200, 0.1);
-}
-
-[data-theme="light"] .memory-snippets-label {
-    color: rgba(0, 0, 0, 0.35);
-}
-
-[data-theme="light"] .memory-snippet-item {
-    color: rgba(0, 0, 0, 0.5);
-    background: rgba(0, 0, 0, 0.02);
-    border-left-color: rgba(0, 0, 0, 0.12);
-}
-
-[data-theme="light"] .memory-cards-filter select {
-    border-color: rgba(0, 0, 0, 0.12);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(240, 240, 242, 0.95));
-    color: var(--text-primary);
-}
-
-[data-theme="light"] .memory-cards-filter select:focus {
-    border-color: rgba(0, 0, 0, 0.3);
-}
-
-[data-theme="light"] .memory-cards-filter-arrow {
-    color: rgba(0, 0, 0, 0.4);
-}
-
-[data-theme="light"] .memory-browse-title {
-    color: rgba(26, 26, 26, 0.95);
-}
-
-[data-theme="light"] .memory-browse-summary {
-    color: rgba(26, 26, 26, 0.65);
-}
-
-[data-theme="light"] .memory-browse-summary.memory-browse-summary-primary {
-    color: rgba(26, 26, 26, 0.95);
-}
-
-[data-theme="light"] .memory-browse-story {
-    color: rgba(26, 26, 26, 0.8);
-}
-
-[data-theme="light"] .memory-browse-site {
-    color: #555;
-    background: rgba(0, 0, 0, 0.06);
-    border-color: rgba(0, 0, 0, 0.12);
-}
-
-[data-theme="light"] .memory-delete-btn {
-    color: #555;
-    border-color: rgba(0, 0, 0, 0.15);
-    background: rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="light"] .memory-delete-btn:hover:not(:disabled) {
-    border-color: rgba(0, 0, 0, 0.25);
-    background: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .memory-browse-expand {
-    color: rgba(26, 26, 26, 0.7);
-}
-
-[data-theme="light"] .memory-browse-expand:hover {
-    color: rgba(26, 26, 26, 0.95);
 }
