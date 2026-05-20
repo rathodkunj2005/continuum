@@ -5,7 +5,6 @@ import * as THREE from "three"
 import type { GraphData } from "../types"
 import { GraphNodes } from "./GraphNodes"
 import { GraphEdges } from "./GraphEdges"
-import { GraphLabels } from "./GraphLabels"
 import { computeCommunityAnchors, computeLocalNodePositions } from "../layout/communityLayout"
 import { useGraphStore } from "../state/graphStore"
 
@@ -106,11 +105,6 @@ function SceneContent({ graphData }: GraphSceneProps) {
       {/* Graph content */}
       <GraphNodes graphData={graphData} nodePositions={layout.nodePositions} />
       <GraphEdges graphData={graphData} nodePositions={layout.nodePositions} />
-      <GraphLabels
-        graphData={graphData}
-        nodePositions={layout.nodePositions}
-        communities={layout.communities}
-      />
 
       {/* Controls */}
       <OrbitControls

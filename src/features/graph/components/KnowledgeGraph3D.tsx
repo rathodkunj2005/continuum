@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import type { InsightGraphSubgraph } from "@/shared/ipc/tauri"
 import { graphDataAdapter } from "../data/adapter"
 import { normalizeInsightGraph } from "../data/normalizeInsightGraph"
+import { computeCommunityAnchors, computeLocalNodePositions } from "../layout/communityLayout"
 import { useGraphStore } from "../state/graphStore"
 import type { GraphData } from "../types"
 import { FocusType } from "../types"
@@ -9,6 +10,7 @@ import { GraphScene } from "./GraphScene"
 import { GraphControls } from "./GraphControls"
 import { GraphSidePanel } from "./GraphSidePanel"
 import { GraphHoverCard } from "./GraphHoverCard"
+import { GraphLabels } from "./GraphLabels"
 
 interface KnowledgeGraph3DProps {
   onClose?: () => void
@@ -189,11 +191,27 @@ export const KnowledgeGraph3D: React.FC<KnowledgeGraph3DProps> = ({
   const selectedNode = graphData.nodes.find((n) => n.id === selectedNodeId)
   const hoveredNode = graphData.nodes.find((n) => n.id === hoveredNodeId)
 
+  // Compute layout for labels (same as in GraphScene, but needed here for GraphLabels outside Canvas)
+  const { communities, nodePositions } = useMemo(() => {
+    const communities = computeCommunityAnchors(graphData.communities)
+    const nodePositions = computeLocalNodePositions(graphData.nodes, communities)
+    return { communities, nodePositions }
+  }, [graphData.nodes, graphData.communities])
+
   return (
     <div className="relative w-full h-full bg-slate-950 rounded-lg overflow-hidden flex flex-col">
       {/* Main graph canvas */}
       <div className="flex-1 relative">
         <GraphScene graphData={graphData} />
+
+        {/* Labels layer — positioned absolutely over canvas (DOM, NOT inside Canvas) */}
+        <div className="absolute inset-0 pointer-events-none">
+          <GraphLabels
+            graphData={graphData}
+            nodePositions={nodePositions}
+            communities={communities}
+          />
+        </div>
 
         {/* Hover card */}
         {hoveredNode && hoveredNodeId !== selectedNodeId && (
