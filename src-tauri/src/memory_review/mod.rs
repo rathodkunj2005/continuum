@@ -25,15 +25,22 @@
 //! for production while tests can substitute a deterministic stub via the
 //! `ReviewProvider` trait — no real LLM, no cloud, no network.
 
+mod backfill;
+mod daily;
 mod inference_provider;
 mod pipeline;
 mod queue;
 mod worker;
 
+pub use backfill::{backfill_memory_review_in_range, BackfillReviewSummary};
+pub use daily::{
+    parse_day_range_local, run_daily_memory_review, spawn_daily_scheduler, DailyReviewOutcome,
+    DailyReviewSummary, DAILY_REVIEW_TICK_INTERVAL,
+};
 pub use inference_provider::InferenceReviewProvider;
 pub use pipeline::{
-    review_one_memory, MemoryReviewOutcome, ReviewError, ReviewInput, ReviewProvider,
-    ReviewedMemory, SameDayCandidate,
+    review_one_memory, review_one_memory_with_mode, MemoryReviewOutcome, ReviewError, ReviewInput,
+    ReviewProvider, ReviewWriteMode, ReviewedMemory, SameDayCandidate,
 };
 pub use queue::{MemoryReviewJob, MemoryReviewQueue};
 pub use worker::{
@@ -47,10 +54,13 @@ use std::sync::atomic::Ordering;
 /// Lifecycle status strings. Persisted in `MemoryRecord::enrichment_status`.
 pub const STATUS_PENDING: &str = "pending";
 pub const STATUS_REVIEWED_LOCAL: &str = "reviewed_local";
+pub const STATUS_REVIEWED_DAILY: &str = "reviewed_daily";
 pub const STATUS_REVIEW_FAILED: &str = "review_failed";
 
 /// `synthesis_branch` written by a successful local review pass.
 pub const SYNTHESIS_BRANCH_REVIEWED_LOCAL: &str = "reviewed_local";
+/// `synthesis_branch` written by a successful daily-batch review.
+pub const SYNTHESIS_BRANCH_REVIEWED_DAILY: &str = "reviewed_daily";
 
 /// Maximum same-day candidate titles surfaced to the reviewer. Keeps the
 /// prompt bounded and the candidate set scannable for the LLM.

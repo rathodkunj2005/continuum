@@ -1535,6 +1535,62 @@ export async function getMemoryReviewStatus(): Promise<MemoryReviewWorkerStatus>
     return invoke<MemoryReviewWorkerStatus>("get_memory_review_status");
 }
 
+export type DailyReviewOutcome =
+    | { kind: "changed"; memory_id: string }
+    | { kind: "invalid_patch"; memory_id: string; reason: string }
+    | { kind: "provider_failure"; memory_id: string; reason: string }
+    | { kind: "already_reviewed"; memory_id: string };
+
+export interface DailyReviewSummary {
+    day: string;
+    start_ms: number;
+    end_ms: number;
+    dry_run: boolean;
+    scanned: number;
+    changed: number;
+    would_change: number;
+    failed: number;
+    skipped_pressure: number;
+    skipped_already_reviewed: number;
+    outcomes: DailyReviewOutcome[];
+}
+
+export interface BackfillReviewSummary {
+    start_ms: number;
+    end_ms: number;
+    dry_run: boolean;
+    scanned: number;
+    queued: number;
+    would_queue: number;
+    already_reviewed: number;
+    already_queued: number;
+}
+
+/** Manually run the daily memory-review batch for a YYYY-MM-DD date.
+ *  Pass `dryRun: true` to compute patches without writing them. Requires the
+ *  local inference engine to be loaded. */
+export async function runDailyMemoryReview(
+    date: string,
+    dryRun = false,
+): Promise<DailyReviewSummary> {
+    return invoke<DailyReviewSummary>("run_daily_memory_review_cmd", { date, dryRun });
+}
+
+/** Backfill the post-capture memory-review worker queue for the given range.
+ *  Returns the count that was (or would be in dry-run) queued; the worker
+ *  drains the queue under the existing pressure gate. */
+export async function backfillMemoryReview(
+    startMs: number,
+    endMs: number,
+    dryRun = false,
+): Promise<BackfillReviewSummary> {
+    return invoke<BackfillReviewSummary>("backfill_memory_review", {
+        startMs,
+        endMs,
+        dryRun,
+    });
+}
+
 export async function getRetentionDays(): Promise<number> {
     return invoke<number>("get_retention_days");
 }

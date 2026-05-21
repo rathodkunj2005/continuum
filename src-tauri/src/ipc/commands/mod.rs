@@ -46,6 +46,9 @@ pub use graph::*;
 mod glasses_import;
 pub use glasses_import::*;
 
+mod daily_review;
+pub use daily_review::*;
+
 pub mod debug;
 pub use debug::{get_memory_timeline_thread, inspect_memory_pipeline};
 

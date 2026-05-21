@@ -258,6 +258,16 @@ fn main() {
                 fndr_lib::memory_review::spawn_worker(review_state, MEMORY_REVIEW_INTERVAL);
             }
 
+            // Background: daily memory-review scheduler. Wakes hourly and runs
+            // the previous calendar day's batch review pass once per day when
+            // the inference engine is loaded and the pressure gate allows. The
+            // pipeline itself acquires the model_pipeline_lock so capture is
+            // never blocked.
+            {
+                let daily_state = state.clone();
+                fndr_lib::memory_review::spawn_daily_scheduler(daily_state);
+            }
+
             let runtime_state = state.clone();
 
             // Background: 1 Hz Activity-Monitor-grade system metrics sampler.
@@ -605,6 +615,9 @@ fn main() {
             ipc::commands::search::find_visually_similar_memories,
             ipc::commands::get_fun_greeting,
             ipc::commands::get_status,
+            ipc::commands::get_memory_review_status,
+            ipc::commands::run_daily_memory_review_cmd,
+            ipc::commands::backfill_memory_review,
             // MCP
             ipc::commands::get_mcp_server_status,
             ipc::commands::start_mcp_server,

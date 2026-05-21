@@ -28,8 +28,9 @@ use futures::future::BoxFuture;
 
 use super::queue::MemoryReviewJob;
 use super::{
-    MAX_RELATED_MEMORY_IDS, MAX_SAME_DAY_CANDIDATES, STATUS_PENDING, STATUS_REVIEWED_LOCAL,
-    STATUS_REVIEW_FAILED, SYNTHESIS_BRANCH_REVIEWED_LOCAL,
+    MAX_RELATED_MEMORY_IDS, MAX_SAME_DAY_CANDIDATES, STATUS_PENDING, STATUS_REVIEWED_DAILY,
+    STATUS_REVIEWED_LOCAL, STATUS_REVIEW_FAILED, SYNTHESIS_BRANCH_REVIEWED_DAILY,
+    SYNTHESIS_BRANCH_REVIEWED_LOCAL,
 };
 
 const MAX_CLEAN_TEXT_CHARS: usize = 4000;
@@ -105,6 +106,42 @@ pub trait ReviewProvider: Send + Sync {
     ) -> BoxFuture<'a, Result<ReviewedMemory, String>>;
 }
 
+/// How a successful review pass should be persisted. Selecting `ReviewedLocal`
+/// keeps the original Subagent 9 behavior; `ReviewedDaily` is used by the
+/// daily batch driver; `DryRun` computes the patched record but skips the
+/// write-back (used by both manual + scheduled daily commands).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewWriteMode {
+    /// Persist as `reviewed_local` / `synthesis_branch=reviewed_local`.
+    ReviewedLocal,
+    /// Persist as `reviewed_daily` / `synthesis_branch=reviewed_daily`.
+    ReviewedDaily,
+    /// Validate + compute the patched record, but skip the LanceDB write.
+    DryRun,
+}
+
+impl ReviewWriteMode {
+    fn success_status(self) -> &'static str {
+        match self {
+            ReviewWriteMode::ReviewedLocal => STATUS_REVIEWED_LOCAL,
+            ReviewWriteMode::ReviewedDaily => STATUS_REVIEWED_DAILY,
+            ReviewWriteMode::DryRun => STATUS_REVIEWED_LOCAL,
+        }
+    }
+
+    fn success_branch(self) -> &'static str {
+        match self {
+            ReviewWriteMode::ReviewedLocal => SYNTHESIS_BRANCH_REVIEWED_LOCAL,
+            ReviewWriteMode::ReviewedDaily => SYNTHESIS_BRANCH_REVIEWED_DAILY,
+            ReviewWriteMode::DryRun => SYNTHESIS_BRANCH_REVIEWED_LOCAL,
+        }
+    }
+
+    fn persists(self) -> bool {
+        !matches!(self, ReviewWriteMode::DryRun)
+    }
+}
+
 /// Outcome of a single review pass.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MemoryReviewOutcome {
@@ -163,6 +200,27 @@ pub async fn review_one_memory(
     job: &MemoryReviewJob,
     now_ms: i64,
 ) -> Result<MemoryReviewOutcome, String> {
+    review_one_memory_with_mode(
+        store,
+        provider,
+        embedder,
+        job,
+        now_ms,
+        ReviewWriteMode::ReviewedLocal,
+    )
+    .await
+}
+
+/// Same as [`review_one_memory`] but parameterized over the target lifecycle
+/// status. Used by the daily-review driver and by dry-run inspections.
+pub async fn review_one_memory_with_mode(
+    store: &Store,
+    provider: &dyn ReviewProvider,
+    embedder: Option<&Embedder>,
+    job: &MemoryReviewJob,
+    now_ms: i64,
+    mode: ReviewWriteMode,
+) -> Result<MemoryReviewOutcome, String> {
     let Some(mut record) = store
         .get_memory_by_id(&job.memory_id)
         .await
@@ -180,8 +238,10 @@ pub async fn review_one_memory(
     let reviewed = match provider.review(&input).await {
         Ok(reviewed) => reviewed,
         Err(err) => {
-            mark_failed(&mut record, now_ms);
-            persist_failure(store, &record).await?;
+            if mode.persists() {
+                mark_failed(&mut record, now_ms);
+                persist_failure(store, &record).await?;
+            }
             return Ok(MemoryReviewOutcome::Failed {
                 memory_id: job.memory_id.clone(),
                 reason: ReviewError::ProviderError(err),
@@ -192,8 +252,10 @@ pub async fn review_one_memory(
     let validated = match validate_review(&reviewed, &input) {
         Ok(validated) => validated,
         Err(err) => {
-            mark_failed(&mut record, now_ms);
-            persist_failure(store, &record).await?;
+            if mode.persists() {
+                mark_failed(&mut record, now_ms);
+                persist_failure(store, &record).await?;
+            }
             return Ok(MemoryReviewOutcome::Failed {
                 memory_id: job.memory_id.clone(),
                 reason: err,
@@ -216,7 +278,14 @@ pub async fn review_one_memory(
         )
     };
 
-    apply_reviewed_to_record(&mut record, &validated, &merged_display_summary, now_ms);
+    apply_reviewed_to_record(
+        &mut record,
+        &validated,
+        &merged_display_summary,
+        now_ms,
+        mode.success_status(),
+        mode.success_branch(),
+    );
 
     derive_insight_for_record(&mut record);
 
@@ -247,15 +316,18 @@ pub async fn review_one_memory(
         }
     }
 
-    store
-        .replace_memory_preserving_chunks(&record)
-        .await
-        .map_err(|err| err.to_string())?;
+    if mode.persists() {
+        store
+            .replace_memory_preserving_chunks(&record)
+            .await
+            .map_err(|err| err.to_string())?;
+    }
 
     if narration_fallback_used {
         tracing::info!(
             memory_id = %record.id,
             reviewer_generation = record.reviewer_generation,
+            mode = ?mode,
             "memory_review: narration fallback applied during review"
         );
     }
@@ -271,6 +343,8 @@ fn apply_reviewed_to_record(
     reviewed: &ReviewedMemory,
     cleaned_display_summary: &str,
     now_ms: i64,
+    success_status: &str,
+    success_branch: &str,
 ) {
     if !reviewed.memory_context.trim().is_empty() {
         record.memory_context = reviewed.memory_context.trim().to_string();
@@ -300,10 +374,10 @@ fn apply_reviewed_to_record(
         }
         record.related_memory_ids = combined;
     }
-    record.enrichment_status = STATUS_REVIEWED_LOCAL.to_string();
+    record.enrichment_status = success_status.to_string();
     record.reviewed_at_ms = now_ms;
     record.reviewer_generation = record.reviewer_generation.saturating_add(1);
-    record.synthesis_branch = SYNTHESIS_BRANCH_REVIEWED_LOCAL.to_string();
+    record.synthesis_branch = success_branch.to_string();
     if reviewed.confidence > 0.0 {
         record.evidence_confidence = record.evidence_confidence.max(reviewed.confidence);
     }
