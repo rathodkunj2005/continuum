@@ -1,0 +1,16 @@
+{
+  "name": "identifier_heavy_developer",
+  "app_name": "Visual Studio Code",
+  "window_title": "chunk_route.rs identifier capture",
+  "raw_text": "pub struct ChunkRoute holds the chunk-first retrieval pipeline.\nThe route uses prefix_query_for_search to build the BGE input string.\nIt calls Embedder::new_bge_v5_for_query to construct the 1024-d query embedder.\nIt then invokes chunk_vector_search on the store to fetch ranked child hits.\nFinally, assemble_chunk_parent_results groups the chunks by memory id and attaches winning evidence.",
+  "expected_min_chunks": 1,
+  "expected_max_chunks": 3,
+  "must_contain": [
+    "ChunkRoute",
+    "prefix_query_for_search",
+    "Embedder::new_bge_v5_for_query",
+    "chunk_vector_search",
+    "assemble_chunk_parent_results"
+  ],
+  "must_not_contain": []
+}
