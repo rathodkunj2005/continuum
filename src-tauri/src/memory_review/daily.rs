@@ -42,10 +42,21 @@ use super::{allows_memory_review_worker, STATUS_REVIEWED_DAILY};
 /// `ReviewProvider` by reference; the caller has already chosen which provider
 /// to use, and unit tests legitimately drive the pipeline with a deterministic
 /// stub.
+///
+/// Under `cfg(test)` the system-pressure check (`pmset -g batt` / CPU load) is
+/// skipped so the test outcome doesn't depend on the host's instantaneous
+/// battery / load state. Production builds always go through the full
+/// `allows_graph_idle_commit` heuristic.
 fn daily_pipeline_gate_open(state: &AppState) -> bool {
     if state.is_paused.load(Ordering::Relaxed) {
         return false;
     }
+    #[cfg(test)]
+    {
+        let _ = state;
+        return true;
+    }
+    #[cfg(not(test))]
     crate::system_resources::allows_graph_idle_commit(state)
 }
 
