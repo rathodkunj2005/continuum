@@ -255,6 +255,25 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
     if let Some(domain) = url.as_deref().and_then(card_domain) {
         context.push(format!("Site: {}", domain));
     }
+    if !result.activity_type.trim().is_empty() && result.activity_type != "other" {
+        context.push(format!("Activity: {}", result.activity_type.trim()));
+    }
+    for file in result.files_touched.iter().take(3) {
+        let trimmed = file.trim();
+        if !trimmed.is_empty() {
+            context.push(format!("File: {}", trimmed));
+        }
+    }
+    let memory_context = result.memory_context.trim();
+    if !memory_context.is_empty() {
+        let excerpt: String = memory_context.chars().take(220).collect();
+        if !context.iter().any(|line| line.contains(&excerpt)) {
+            context.push(excerpt);
+        }
+    } else if !result.internal_context.trim().is_empty() {
+        let excerpt: String = result.internal_context.chars().take(220).collect();
+        context.push(excerpt);
+    }
 
     let fallback_snippet = summary.clone();
     let action = if result.url.is_some() {
@@ -311,7 +330,32 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         synthesis_branch: result.synthesis_branch.clone(),
         topic_categories: result.topic_categories.clone(),
         search_aliases: result.search_aliases.clone(),
-        surfacing_reason: None,
+        surfacing_reason: if result.matched_routes.is_empty() {
+            None
+        } else {
+            Some(crate::context_runtime::context_pack::SurfacingReason {
+                headline: if result
+                    .matched_routes
+                    .iter()
+                    .any(|route| route.eq_ignore_ascii_case("chunk"))
+                {
+                    "Matched a precise memory chunk".to_string()
+                } else {
+                    format!("Matched in {} routes", result.matched_routes.len())
+                },
+                routes: result.matched_routes.clone(),
+                graph_path: None,
+                anchor_terms_hit: Vec::new(),
+                recency_boost: 0.0,
+            })
+        },
+        matched_routes: result.matched_routes.clone(),
+        matched_chunk_ids: result.matched_chunk_ids.clone(),
+        chunk_evidence: result.chunk_evidence.clone(),
+        enrichment_status: result.enrichment_status.clone(),
+        reviewed_at_ms: result.reviewed_at_ms,
+        reviewer_generation: result.reviewer_generation,
+        storage_outcome: result.storage_outcome.clone(),
     }
 }
 

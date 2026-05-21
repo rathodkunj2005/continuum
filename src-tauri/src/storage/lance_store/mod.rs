@@ -6,15 +6,19 @@
 use super::schema::{
     ActivityEvent, AppCount, ContextDelta, ContextPack, DayCount, DaypartCount,
     DecisionLedgerEntry, DomainCount, EdgeType, EntityAliasRecord, GraphEdge, GraphNode, HourCount,
-    KnowledgePage, MeetingSegment, MeetingSession, MemoryRecord, NodeType, ProjectContext,
-    SearchResult, Stats, Task, TaskType, WeekdayCount,
+    KnowledgePage, MeetingSegment, MeetingSession, MemoryChunkRecord, MemoryChunkSearchResult,
+    MemoryRecord, NodeType, ProjectContext, SearchResult, Stats, Task, TaskType, WeekdayCount,
 };
 use crate::config::{
     DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_STORE_KEYWORD_QUERY_MULTIPLIER,
     DEFAULT_STORE_MAX_KEYWORD_SCAN, DEFAULT_STORE_VECTOR_QUERY_MULTIPLIER,
     DEFAULT_TEXT_EMBEDDING_DIM,
 };
+use crate::inference::model_config::{BGE_V5_DIMENSIONS, MEMORIES_V5_TABLE};
 use crate::memory_compaction::{build_lexical_shadow, compact_memory_record_payload};
+// Re-exported so `lance_store::tests` can call the shared quality helpers via
+// `use super::*;`. These are not used directly in this file.
+#[allow(unused_imports)]
 use crate::memory_quality::{
     classify_storage_outcome, default_memory_quality_config, deterministic_dedup_fingerprint,
     is_supported_dedup_fingerprint, quality_gate_reason as shared_quality_gate_reason,
@@ -35,7 +39,14 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub const MEMORIES_TABLE: &str = "memories_v4_minilm_384";
+/// Active LanceDB table for memory records.
+///
+/// **Current durable write path:** v4 = all-MiniLM-L6-v2, 384-d vectors.
+/// This re-exports `inference::model_config::MEMORIES_V4_TABLE` so the
+/// embedding contract has exactly one source of truth (see `model_config.rs`).
+pub const MEMORIES_TABLE: &str = crate::inference::model_config::MEMORIES_V4_TABLE;
+pub const MEMORIES_V5_PARENT_TABLE: &str = MEMORIES_V5_TABLE;
+pub const MEMORY_CHUNKS_TABLE: &str = "memory_chunks_v1_bge_1024";
 pub const TASKS_TABLE: &str = "tasks";
 pub const MEETINGS_TABLE: &str = "meetings";
 pub const SEGMENTS_TABLE: &str = "segments";
@@ -98,6 +109,18 @@ const SEARCH_RESULT_COLUMNS: &[&str] = &[
     "entities",
     "anchor_coverage_score",
     "content_hash",
+    "insight_what_happened",
+    "insight_why_mattered",
+    "insight_what_changed",
+    "insight_context_thread",
+    "insight_spans_json",
+    "insight_card_confidence",
+    "synthesis_branch",
+    "topic_categories",
+    "enrichment_status",
+    "reviewed_at_ms",
+    "reviewer_generation",
+    "storage_outcome",
 ];
 const TEXT_EMBED_DIM: i32 = DEFAULT_TEXT_EMBEDDING_DIM as i32;
 const IMAGE_EMBED_DIM: i32 = DEFAULT_IMAGE_EMBEDDING_DIM as i32;
@@ -116,6 +139,8 @@ const INDEX_NOISE_HOSTS: &[&str] = &[
 pub struct Store {
     data_dir: PathBuf,
     table: Table,
+    memories_v5_table: Table,
+    memory_chunks_table: Table,
     tasks_table: Table,
     meetings_table: Table,
     segments_table: Table,
@@ -166,6 +191,8 @@ impl Store {
         let (
             table,
             _legacy_table,
+            memories_v5_table,
+            memory_chunks_table,
             tasks_table,
             meetings_table,
             segments_table,
@@ -215,6 +242,8 @@ impl Store {
         Ok(Self {
             data_dir,
             table,
+            memories_v5_table,
+            memory_chunks_table,
             tasks_table,
             meetings_table,
             segments_table,
@@ -1010,6 +1039,235 @@ impl Store {
         self.insert_memory_batch(&normalized).await
     }
 
+    /// Replace a single memory row in the v4 parent table, preserving its id
+    /// and any linked memory chunks. Used by the memory_review worker after
+    /// validation succeeds; callers must not pass partial records — the full
+    /// `MemoryRecord` is required because the underlying table replace pattern
+    /// is delete-then-insert.
+    pub async fn replace_memory_preserving_chunks(
+        &self,
+        record: &MemoryRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if record.id.trim().is_empty() {
+            return Err("Refusing to replace a memory with empty id".into());
+        }
+        let id = sql_escape(&record.id);
+        self.table.delete(&format!("id = '{id}'")).await?;
+        // Note: deliberately not calling delete_chunks_for_memory — children
+        // outlive a parent review pass.
+        let normalized = normalize_record_for_index(record);
+        self.insert_memory_batch(&[normalized]).await
+    }
+
+    pub async fn add_v5_batch_preserving_ids(
+        &self,
+        records: &[MemoryRecord],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if records.is_empty() {
+            return Ok(());
+        }
+        validate_v5_record_vectors(records)?;
+        let batch = records_to_batch_with_text_dim(records, BGE_V5_DIMENSIONS as i32)?;
+        let schema = Arc::new(memory_v5_schema());
+        let iter = RecordBatchIterator::new(vec![Ok(batch)], schema);
+        self.memories_v5_table
+            .add(Box::new(iter) as Box<dyn RecordBatchReader + Send>)
+            .execute()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn upsert_memory_chunks(
+        &self,
+        chunks: &[MemoryChunkRecord],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if chunks.is_empty() {
+            return Ok(());
+        }
+        validate_memory_chunk_vectors(chunks)?;
+
+        let ids = chunks
+            .iter()
+            .map(|chunk| chunk.id.clone())
+            .collect::<Vec<_>>();
+        for id_chunk in ids.chunks(128) {
+            if let Some(filter) = build_string_match_filter("id", id_chunk) {
+                self.memory_chunks_table.delete(&filter).await?;
+            }
+        }
+
+        let batch = memory_chunks_to_batch(chunks, BGE_V5_DIMENSIONS as i32)?;
+        let schema = Arc::new(memory_chunk_schema());
+        let iter = RecordBatchIterator::new(vec![Ok(batch)], schema);
+        self.memory_chunks_table
+            .add(Box::new(iter) as Box<dyn RecordBatchReader + Send>)
+            .mode(AddDataMode::Append)
+            .execute()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_chunks_for_memory(
+        &self,
+        memory_id: &str,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
+        let before = self.memory_chunks_table.count_rows(None).await?;
+        let escaped = sql_escape(memory_id);
+        self.memory_chunks_table
+            .delete(&format!("memory_id = '{escaped}'"))
+            .await?;
+        let after = self.memory_chunks_table.count_rows(None).await?;
+        Ok(before.saturating_sub(after))
+    }
+
+    pub async fn list_chunks_for_memory(
+        &self,
+        memory_id: &str,
+    ) -> Result<Vec<MemoryChunkRecord>, Box<dyn std::error::Error>> {
+        let escaped = sql_escape(memory_id);
+        let batches: Vec<RecordBatch> = self
+            .memory_chunks_table
+            .query()
+            .only_if(format!("memory_id = '{escaped}'"))
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut chunks = Vec::new();
+        for batch in &batches {
+            chunks.extend(batch_to_memory_chunks(batch));
+        }
+        chunks.sort_by_key(|chunk| chunk.chunk_index);
+        Ok(chunks)
+    }
+
+    pub async fn chunk_vector_search(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+    ) -> Result<Vec<MemoryChunkSearchResult>, Box<dyn std::error::Error>> {
+        if query_embedding.len() != BGE_V5_DIMENSIONS {
+            return Err(format!(
+                "Refusing chunk vector search on {MEMORY_CHUNKS_TABLE}: query is {}-d, expected {}-d BGE. No fallback across embedding dimensions is allowed.",
+                query_embedding.len(),
+                BGE_V5_DIMENSIONS
+            )
+            .into());
+        }
+        let batches: Vec<RecordBatch> = self
+            .memory_chunks_table
+            .vector_search(query_embedding.to_vec())?
+            .column("embedding")
+            .limit(limit.max(1))
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut chunks = Vec::new();
+        for batch in &batches {
+            chunks.extend(batch_to_memory_chunk_search_results(batch));
+        }
+        Ok(chunks)
+    }
+
+    pub async fn has_chunk_retrieval_index(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        let parent_count = self.memories_v5_table.count_rows(None).await?;
+        if parent_count == 0 {
+            return Ok(false);
+        }
+        let chunk_count = self.memory_chunks_table.count_rows(None).await?;
+        Ok(chunk_count > 0)
+    }
+
+    pub async fn get_v5_search_results_by_ids(
+        &self,
+        memory_ids: &[String],
+        time_filter: Option<&str>,
+        app_filter: Option<&str>,
+    ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+        let ids = memory_ids
+            .iter()
+            .map(|id| id.trim().to_string())
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let Some(id_filter) = build_string_match_filter("id", &ids) else {
+            return Ok(Vec::new());
+        };
+        let filter = match build_filter(time_filter, app_filter) {
+            Some(extra) => format!("({id_filter}) AND ({extra})"),
+            None => id_filter,
+        };
+        let batches: Vec<RecordBatch> = self
+            .memories_v5_table
+            .query()
+            .select(Select::columns(SEARCH_RESULT_COLUMNS))
+            .only_if(filter)
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut results = Vec::new();
+        for batch in &batches {
+            results.extend(batch_to_search_results(batch));
+        }
+        Ok(results)
+    }
+
+    pub async fn list_v5_reindex_identities(
+        &self,
+    ) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+        let batches: Vec<RecordBatch> = self
+            .memories_v5_table
+            .query()
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "content_hash".to_string(),
+                "dedup_fingerprint".to_string(),
+            ]))
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut identities = HashSet::new();
+        for batch in &batches {
+            let ids = str_col(batch, "id");
+            let content_hashes = str_col(batch, "content_hash");
+            let dedup_fingerprints = str_col(batch, "dedup_fingerprint");
+            for i in 0..batch.num_rows() {
+                let content_hash = content_hashes
+                    .as_ref()
+                    .filter(|col| !col.is_null(i))
+                    .map(|col| col.value(i))
+                    .unwrap_or_default();
+                if !content_hash.trim().is_empty() {
+                    identities.insert(format!("content:{}", content_hash.trim()));
+                    continue;
+                }
+                let dedup = dedup_fingerprints
+                    .as_ref()
+                    .filter(|col| !col.is_null(i))
+                    .map(|col| col.value(i))
+                    .unwrap_or_default();
+                if !dedup.trim().is_empty() {
+                    identities.insert(format!("dedup:{}", dedup.trim()));
+                    continue;
+                }
+                let id = ids
+                    .as_ref()
+                    .filter(|col| !col.is_null(i))
+                    .map(|col| col.value(i))
+                    .unwrap_or_default();
+                if !id.trim().is_empty() {
+                    identities.insert(format!("id:{}", id.trim()));
+                }
+            }
+        }
+        Ok(identities)
+    }
+
     /// Replace the entire memories table in one write, preserving caller ids.
     pub async fn replace_all_memories_preserving_ids(
         &self,
@@ -1237,7 +1495,11 @@ impl Store {
             "LOWER(window_title) LIKE '%{}%' OR LOWER(url) LIKE '%{}%'",
             escaped, escaped
         );
+        let ids = self.memory_ids_for_filter(&filter).await?;
         self.table.delete(&filter).await?;
+        for id in ids {
+            self.delete_chunks_for_memory(&id).await?;
+        }
         Ok(())
     }
 
@@ -1795,6 +2057,9 @@ impl Store {
     /// Delete all records.
     pub async fn delete_all(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.table.delete("id IS NOT NULL").await?;
+        self.memory_chunks_table
+            .delete("memory_id IS NOT NULL")
+            .await?;
         Ok(())
     }
 
@@ -1826,12 +2091,15 @@ impl Store {
     pub async fn delete_older_than(&self, days: u32) -> Result<usize, Box<dyn std::error::Error>> {
         let cutoff = chrono::Utc::now() - chrono::Duration::days(days as i64);
         let cutoff_ms = cutoff.timestamp_millis();
+        let filter = format!("timestamp < {cutoff_ms}");
+        let ids = self.memory_ids_for_filter(&filter).await?;
 
         // Count before deletion.
         let before = self.table.count_rows(None).await?;
-        self.table
-            .delete(&format!("timestamp < {cutoff_ms}"))
-            .await?;
+        self.table.delete(&filter).await?;
+        for id in ids {
+            self.delete_chunks_for_memory(&id).await?;
+        }
         let after = self.table.count_rows(None).await?;
 
         Ok(before.saturating_sub(after))
@@ -1845,6 +2113,7 @@ impl Store {
         let before = self.table.count_rows(None).await?;
         let id = sql_escape(memory_id);
         self.table.delete(&format!("id = '{id}'")).await?;
+        self.delete_chunks_for_memory(memory_id).await?;
         let after = self.table.count_rows(None).await?;
         Ok(before.saturating_sub(after))
     }
@@ -2069,83 +2338,75 @@ impl Store {
         Ok(results)
     }
 
-    /// Open (or create) the EmbeddingGemma 256-dim memories table on demand.
-    pub async fn open_or_create_memories_v3(&self) -> Result<lancedb::Table, lancedb::Error> {
-        use crate::inference::model_config::MEMORIES_V3_TABLE;
-        let db_path = self.data_dir.join("lancedb");
-        let uri = db_path.to_string_lossy();
-        let conn = lancedb::connect(&uri).execute().await?;
-        let names = conn.table_names().execute().await?;
-        open_or_create_named_table(
-            &conn,
-            &names,
-            MEMORIES_V3_TABLE,
-            std::sync::Arc::new(memories_v3_schema()),
-        )
-        .await
-    }
-
-    /// ANN search over the `memories_v3_egemma_256` table (256-dim EmbeddingGemma).
-    /// Opens the connection and table on each call (lazy — no warm table reference stored).
-    /// Returns empty vec if table doesn't exist or has no indexed rows.
-    pub async fn vector_search_v3(
+    async fn memory_ids_for_filter(
         &self,
-        query_embedding: &[f32],
-        limit: usize,
-        time_filter: Option<&str>,
-        app_filter: Option<&str>,
-    ) -> Result<Vec<crate::storage::SearchResult>, Box<dyn std::error::Error>> {
-        let v3_table = match self.open_or_create_memories_v3().await {
-            Ok(t) => t,
-            Err(e) => {
-                tracing::debug!("vector_search_v3: cannot open v3 table: {e}");
-                return Ok(Vec::new());
-            }
-        };
-
-        let row_count = v3_table.count_rows(None).await.unwrap_or(0);
-        if row_count == 0 {
-            return Ok(Vec::new());
-        }
-
-        let filter = build_filter(time_filter, app_filter);
-        let query_vec: Vec<f32> = query_embedding.to_vec();
-        let base_limit = limit.max(1);
-        let retrieval_limit = base_limit.saturating_mul(VECTOR_QUERY_MULTIPLIER).min(300);
-
-        let mut vq = v3_table
-            .vector_search(query_vec)?
-            .column("embedding")
-            .limit(retrieval_limit);
-
-        if let Some(f) = filter {
-            vq = vq.only_if(f);
-        }
-
-        let batches: Vec<RecordBatch> = vq.execute().await?.try_collect().await?;
-        let mut results = Vec::new();
+        filter: &str,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(Select::Columns(vec!["id".to_string()]))
+            .only_if(filter.to_string())
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut ids = Vec::new();
         for batch in &batches {
-            results.extend(batch_to_search_results(batch));
+            let id_col = str_col(batch, "id");
+            for row in 0..batch.num_rows() {
+                let id = get_str(&id_col, row);
+                if !id.is_empty() {
+                    ids.push(id);
+                }
+            }
         }
-        Ok(dedup_search_results(results, limit))
+        Ok(ids)
     }
+}
 
-    /// One-time migration stub: re-embeds existing records into `memories_v3_egemma_256`.
-    /// Returns the count of records processed.
-    /// Currently a stub — real implementation runs in the maintenance command.
-    pub async fn reindex_memories_to_embeddinggemma_256(
-        &self,
-        _embedder: &crate::embedding::Embedder,
-    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        use crate::inference::model_config::MEMORIES_V3_TABLE;
-        // Ensure v3 table exists
-        let _ = self
-            .open_or_create_memories_v3()
-            .await
-            .map_err(|e| format!("cannot open v3 table: {e}"))?;
-        tracing::info!("reindex_memories_to_embeddinggemma_256: v3 table ({MEMORIES_V3_TABLE}) ready; full reindex not yet implemented");
-        Ok(0)
+fn validate_v5_record_vectors(records: &[MemoryRecord]) -> Result<(), Box<dyn std::error::Error>> {
+    for record in records {
+        for (name, vector) in [
+            ("embedding", &record.embedding),
+            ("snippet_embedding", &record.snippet_embedding),
+            ("support_embedding", &record.support_embedding),
+        ] {
+            if vector.len() != BGE_V5_DIMENSIONS {
+                return Err(format!(
+                    "Refusing to write memory {} to {}: {} is {}-d, expected {}-d BGE. No fallback across embedding dimensions is allowed.",
+                    record.id,
+                    MEMORIES_V5_PARENT_TABLE,
+                    name,
+                    vector.len(),
+                    BGE_V5_DIMENSIONS
+                )
+                .into());
+            }
+        }
     }
+    Ok(())
+}
+
+fn validate_memory_chunk_vectors(
+    chunks: &[MemoryChunkRecord],
+) -> Result<(), Box<dyn std::error::Error>> {
+    for chunk in chunks {
+        if chunk.embedding.len() != BGE_V5_DIMENSIONS {
+            return Err(format!(
+                "Refusing to write chunk {} to {}: embedding is {}-d, expected {}-d BGE. No fallback across embedding dimensions is allowed.",
+                chunk.id,
+                MEMORY_CHUNKS_TABLE,
+                chunk.embedding.len(),
+                BGE_V5_DIMENSIONS
+            )
+            .into());
+        }
+        if chunk.memory_id.trim().is_empty() {
+            return Err(format!("Refusing to write chunk {} without memory_id", chunk.id).into());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

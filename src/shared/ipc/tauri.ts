@@ -18,6 +18,31 @@ export interface SearchResult {
     anchor_coverage_score?: number;
     extracted_entities?: string[];
     content_hash?: string;
+    matched_routes?: string[];
+    matched_chunk_ids?: string[];
+    chunk_evidence?: MatchedChunkEvidence[];
+    /** Post-capture review lifecycle:
+     *  "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed". */
+    enrichment_status?: string;
+    /** Unix ms timestamp of the last successful review (0 = never). */
+    reviewed_at_ms?: number;
+    /** Monotonic counter incremented on each successful review pass. */
+    reviewer_generation?: number;
+    /** Coarse persisted gate outcome — "enriched_memory_card",
+     *  "visual_semantics_failed", "metadata_only", etc. */
+    storage_outcome?: string;
+}
+
+export interface MatchedChunkEvidence {
+    chunk_id: string;
+    memory_id: string;
+    chunk_index: number;
+    text: string;
+    score: number;
+    distance: number;
+    app_name?: string;
+    window_title?: string;
+    day_bucket?: string;
 }
 
 export interface MemoryCard {
@@ -69,9 +94,22 @@ export interface MemoryCard {
     topic_categories?: string[];
     /** Semantic search aliases / synonyms */
     search_aliases?: string[];
+    matched_routes?: string[];
+    matched_chunk_ids?: string[];
+    chunk_evidence?: MatchedChunkEvidence[];
     /** Phase 3 — deterministic "Why this surfaced" attached by the
      *  agentic-graph-rag composer. Absent on legacy code paths. */
     surfacing_reason?: SurfacingReason;
+    /** Post-capture review lifecycle:
+     *  "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed". */
+    enrichment_status?: string;
+    /** Unix ms timestamp of the last successful review (0 = never). */
+    reviewed_at_ms?: number;
+    /** Monotonic counter incremented on each successful review pass. */
+    reviewer_generation?: number;
+    /** Coarse persisted gate outcome — "enriched_memory_card",
+     *  "visual_semantics_failed", "metadata_only", etc. */
+    storage_outcome?: string;
 }
 
 // ── Phase 4 agentic-graph-rag types ───────────────────────────────────────
@@ -1480,6 +1518,77 @@ export interface RuntimeMetricsSnapshot {
 
 export async function getRuntimeMetrics(): Promise<RuntimeMetricsSnapshot> {
     return invoke<RuntimeMetricsSnapshot>("get_runtime_metrics");
+}
+
+export interface MemoryReviewWorkerStatus {
+    queue_depth: number;
+    last_review_at_ms: number;
+    last_error_kind: string | null;
+    worker_enabled: boolean;
+    pressure_blocked: boolean;
+}
+
+/** Snapshot of the local memory-review worker (queue depth, last error, gating).
+ *  Surfaced in the engine-metrics panel so users can see whether reviewing is
+ *  progressing or blocked by inference unavailability / system pressure. */
+export async function getMemoryReviewStatus(): Promise<MemoryReviewWorkerStatus> {
+    return invoke<MemoryReviewWorkerStatus>("get_memory_review_status");
+}
+
+export type DailyReviewOutcome =
+    | { kind: "changed"; memory_id: string }
+    | { kind: "invalid_patch"; memory_id: string; reason: string }
+    | { kind: "provider_failure"; memory_id: string; reason: string }
+    | { kind: "already_reviewed"; memory_id: string };
+
+export interface DailyReviewSummary {
+    day: string;
+    start_ms: number;
+    end_ms: number;
+    dry_run: boolean;
+    scanned: number;
+    changed: number;
+    would_change: number;
+    failed: number;
+    skipped_pressure: number;
+    skipped_already_reviewed: number;
+    outcomes: DailyReviewOutcome[];
+}
+
+export interface BackfillReviewSummary {
+    start_ms: number;
+    end_ms: number;
+    dry_run: boolean;
+    scanned: number;
+    queued: number;
+    would_queue: number;
+    already_reviewed: number;
+    already_queued: number;
+}
+
+/** Manually run the daily memory-review batch for a YYYY-MM-DD date.
+ *  Pass `dryRun: true` to compute patches without writing them. Requires the
+ *  local inference engine to be loaded. */
+export async function runDailyMemoryReview(
+    date: string,
+    dryRun = false,
+): Promise<DailyReviewSummary> {
+    return invoke<DailyReviewSummary>("run_daily_memory_review_cmd", { date, dryRun });
+}
+
+/** Backfill the post-capture memory-review worker queue for the given range.
+ *  Returns the count that was (or would be in dry-run) queued; the worker
+ *  drains the queue under the existing pressure gate. */
+export async function backfillMemoryReview(
+    startMs: number,
+    endMs: number,
+    dryRun = false,
+): Promise<BackfillReviewSummary> {
+    return invoke<BackfillReviewSummary>("backfill_memory_review", {
+        startMs,
+        endMs,
+        dryRun,
+    });
 }
 
 export async function getRetentionDays(): Promise<number> {

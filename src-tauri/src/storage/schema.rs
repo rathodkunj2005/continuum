@@ -30,6 +30,10 @@ fn default_support_embedding() -> Vec<f32> {
     vec![0.0; DEFAULT_TEXT_EMBEDDING_DIM]
 }
 
+fn default_bge_embedding() -> Vec<f32> {
+    vec![0.0; crate::inference::model_config::BGE_V5_DIMENSIONS]
+}
+
 fn default_decay_score() -> f32 {
     1.0
 }
@@ -126,6 +130,86 @@ pub struct MemoryActionItem {
     pub created_at: i64,
     #[serde(default)]
     pub updated_at: i64,
+}
+
+/// A BGE-v5 child chunk derived from a parent memory's sanitized `clean_text`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryChunkRecord {
+    pub id: String,
+    pub memory_id: String,
+    pub chunk_index: u32,
+    #[serde(default)]
+    pub line_kind: String,
+    pub text: String,
+    #[serde(default = "default_bge_embedding")]
+    pub embedding: Vec<f32>,
+    #[serde(default)]
+    pub created_at: i64,
+    #[serde(default)]
+    pub app_name: String,
+    #[serde(default)]
+    pub window_title: String,
+    #[serde(default)]
+    pub day_bucket: String,
+    #[serde(default = "default_content_hash")]
+    pub content_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, specta::Type)]
+pub struct MatchedChunkEvidence {
+    pub chunk_id: String,
+    pub memory_id: String,
+    pub chunk_index: u32,
+    pub text: String,
+    pub score: f32,
+    pub distance: f32,
+    #[serde(default)]
+    pub app_name: String,
+    #[serde(default)]
+    pub window_title: String,
+    #[serde(default)]
+    pub day_bucket: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryChunkSearchResult {
+    pub chunk: MemoryChunkRecord,
+    pub score: f32,
+    pub distance: f32,
+}
+
+impl MemoryChunkSearchResult {
+    pub fn evidence(&self) -> MatchedChunkEvidence {
+        MatchedChunkEvidence {
+            chunk_id: self.chunk.id.clone(),
+            memory_id: self.chunk.memory_id.clone(),
+            chunk_index: self.chunk.chunk_index,
+            text: self.chunk.text.clone(),
+            score: self.score,
+            distance: self.distance,
+            app_name: self.chunk.app_name.clone(),
+            window_title: self.chunk.window_title.clone(),
+            day_bucket: self.chunk.day_bucket.clone(),
+        }
+    }
+}
+
+impl Default for MemoryChunkRecord {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            memory_id: String::new(),
+            chunk_index: 0,
+            line_kind: String::new(),
+            text: String::new(),
+            embedding: default_bge_embedding(),
+            created_at: 0,
+            app_name: String::new(),
+            window_title: String::new(),
+            day_bucket: String::new(),
+            content_hash: default_content_hash(),
+        }
+    }
 }
 
 /// A single memory record stored in the database
@@ -345,8 +429,19 @@ pub struct MemoryRecord {
     pub embedding_model: String,
     #[serde(default)]
     pub embedding_dim: u32,
+    /// Lifecycle of post-capture memory review: "" / "pending" /
+    /// "reviewed_local" / "review_failed".
     #[serde(default)]
     pub enrichment_status: String,
+    /// Unix ms timestamp of the last successful local review. Zero means
+    /// the record has never been reviewed.
+    #[serde(default)]
+    pub reviewed_at_ms: i64,
+    /// Monotonic counter incremented on each successful local review. Used to
+    /// invalidate downstream artifacts and to attribute writes to a specific
+    /// review pass.
+    #[serde(default)]
+    pub reviewer_generation: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     #[serde(default)]
@@ -489,6 +584,8 @@ impl Default for MemoryRecord {
             embedding_model: crate::config::DEFAULT_EMBEDDING_MODEL_NAME.to_string(),
             embedding_dim: DEFAULT_TEXT_EMBEDDING_DIM as u32,
             enrichment_status: String::new(),
+            reviewed_at_ms: 0,
+            reviewer_generation: 0,
             fallback_reason: None,
             raw_screenshot_stored: false,
             is_consolidated: false,
@@ -644,6 +741,31 @@ pub struct SearchResult {
     /// Broad semantic category labels.
     #[serde(default)]
     pub topic_categories: Vec<String>,
+    /// Retrieval routes that contributed to this result, e.g. "Chunk".
+    #[serde(default)]
+    pub matched_routes: Vec<String>,
+    /// Matched child chunk ids when this result came through parent-child RAG.
+    #[serde(default)]
+    pub matched_chunk_ids: Vec<String>,
+    /// Short textual evidence from the winning child chunk(s).
+    #[serde(default)]
+    pub chunk_evidence: Vec<MatchedChunkEvidence>,
+
+    /// Post-capture review lifecycle (mirrors `MemoryRecord.enrichment_status`).
+    /// "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed".
+    #[serde(default)]
+    pub enrichment_status: String,
+    /// Unix ms timestamp of the last successful review. Zero means never reviewed.
+    #[serde(default)]
+    pub reviewed_at_ms: i64,
+    /// Monotonic counter incremented on each successful review pass.
+    #[serde(default)]
+    pub reviewer_generation: u32,
+    /// Coarse persisted gate outcome ("enriched_memory_card",
+    /// "visual_semantics_failed", "metadata_only", etc.). Surfaced so the UI
+    /// can render lifecycle chips without re-deriving the gate.
+    #[serde(default = "default_storage_outcome")]
+    pub storage_outcome: String,
 }
 
 impl Default for SearchResult {
@@ -715,6 +837,13 @@ impl Default for SearchResult {
             insight_card_confidence: 0.0,
             synthesis_branch: String::new(),
             topic_categories: Vec::new(),
+            matched_routes: Vec::new(),
+            matched_chunk_ids: Vec::new(),
+            chunk_evidence: Vec::new(),
+            enrichment_status: String::new(),
+            reviewed_at_ms: 0,
+            reviewer_generation: 0,
+            storage_outcome: default_storage_outcome(),
         }
     }
 }
@@ -870,6 +999,7 @@ pub struct MeetingSegment {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NodeType {
+    Memory,
     MemoryChunk,
     Entity,
     Task,

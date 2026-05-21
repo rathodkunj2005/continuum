@@ -254,6 +254,11 @@ fn looks_like_email_header(line: &str) -> bool {
         || lower.starts_with("bcc:")
 }
 
+fn looks_like_url_line(line: &str) -> bool {
+    let lower = line.trim().to_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://") || lower.contains("www.")
+}
+
 fn is_generic_browser_label(line: &str) -> bool {
     let lower = line.to_lowercase();
     GENERIC_BROWSER_LABELS
@@ -284,6 +289,10 @@ fn should_drop_line(app_name: &str, line: &str) -> bool {
     // Mail sidebars reuse the same short nav labels as browser chrome in OCR.
     if mail_app && is_generic_browser_label(line) {
         return true;
+    }
+
+    if looks_like_url_line(line) {
+        return false;
     }
 
     if browser_app && (looks_like_notification_fragment(line) || looks_like_feed_fragment(line)) {
@@ -778,6 +787,14 @@ mod tests {
         assert!(!cleaned.to_lowercase().contains("new tab"));
         assert!(!cleaned.to_lowercase().contains("home"));
         assert!(cleaned.contains("Preparing launch checklist"));
+    }
+
+    #[test]
+    fn preserves_url_lines_for_chunk_boundaries() {
+        let raw = "Project planning notes for launch\nhttps://example.com/path?query=value";
+        let cleaned = reduce_chrome_noise_for_app("Chrome", raw);
+        assert!(cleaned.contains("Project planning notes"));
+        assert!(cleaned.contains("https://example.com/path?query=value"));
     }
 
     #[test]

@@ -5,9 +5,42 @@ use std::sync::Arc;
 use crate::storage::schema::{EdgeType, GraphEdge};
 use arrow_schema::{DataType, Field, Schema};
 
+use crate::inference::model_config::BGE_V5_DIMENSIONS_I32;
+
 use super::{IMAGE_EMBED_DIM, TEXT_EMBED_DIM};
 
 pub fn memory_schema() -> Schema {
+    memory_schema_for_text_dim(TEXT_EMBED_DIM)
+}
+
+pub fn memory_v5_schema() -> Schema {
+    memory_schema_for_text_dim(BGE_V5_DIMENSIONS_I32)
+}
+
+pub fn memory_chunk_schema() -> Schema {
+    Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("memory_id", DataType::Utf8, false),
+        Field::new("chunk_index", DataType::UInt32, false),
+        Field::new("line_kind", DataType::Utf8, false),
+        Field::new("text", DataType::Utf8, false),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                BGE_V5_DIMENSIONS_I32,
+            ),
+            false,
+        ),
+        Field::new("created_at", DataType::Int64, false),
+        Field::new("app_name", DataType::Utf8, false),
+        Field::new("window_title", DataType::Utf8, false),
+        Field::new("day_bucket", DataType::Utf8, false),
+        Field::new("content_hash", DataType::Utf8, false),
+    ])
+}
+
+pub fn memory_schema_for_text_dim(text_embed_dim: i32) -> Schema {
     Schema::new(vec![
         Field::new("id", DataType::Utf8, false),
         Field::new("timestamp", DataType::Int64, false),
@@ -31,7 +64,7 @@ pub fn memory_schema() -> Schema {
             "embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                TEXT_EMBED_DIM,
+                text_embed_dim,
             ),
             false,
         ),
@@ -49,7 +82,7 @@ pub fn memory_schema() -> Schema {
             "snippet_embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                TEXT_EMBED_DIM,
+                text_embed_dim,
             ),
             false,
         ),
@@ -57,7 +90,7 @@ pub fn memory_schema() -> Schema {
             "support_embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                TEXT_EMBED_DIM,
+                text_embed_dim,
             ),
             false,
         ),
@@ -241,6 +274,11 @@ pub fn memory_schema() -> Schema {
         Field::new("insight_context_thread", DataType::Utf8, false),
         Field::new("insight_spans_json", DataType::Utf8, false),
         Field::new("insight_card_confidence", DataType::Float32, false),
+        // Post-capture review lifecycle (Subagent 9). Existing rows get
+        // backfilled by the schema migration in normalize_embed_migrate.rs.
+        Field::new("enrichment_status", DataType::Utf8, false),
+        Field::new("reviewed_at_ms", DataType::Int64, false),
+        Field::new("reviewer_generation", DataType::UInt32, false),
     ])
 }
 
@@ -505,77 +543,4 @@ pub(super) fn build_edge_identity_filter(edges: &[GraphEdge]) -> Option<String> 
     } else {
         Some(clauses.join(" OR "))
     }
-}
-
-/// Arrow schema for `memories_v3_egemma_256` — EmbeddingGemma 256-dim vectors.
-pub fn memories_v3_schema() -> Schema {
-    Schema::new(vec![
-        Field::new("id", DataType::Utf8, false),
-        Field::new("timestamp", DataType::Int64, false),
-        Field::new("timestamp_start", DataType::Int64, false),
-        Field::new("timestamp_end", DataType::Int64, false),
-        Field::new("day_bucket", DataType::Utf8, false),
-        Field::new("app_name", DataType::Utf8, false),
-        Field::new("bundle_id", DataType::Utf8, true),
-        Field::new("window_title", DataType::Utf8, false),
-        Field::new("url", DataType::Utf8, true),
-        Field::new("source_type", DataType::Utf8, false),
-        Field::new("ocr_confidence", DataType::Float32, false),
-        Field::new("memory_context", DataType::Utf8, false),
-        Field::new("summary_short", DataType::Utf8, false),
-        Field::new("topic", DataType::Utf8, false),
-        Field::new("activity_type", DataType::Utf8, false),
-        Field::new("user_intent", DataType::Utf8, false),
-        Field::new(
-            "entities",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new(
-            "files",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new(
-            "urls",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new(
-            "decisions",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new(
-            "errors",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new(
-            "next_steps",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new(
-            "search_aliases",
-            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
-            false,
-        ),
-        Field::new("confidence_score", DataType::Float32, false),
-        Field::new("importance_score", DataType::Float32, false),
-        Field::new("enrichment_status", DataType::Utf8, false),
-        Field::new("fallback_reason", DataType::Utf8, true),
-        Field::new("embedding_model", DataType::Utf8, false),
-        Field::new("embedding_dimensions", DataType::Int32, false),
-        Field::new("raw_screenshot_stored", DataType::Boolean, false),
-        Field::new(
-            "embedding",
-            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), 256),
-            false,
-        ),
-        Field::new("content_hash", DataType::Utf8, false),
-        Field::new("dedup_fingerprint", DataType::Utf8, false),
-        Field::new("is_soft_deleted", DataType::Boolean, false),
-        Field::new("schema_version", DataType::Utf8, false),
-    ])
 }

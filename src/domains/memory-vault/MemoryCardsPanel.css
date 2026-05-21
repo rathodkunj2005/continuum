@@ -292,6 +292,10 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+    /* Enable container queries so compact cards respond to the
+       list container width, not the viewport width. */
+    container-type: inline-size;
+    container-name: memory-stream;
 }
 
 .memory-cards-inline-error {

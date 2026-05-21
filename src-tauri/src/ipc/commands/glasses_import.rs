@@ -6,16 +6,20 @@
 use super::common::shared_embedder;
 use crate::config::DEFAULT_IMAGE_EMBEDDING_DIM;
 use crate::embedding::{embed_imported_image, EMBEDDING_DIM};
-use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
+use crate::inference::vlm_router::{
+    should_run_vlm, vlm_capability_label, vlm_runtime_status_label, VlmRouteDecision, VlmRouteInput,
+};
 use crate::inference::{
-    build_import_raw_evidence, compose_import_memory_context, extract_image_semantics,
-    insight_from_ocr_only, insight_from_structured, should_include_import_ocr,
-    synthesize_vision_insight, ImageImportSource, ImageSemanticInsight, ImportOcrStats,
+    build_import_raw_evidence, compose_failed_visual_semantics_import_metadata,
+    compose_import_memory_context, extract_image_semantics, insight_from_ocr_only,
+    insight_from_structured, should_include_import_ocr, synthesize_vision_insight,
+    visual_semantics_is_grounded, ImageImportSource, ImageSemanticInsight, ImportOcrStats,
 };
 use crate::memory_compaction::{
     build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
-    support_embedding_texts,
+    support_embedding_texts_with_config,
 };
+use crate::memory_quality::{cap_visual_semantics_failed_scores, VISUAL_SEMANTICS_FAILED_OUTCOME};
 use crate::models;
 use crate::ocr::OcrEngine;
 use crate::storage::MemoryRecord;
@@ -244,6 +248,15 @@ pub async fn import_meta_glasses_photo(
                 .unwrap_or_else(|| insight_from_ocr_only(&filename, None, None, ocr_grounding))
         }
     };
+    let visual_semantics_grounded = visual_semantics_is_grounded(
+        &insight,
+        include_ocr,
+        route_label(&vlm_route),
+        fallback_reason(&vlm_route),
+    );
+    if !visual_semantics_grounded {
+        extraction_issues.push(VISUAL_SEMANTICS_FAILED_OUTCOME.to_string());
+    }
 
     // Knowledge-rich synthesis: after a successful pixel-VLM run, pass the scene
     // understanding through the text LLM to produce a `why_mattered` sentence and
@@ -261,25 +274,37 @@ pub async fn import_meta_glasses_photo(
         None
     };
 
-    let mut composed = compose_import_memory_context(
-        &filename,
-        &insight,
-        ocr_append,
-        ImageImportSource::MetaGlasses,
-    );
+    let mut composed = if visual_semantics_grounded {
+        compose_import_memory_context(
+            &filename,
+            &insight,
+            ocr_append,
+            ImageImportSource::MetaGlasses,
+        )
+    } else {
+        compose_failed_visual_semantics_import_metadata(
+            &filename,
+            ImageImportSource::MetaGlasses,
+            fallback_reason(&vlm_route).or(extraction_failure_reason.as_deref()),
+        )
+    };
 
     // Merge synthesis results into the composed memory fields when non-empty.
-    if !synthesis.why_mattered.is_empty() {
+    if visual_semantics_grounded && !synthesis.why_mattered.is_empty() {
         composed.insight_why_mattered = synthesis.why_mattered;
     }
-    for alias in synthesis.enriched_aliases {
-        if !composed.search_aliases.contains(&alias) {
-            composed.search_aliases.push(alias);
+    if visual_semantics_grounded {
+        for alias in synthesis.enriched_aliases {
+            if !composed.search_aliases.contains(&alias) {
+                composed.search_aliases.push(alias);
+            }
         }
     }
 
     let clean_text = composed.memory_context.clone();
-    let snippet = if !insight.summary_short.trim().is_empty() {
+    let snippet = if !visual_semantics_grounded {
+        format!("Imported image pending visual semantics: {filename}")
+    } else if !insight.summary_short.trim().is_empty() {
         insight
             .summary_short
             .trim()
@@ -293,7 +318,14 @@ pub async fn import_meta_glasses_photo(
     let lexical_shadow = build_lexical_shadow(APP_LABEL, &snippet, &clean_text, None);
     let compact_summary_text =
         compact_summary_embedding_text("import", &snippet, &clean_text, &lexical_shadow);
-    let support_texts = support_embedding_texts(APP_LABEL, &filename, &clean_text, &lexical_shadow);
+    let chunking_config = state.config.read().chunking.clone();
+    let support_texts = support_embedding_texts_with_config(
+        APP_LABEL,
+        &filename,
+        &clean_text,
+        &lexical_shadow,
+        Some(&chunking_config),
+    );
 
     let embedder = shared_embedder()?;
     let mut contexts = vec![
@@ -349,9 +381,23 @@ pub async fn import_meta_glasses_photo(
     let mut raw_evidence_json: Value =
         serde_json::from_str(&raw_evidence_base).unwrap_or_else(|_| json!({}));
     raw_evidence_json["vlm_route"] = json!(route_label(&vlm_route));
+    raw_evidence_json["vlm_capability"] = json!(vlm_capability_label(
+        config.use_vlm,
+        host_supports_qwen_vlm,
+        vlm_available
+    ));
+    raw_evidence_json["vlm_runtime_status"] =
+        json!(vlm_runtime_status_label(&vlm_route, Some(skip_reason)));
     raw_evidence_json["vlm_block_reason"] = json!(fallback_reason(&vlm_route));
     raw_evidence_json["host_supports_vlm"] = json!(host_supports_qwen_vlm);
     raw_evidence_json["pressure_reason"] = json!(skip_reason);
+    raw_evidence_json["extraction_issues"] = json!(&extraction_issues);
+    raw_evidence_json["visual_semantics_grounded"] = json!(visual_semantics_grounded);
+    raw_evidence_json["storage_outcome"] = json!(if visual_semantics_grounded {
+        "candidate_memory_card"
+    } else {
+        VISUAL_SEMANTICS_FAILED_OUTCOME
+    });
     raw_evidence_json["clip_embedding_status"] =
         json!(if image_embedding.iter().all(|v| *v == 0.0) {
             "zero_vector"
@@ -367,9 +413,12 @@ pub async fn import_meta_glasses_photo(
         "ocr_included": include_ocr,
         "ocr_rejected_reason": ocr_rejected_reason,
         "vlm_route": route_label(&vlm_route),
+        "vlm_capability": vlm_capability_label(config.use_vlm, host_supports_qwen_vlm, vlm_available),
+        "vlm_runtime_status": vlm_runtime_status_label(&vlm_route, Some(skip_reason)),
         "vlm_block_reason": fallback_reason(&vlm_route),
         "host_supports_vlm": host_supports_qwen_vlm,
         "pressure_reason": skip_reason,
+        "visual_semantics_grounded": visual_semantics_grounded,
     })
     .to_string();
 
@@ -413,7 +462,11 @@ pub async fn import_meta_glasses_photo(
         support_embedding,
         decay_score: 1.0,
         last_accessed_at: now.timestamp_millis(),
-        source_type: "import".to_string(),
+        source_type: if visual_semantics_grounded {
+            "import".to_string()
+        } else {
+            ImageImportSource::MetaGlasses.api_label().to_string()
+        },
         topic: composed.topic.clone(),
         workflow: "import".to_string(),
         user_intent: composed.user_intent.clone(),
@@ -432,7 +485,32 @@ pub async fn import_meta_glasses_photo(
         ..Default::default()
     };
 
-    if !extraction_issues.is_empty() {
+    if !visual_semantics_grounded {
+        record.storage_outcome = VISUAL_SEMANTICS_FAILED_OUTCOME.to_string();
+        record.enrichment_status = "pending_visual_semantics".to_string();
+        record.summary_source = "visual_semantics_failed".to_string();
+        record.synthesis_branch = "visual_semantics_failed".to_string();
+        record.fallback_reason = fallback_reason(&vlm_route)
+            .or(extraction_failure_reason.as_deref())
+            .map(str::to_string);
+        record.evidence_confidence = 0.05;
+        record.extraction_confidence = 0.0;
+        record.specificity_score = 0.10;
+        record.intent_score = 0.0;
+        record.entity_score = 0.0;
+        record.agent_usefulness_score = 0.10;
+        record.graph_readiness_score = 0.05;
+        record.retrieval_value_score = 0.10;
+        record.confidence_score = 0.05;
+        record.importance_score = 0.05;
+        record.insight_card_confidence = 0.0;
+        record.quality_gate_reason = "hard_gate=visual_semantics_failed".to_string();
+        record.search_aliases.clear();
+        record.entities.clear();
+        record.tags.clear();
+        record.topic_categories.clear();
+        cap_visual_semantics_failed_scores(&mut record);
+    } else if !extraction_issues.is_empty() {
         record.outcome = "vision_semantic_extraction_failed".to_string();
     }
 
@@ -479,6 +557,21 @@ mod tests {
                 reason: "vlm_blocked_low_ram".to_string()
             }
         );
+    }
+
+    #[test]
+    fn blocked_empty_ocr_import_is_not_grounded_visual_semantics() {
+        let decision = VlmRouteDecision::FallbackOcrOnly {
+            reason: "vlm_blocked_low_ram".to_string(),
+        };
+        let insight = insight_from_ocr_only("github-profile.jpeg", None, None, "");
+
+        assert!(!visual_semantics_is_grounded(
+            &insight,
+            false,
+            route_label(&decision),
+            fallback_reason(&decision)
+        ));
     }
 
     #[test]

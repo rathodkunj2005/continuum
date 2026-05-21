@@ -85,6 +85,7 @@ struct Agg {
 impl Agg {
     fn add_route(&mut self, route: Route, score: f32, weight: f32) {
         match route {
+            Route::Chunk => self.signals.chunk = self.signals.chunk.max(score),
             Route::Vector => self.signals.vector = self.signals.vector.max(score),
             Route::Keyword => self.signals.keyword = self.signals.keyword.max(score),
             Route::Temporal => self.signals.temporal = self.signals.temporal.max(score),
@@ -100,6 +101,7 @@ impl Agg {
 
 fn weight_for(weights: &FusionWeights, route: Route) -> f32 {
     match route {
+        Route::Chunk => weights.chunk,
         Route::Vector => weights.vector,
         Route::Keyword => weights.keyword,
         Route::Temporal => weights.temporal,
@@ -169,6 +171,7 @@ fn build_surfacing_reason(
 
 fn route_label(route: Route, graph_path: &Option<Vec<PathStep>>) -> String {
     match route {
+        Route::Chunk => "Chunk".to_string(),
         Route::Vector => "vector".to_string(),
         Route::Keyword => "keyword".to_string(),
         Route::Temporal => "temporal".to_string(),

@@ -121,8 +121,8 @@ function matchesFilters(
     }
 
     // Fall back to generic text signals when structured activity_type is absent.
-    const text = normalizeText(
-        `${card.window_title ?? ""} ${(card.context ?? []).join(" ")} ${card.summary ?? ""}`
+        const text = normalizeText(
+        `${card.window_title ?? ""} ${(card.context ?? []).join(" ")} ${card.summary ?? ""} ${card.display_summary ?? ""} ${card.internal_context ?? ""}`
     ).toLowerCase();
     const url = (card.url ?? "").toLowerCase();
     const hasAny = (terms: string[]) => terms.some((term) => text.includes(term));
@@ -702,7 +702,12 @@ export function MemoryCardsPanel({
                                     setOpenExpandedId(c.id);
                                     void handleToggleDebug(c.id);
                                 }}
-                                threadCountHint={card.insight_kg_node_count}
+                                threadCountHint={
+                                    card.topic_categories?.length ||
+                                    (card.insight_context_thread?.trim() ? 1 : 0) ||
+                                    card.files_touched?.length ||
+                                    undefined
+                                }
                             />
                         ))}
                     </div>
