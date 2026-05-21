@@ -69,9 +69,29 @@ At query time the chunk index is searched first for precision; matched chunks' p
 |---|---|---|
 | v4 MiniLM 384-d | `memories_v4_minilm_384` | Current durable write path |
 | v5 BGE 1024-d | `memories_v5_bge_1024` | Additive parent target table and explicit reindex path |
-| v1 BGE chunks 1024-d | `memory_chunks_v1_bge_1024` | Additive child chunk table for explicit v5 reindex; not searched yet |
+| v1 BGE chunks 1024-d | `memory_chunks_v1_bge_1024` | Additive child chunk table; queried by the chunk-first retrieval route |
 
-The v5 parent table is available as a migration target, but 1024-d is still **not** the current live search path. v4 remains readable and v5 writes refuse wrong-dimension fallback. See ADR 002 (amended) and ADR 008.
+The v5 parent table is available as a migration target, but 1024-d is still **not** the current live durable write path. v4 remains readable, v5 writes refuse wrong-dimension fallback, and the chunk-first route fans out to the v5 chunk table at query time and resolves matches back to the v4 parent for card synthesis. See ADR 002 (amended) and ADR 008.
+
+## Memory review lifecycle (post-capture)
+
+Captured memories carry a `enrichment_status` lifecycle field that distinguishes raw captures from locally-reviewed ones:
+
+| Status | Meaning |
+| --- | --- |
+| `""` / `pending` | Just captured; waiting for the post-capture review worker. |
+| `reviewed_local` | The async per-memory worker upgraded the record under the local model and persisted a validated patch. |
+| `reviewed_daily` | The daily batch driver re-reviewed yesterday's records and persisted a validated patch. |
+| `review_failed` | The review surfaced an ungrounded or meta-narrated patch; the original content is preserved. |
+
+The review pipeline is local-only and pressure-gated:
+
+- The per-capture worker drains a small queue under the `model_pipeline_lock` so the LLM call never races capture.
+- The daily scheduler wakes hourly, runs the previous calendar day once per day when inference is loaded and the pressure gate is open, and aborts gracefully if the gate closes mid-batch.
+- Both paths run the same grounding + narration-filter validation. Failed patches preserve the original record content.
+- IPC commands `run_daily_memory_review_cmd` and `backfill_memory_review` expose the same pipeline for manual or backfill use with a `dry_run` option that computes patches without mutating storage.
+
+The vault surfaces lifecycle status through a chip on each card (`DEVELOPED` / `PENDING` / `RAW` / `REVIEW_FAILED` / `VISUAL_FAILED`) and prefers reviewed summaries over raw OCR for the preview text. See `src/domains/memory-vault/MemoryCard.tsx` for the derivation rules.
 
 ## Stable vs Experimental
 
