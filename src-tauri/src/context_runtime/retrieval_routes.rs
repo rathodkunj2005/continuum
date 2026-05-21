@@ -300,6 +300,10 @@ pub fn memory_record_to_search_result(record: &MemoryRecord, score: f32) -> Sear
         matched_routes: Vec::new(),
         matched_chunk_ids: Vec::new(),
         chunk_evidence: Vec::new(),
+        enrichment_status: record.enrichment_status.clone(),
+        reviewed_at_ms: record.reviewed_at_ms,
+        reviewer_generation: record.reviewer_generation,
+        storage_outcome: record.storage_outcome.clone(),
     }
 }
 

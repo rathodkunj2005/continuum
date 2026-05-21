@@ -4688,6 +4688,10 @@ fn memory_to_search_result(memory: &crate::storage::MemoryRecord) -> crate::stor
         matched_routes: Vec::new(),
         matched_chunk_ids: Vec::new(),
         chunk_evidence: Vec::new(),
+        enrichment_status: memory.enrichment_status.clone(),
+        reviewed_at_ms: memory.reviewed_at_ms,
+        reviewer_generation: memory.reviewer_generation,
+        storage_outcome: memory.storage_outcome.clone(),
     }
 }
 

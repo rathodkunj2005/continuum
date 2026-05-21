@@ -807,10 +807,7 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 embedding_model: get_str(&embedding_models, i),
                 embedding_dim: get_u32(&embedding_dims, i),
                 enrichment_status: get_str(&enrichment_statuses, i),
-                reviewed_at_ms: reviewed_at_ms_col
-                    .as_ref()
-                    .map(|c| c.value(i))
-                    .unwrap_or(0),
+                reviewed_at_ms: reviewed_at_ms_col.as_ref().map(|c| c.value(i)).unwrap_or(0),
                 reviewer_generation: get_u32(&reviewer_generations, i),
                 fallback_reason: None,
                 raw_screenshot_stored: false,
@@ -906,6 +903,10 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
     let insight_conf = f32_col(batch, "insight_card_confidence");
     let search_synthesis_branches = str_col(batch, "synthesis_branch");
     let search_topic_categories = list_str_col(batch, "topic_categories");
+    let search_enrichment_statuses = str_col(batch, "enrichment_status");
+    let search_reviewed_at_ms = i64_col(batch, "reviewed_at_ms");
+    let search_reviewer_generations = u32_col(batch, "reviewer_generation");
+    let search_storage_outcomes = str_col(batch, "storage_outcome");
 
     (0..n)
         .map(|i| {
@@ -1016,6 +1017,20 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
                 matched_routes: Vec::new(),
                 matched_chunk_ids: Vec::new(),
                 chunk_evidence: Vec::new(),
+                enrichment_status: get_str(&search_enrichment_statuses, i),
+                reviewed_at_ms: search_reviewed_at_ms
+                    .as_ref()
+                    .map(|c| c.value(i))
+                    .unwrap_or(0),
+                reviewer_generation: get_u32(&search_reviewer_generations, i),
+                storage_outcome: {
+                    let outcome = get_str(&search_storage_outcomes, i);
+                    if outcome.trim().is_empty() {
+                        "enriched_memory_card".to_string()
+                    } else {
+                        outcome
+                    }
+                },
             }
         })
         .collect()
@@ -1308,6 +1323,7 @@ pub(super) fn nodes_to_batch(
     for n in nodes {
         ids.append_value(&n.id);
         types.append_value(match n.node_type {
+            NodeType::Memory => "Memory",
             NodeType::Entity => "Entity",
             NodeType::Task => "Task",
             NodeType::Url => "Url",
@@ -1388,6 +1404,7 @@ pub(super) fn batch_to_nodes(batch: &RecordBatch) -> Vec<GraphNode> {
     let mut nodes = Vec::with_capacity(n);
     for i in 0..n {
         let node_type = match get_str(&types, i).as_str() {
+            "Memory" => NodeType::Memory,
             "Entity" => NodeType::Entity,
             "Task" => NodeType::Task,
             "Url" => NodeType::Url,

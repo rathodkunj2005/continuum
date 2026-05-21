@@ -109,6 +109,18 @@ const SEARCH_RESULT_COLUMNS: &[&str] = &[
     "entities",
     "anchor_coverage_score",
     "content_hash",
+    "insight_what_happened",
+    "insight_why_mattered",
+    "insight_what_changed",
+    "insight_context_thread",
+    "insight_spans_json",
+    "insight_card_confidence",
+    "synthesis_branch",
+    "topic_categories",
+    "enrichment_status",
+    "reviewed_at_ms",
+    "reviewer_generation",
+    "storage_outcome",
 ];
 const TEXT_EMBED_DIM: i32 = DEFAULT_TEXT_EMBEDDING_DIM as i32;
 const IMAGE_EMBED_DIM: i32 = DEFAULT_IMAGE_EMBEDDING_DIM as i32;

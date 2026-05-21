@@ -103,6 +103,19 @@ pub struct MemoryCard {
     pub matched_chunk_ids: Vec<String>,
     #[serde(default)]
     pub chunk_evidence: Vec<crate::storage::MatchedChunkEvidence>,
+    /// Lifecycle status from `MemoryRecord.enrichment_status` — surfaced so the
+    /// vault can render DEVELOPED / PENDING / REVIEW_FAILED chips deterministically.
+    #[serde(default)]
+    pub enrichment_status: String,
+    /// Unix ms timestamp of the last successful review (0 = never).
+    #[serde(default)]
+    pub reviewed_at_ms: i64,
+    /// Monotonic counter of successful review passes.
+    #[serde(default)]
+    pub reviewer_generation: u32,
+    /// Persisted storage gate outcome, e.g. "visual_semantics_failed".
+    #[serde(default)]
+    pub storage_outcome: String,
 }
 
 #[derive(Debug, Clone)]
@@ -322,6 +335,10 @@ impl MemoryCardSynthesizer {
                 matched_routes: anchor.matched_routes.clone(),
                 matched_chunk_ids: anchor.matched_chunk_ids.clone(),
                 chunk_evidence: anchor.chunk_evidence.clone(),
+                enrichment_status: anchor.enrichment_status.clone(),
+                reviewed_at_ms: anchor.reviewed_at_ms,
+                reviewer_generation: anchor.reviewer_generation,
+                storage_outcome: anchor.storage_outcome.clone(),
             });
         }
 
@@ -863,6 +880,10 @@ fn fallback_card_for_result(query: &str, result: &SearchResult) -> MemoryCard {
         matched_routes: result.matched_routes.clone(),
         matched_chunk_ids: result.matched_chunk_ids.clone(),
         chunk_evidence: result.chunk_evidence.clone(),
+        enrichment_status: result.enrichment_status.clone(),
+        reviewed_at_ms: result.reviewed_at_ms,
+        reviewer_generation: result.reviewer_generation,
+        storage_outcome: result.storage_outcome.clone(),
     }
 }
 

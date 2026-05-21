@@ -352,6 +352,10 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         matched_routes: result.matched_routes.clone(),
         matched_chunk_ids: result.matched_chunk_ids.clone(),
         chunk_evidence: result.chunk_evidence.clone(),
+        enrichment_status: result.enrichment_status.clone(),
+        reviewed_at_ms: result.reviewed_at_ms,
+        reviewer_generation: result.reviewer_generation,
+        storage_outcome: result.storage_outcome.clone(),
     }
 }
 

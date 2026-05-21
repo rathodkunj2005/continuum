@@ -750,6 +750,22 @@ pub struct SearchResult {
     /// Short textual evidence from the winning child chunk(s).
     #[serde(default)]
     pub chunk_evidence: Vec<MatchedChunkEvidence>,
+
+    /// Post-capture review lifecycle (mirrors `MemoryRecord.enrichment_status`).
+    /// "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed".
+    #[serde(default)]
+    pub enrichment_status: String,
+    /// Unix ms timestamp of the last successful review. Zero means never reviewed.
+    #[serde(default)]
+    pub reviewed_at_ms: i64,
+    /// Monotonic counter incremented on each successful review pass.
+    #[serde(default)]
+    pub reviewer_generation: u32,
+    /// Coarse persisted gate outcome ("enriched_memory_card",
+    /// "visual_semantics_failed", "metadata_only", etc.). Surfaced so the UI
+    /// can render lifecycle chips without re-deriving the gate.
+    #[serde(default = "default_storage_outcome")]
+    pub storage_outcome: String,
 }
 
 impl Default for SearchResult {
@@ -824,6 +840,10 @@ impl Default for SearchResult {
             matched_routes: Vec::new(),
             matched_chunk_ids: Vec::new(),
             chunk_evidence: Vec::new(),
+            enrichment_status: String::new(),
+            reviewed_at_ms: 0,
+            reviewer_generation: 0,
+            storage_outcome: default_storage_outcome(),
         }
     }
 }
@@ -979,6 +999,7 @@ pub struct MeetingSegment {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NodeType {
+    Memory,
     MemoryChunk,
     Entity,
     Task,

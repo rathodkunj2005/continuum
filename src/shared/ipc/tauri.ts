@@ -21,6 +21,16 @@ export interface SearchResult {
     matched_routes?: string[];
     matched_chunk_ids?: string[];
     chunk_evidence?: MatchedChunkEvidence[];
+    /** Post-capture review lifecycle:
+     *  "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed". */
+    enrichment_status?: string;
+    /** Unix ms timestamp of the last successful review (0 = never). */
+    reviewed_at_ms?: number;
+    /** Monotonic counter incremented on each successful review pass. */
+    reviewer_generation?: number;
+    /** Coarse persisted gate outcome — "enriched_memory_card",
+     *  "visual_semantics_failed", "metadata_only", etc. */
+    storage_outcome?: string;
 }
 
 export interface MatchedChunkEvidence {
@@ -90,6 +100,16 @@ export interface MemoryCard {
     /** Phase 3 — deterministic "Why this surfaced" attached by the
      *  agentic-graph-rag composer. Absent on legacy code paths. */
     surfacing_reason?: SurfacingReason;
+    /** Post-capture review lifecycle:
+     *  "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed". */
+    enrichment_status?: string;
+    /** Unix ms timestamp of the last successful review (0 = never). */
+    reviewed_at_ms?: number;
+    /** Monotonic counter incremented on each successful review pass. */
+    reviewer_generation?: number;
+    /** Coarse persisted gate outcome — "enriched_memory_card",
+     *  "visual_semantics_failed", "metadata_only", etc. */
+    storage_outcome?: string;
 }
 
 // ── Phase 4 agentic-graph-rag types ───────────────────────────────────────
@@ -1498,6 +1518,21 @@ export interface RuntimeMetricsSnapshot {
 
 export async function getRuntimeMetrics(): Promise<RuntimeMetricsSnapshot> {
     return invoke<RuntimeMetricsSnapshot>("get_runtime_metrics");
+}
+
+export interface MemoryReviewWorkerStatus {
+    queue_depth: number;
+    last_review_at_ms: number;
+    last_error_kind: string | null;
+    worker_enabled: boolean;
+    pressure_blocked: boolean;
+}
+
+/** Snapshot of the local memory-review worker (queue depth, last error, gating).
+ *  Surfaced in the engine-metrics panel so users can see whether reviewing is
+ *  progressing or blocked by inference unavailability / system pressure. */
+export async function getMemoryReviewStatus(): Promise<MemoryReviewWorkerStatus> {
+    return invoke<MemoryReviewWorkerStatus>("get_memory_review_status");
 }
 
 export async function getRetentionDays(): Promise<number> {
