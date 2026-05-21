@@ -96,6 +96,13 @@ pub async fn get_status(state: State<'_, Arc<AppState>>) -> Result<CaptureStatus
     })
 }
 
+#[tauri::command]
+pub async fn get_memory_review_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<crate::memory_review::MemoryReviewWorkerStatus, String> {
+    Ok(crate::memory_review::worker_status(state.inner()))
+}
+
 /// Snapshot the per-reason capture counters into a flat IPC payload.
 ///
 /// All reads are `Relaxed` atomic loads, so this is cheap and safe to call on
