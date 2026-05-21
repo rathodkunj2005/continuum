@@ -1027,6 +1027,26 @@ impl Store {
         self.insert_memory_batch(&normalized).await
     }
 
+    /// Replace a single memory row in the v4 parent table, preserving its id
+    /// and any linked memory chunks. Used by the memory_review worker after
+    /// validation succeeds; callers must not pass partial records — the full
+    /// `MemoryRecord` is required because the underlying table replace pattern
+    /// is delete-then-insert.
+    pub async fn replace_memory_preserving_chunks(
+        &self,
+        record: &MemoryRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if record.id.trim().is_empty() {
+            return Err("Refusing to replace a memory with empty id".into());
+        }
+        let id = sql_escape(&record.id);
+        self.table.delete(&format!("id = '{id}'")).await?;
+        // Note: deliberately not calling delete_chunks_for_memory — children
+        // outlive a parent review pass.
+        let normalized = normalize_record_for_index(record);
+        self.insert_memory_batch(&[normalized]).await
+    }
+
     pub async fn add_v5_batch_preserving_ids(
         &self,
         records: &[MemoryRecord],

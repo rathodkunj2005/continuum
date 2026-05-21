@@ -1838,6 +1838,21 @@ pub(super) async fn ensure_memory_schema_columns(table: &Table) -> Result<(), la
             "CAST(0.0 AS FLOAT)".to_string(),
         ));
     }
+    if !existing.contains("enrichment_status") {
+        transforms.push(("enrichment_status".to_string(), "''".to_string()));
+    }
+    if !existing.contains("reviewed_at_ms") {
+        transforms.push((
+            "reviewed_at_ms".to_string(),
+            "CAST(0 AS BIGINT)".to_string(),
+        ));
+    }
+    if !existing.contains("reviewer_generation") {
+        transforms.push((
+            "reviewer_generation".to_string(),
+            "CAST(0 AS INTEGER UNSIGNED)".to_string(),
+        ));
+    }
 
     if !transforms.is_empty() {
         tracing::info!(

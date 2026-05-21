@@ -523,6 +523,50 @@ pub struct GitStats {
     pub commits: i32,
 }
 
+/// Bounded evidence handed to [`InferenceEngine::review_memory_record`]. The
+/// caller is responsible for keeping `clean_text` clipped (≤4k chars by
+/// convention) and `same_day_candidates` capped — this struct is just a
+/// strongly-typed prompt envelope so the inference module never reaches into
+/// `MemoryRecord` directly.
+#[derive(Debug, Clone, Default)]
+pub struct MemoryReviewPromptInput {
+    pub memory_id: String,
+    pub app_name: String,
+    pub window_title: String,
+    pub url: Option<String>,
+    pub clean_text: String,
+    pub current_memory_context: String,
+    pub current_display_summary: String,
+    pub synthesis_branch: String,
+    pub same_day_candidates: Vec<MemoryReviewCandidate>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MemoryReviewCandidate {
+    pub id: String,
+    pub display_title: String,
+}
+
+/// Parsed reviewer output. Mirrors the JSON schema in
+/// [`InferenceEngine::review_memory_record`].
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MemoryReviewPromptOutput {
+    #[serde(default)]
+    pub memory_context: String,
+    #[serde(default)]
+    pub display_summary: String,
+    #[serde(default)]
+    pub topic: String,
+    #[serde(default)]
+    pub user_intent: String,
+    #[serde(default)]
+    pub activity_type: String,
+    #[serde(default)]
+    pub related_memory_ids: Vec<String>,
+    #[serde(default)]
+    pub confidence: f32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StructuredMemoryExtraction {
     #[serde(default)]
@@ -1213,6 +1257,103 @@ Rules:\n\
                 } else {
                     None
                 }
+            }
+        }
+    }
+
+    /// Re-review a previously-captured `MemoryRecord` against bounded
+    /// evidence and return upgraded structured fields. Used by the
+    /// `memory_review` worker so capture stays a hot path and the LLM rewrite
+    /// happens on a pressure-gated background tick.
+    ///
+    /// Returns `None` if the model output cannot be parsed even after one
+    /// repair pass; callers should treat that as a `review_failed` outcome.
+    pub async fn review_memory_record(
+        &self,
+        input: &MemoryReviewPromptInput,
+    ) -> Option<MemoryReviewPromptOutput> {
+        if input.clean_text.trim().is_empty()
+            && input.current_memory_context.trim().is_empty()
+            && input.current_display_summary.trim().is_empty()
+        {
+            return None;
+        }
+
+        let same_day_block = if input.same_day_candidates.is_empty() {
+            "(none)".to_string()
+        } else {
+            input
+                .same_day_candidates
+                .iter()
+                .take(12)
+                .map(|candidate| format!("- {}: {}", candidate.id, candidate.display_title))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let system_msg = format!(
+            "You are a memory reviewer for a privacy-first local memory app.\n\
+            RULES:\n\
+            - Output ONLY raw JSON, no markdown.\n\
+            - memory_context must be a concrete restatement of what happened, not a narration of the OCR process.\n\
+            - Never start sentences with \"You reviewed\", \"User viewed\", or \"The OCR text indicates\".\n\
+            - Never invent URLs, file paths, function names, or memory ids that are not in the provided evidence.\n\
+            - related_memory_ids must come from the SAME_DAY_CANDIDATES list verbatim, max 3 ids.\n\
+            - Prefer empty strings to hallucinated detail; lower confidence instead of guessing.\n\
+            \n\
+            SCHEMA:\n\
+            {{\n\
+              \"memory_context\": \"\",\n\
+              \"display_summary\": \"\",\n\
+              \"topic\": \"\",\n\
+              \"user_intent\": \"\",\n\
+              \"activity_type\": \"\",\n\
+              \"related_memory_ids\": [],\n\
+              \"confidence\": 0.0\n\
+            }}"
+        );
+
+        let url_line = input
+            .url
+            .as_deref()
+            .map(|u| format!("URL: {u}\n"))
+            .unwrap_or_default();
+        let clipped_text = input.clean_text.chars().take(4000).collect::<String>();
+        let user_msg = format!(
+            "APP: {}\nWINDOW: {}\n{url_line}\
+            CURRENT MEMORY_CONTEXT: {}\n\
+            CURRENT DISPLAY_SUMMARY: {}\n\
+            SYNTHESIS_BRANCH: {}\n\
+            \n\
+            SAME_DAY_CANDIDATES:\n{same_day_block}\n\
+            \n\
+            CLEAN_TEXT EVIDENCE:\n\"\"\"\n{clipped_text}\n\"\"\"\n\
+            \n\
+            Return JSON only.",
+            input.app_name,
+            input.window_title,
+            input.current_memory_context,
+            input.current_display_summary,
+            input.synthesis_branch,
+        );
+
+        let prompt = self.build_prompt(&system_msg, &user_msg).ok()?;
+        let raw = self.complete(&prompt, 320).await;
+        let candidate = extract_json_object(&raw)?;
+        match serde_json::from_str::<MemoryReviewPromptOutput>(&candidate) {
+            Ok(parsed) => Some(parsed),
+            Err(err) => {
+                tracing::warn!(
+                    err = %err,
+                    "review_memory_record: failed to parse JSON, attempting one repair"
+                );
+                let repair_msg = format!(
+                    "Fix this invalid JSON to match the strict schema. Output ONLY JSON.\nINVALID JSON:\n{candidate}",
+                );
+                let repair_prompt = self.build_prompt(&system_msg, &repair_msg).ok()?;
+                let repaired_raw = self.complete(&repair_prompt, 320).await;
+                let repaired_candidate = extract_json_object(&repaired_raw)?;
+                serde_json::from_str::<MemoryReviewPromptOutput>(&repaired_candidate).ok()
             }
         }
     }

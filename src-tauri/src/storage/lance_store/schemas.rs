@@ -274,6 +274,11 @@ pub fn memory_schema_for_text_dim(text_embed_dim: i32) -> Schema {
         Field::new("insight_context_thread", DataType::Utf8, false),
         Field::new("insight_spans_json", DataType::Utf8, false),
         Field::new("insight_card_confidence", DataType::Float32, false),
+        // Post-capture review lifecycle (Subagent 9). Existing rows get
+        // backfilled by the schema migration in normalize_embed_migrate.rs.
+        Field::new("enrichment_status", DataType::Utf8, false),
+        Field::new("reviewed_at_ms", DataType::Int64, false),
+        Field::new("reviewer_generation", DataType::UInt32, false),
     ])
 }
 

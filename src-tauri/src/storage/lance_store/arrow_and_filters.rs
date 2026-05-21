@@ -310,6 +310,12 @@ pub(super) fn records_to_batch_with_text_dim(
         .map(|r| r.insight_spans_json.as_str())
         .collect();
     let insight_conf: Vec<f32> = records.iter().map(|r| r.insight_card_confidence).collect();
+    let enrichment_statuses: Vec<&str> = records
+        .iter()
+        .map(|r| r.enrichment_status.as_str())
+        .collect();
+    let reviewed_at_ms: Vec<i64> = records.iter().map(|r| r.reviewed_at_ms).collect();
+    let reviewer_generations: Vec<u32> = records.iter().map(|r| r.reviewer_generation).collect();
 
     RecordBatch::try_new(
         schema,
@@ -422,6 +428,9 @@ pub(super) fn records_to_batch_with_text_dim(
             Arc::new(StringArray::from(insight_thread)),
             Arc::new(StringArray::from(insight_spans)),
             Arc::new(Float32Array::from(insight_conf)),
+            Arc::new(StringArray::from(enrichment_statuses)),
+            Arc::new(Int64Array::from(reviewed_at_ms)),
+            Arc::new(UInt32Array::from(reviewer_generations)),
         ],
     )
 }
@@ -650,6 +659,9 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
     let insight_thread = str_col(batch, "insight_context_thread");
     let insight_spans = str_col(batch, "insight_spans_json");
     let insight_conf = f32_col(batch, "insight_card_confidence");
+    let enrichment_statuses = str_col(batch, "enrichment_status");
+    let reviewed_at_ms_col = i64_col(batch, "reviewed_at_ms");
+    let reviewer_generations = u32_col(batch, "reviewer_generation");
 
     (0..n)
         .map(|i| {
@@ -794,7 +806,12 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 embedding_text: get_str(&embedding_texts, i),
                 embedding_model: get_str(&embedding_models, i),
                 embedding_dim: get_u32(&embedding_dims, i),
-                enrichment_status: String::new(),
+                enrichment_status: get_str(&enrichment_statuses, i),
+                reviewed_at_ms: reviewed_at_ms_col
+                    .as_ref()
+                    .map(|c| c.value(i))
+                    .unwrap_or(0),
+                reviewer_generation: get_u32(&reviewer_generations, i),
                 fallback_reason: None,
                 raw_screenshot_stored: false,
                 is_consolidated: get_bool(&is_consolidated_flags, i),

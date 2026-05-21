@@ -429,8 +429,19 @@ pub struct MemoryRecord {
     pub embedding_model: String,
     #[serde(default)]
     pub embedding_dim: u32,
+    /// Lifecycle of post-capture memory review: "" / "pending" /
+    /// "reviewed_local" / "review_failed".
     #[serde(default)]
     pub enrichment_status: String,
+    /// Unix ms timestamp of the last successful local review. Zero means
+    /// the record has never been reviewed.
+    #[serde(default)]
+    pub reviewed_at_ms: i64,
+    /// Monotonic counter incremented on each successful local review. Used to
+    /// invalidate downstream artifacts and to attribute writes to a specific
+    /// review pass.
+    #[serde(default)]
+    pub reviewer_generation: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     #[serde(default)]
@@ -573,6 +584,8 @@ impl Default for MemoryRecord {
             embedding_model: crate::config::DEFAULT_EMBEDDING_MODEL_NAME.to_string(),
             embedding_dim: DEFAULT_TEXT_EMBEDDING_DIM as u32,
             enrichment_status: String::new(),
+            reviewed_at_ms: 0,
+            reviewer_generation: 0,
             fallback_reason: None,
             raw_screenshot_stored: false,
             is_consolidated: false,

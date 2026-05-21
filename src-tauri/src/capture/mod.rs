@@ -1917,6 +1917,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         }
                         for rec in batch.iter() {
                             state.enqueue_graph_from_flushed_memory(rec);
+                            state.enqueue_memory_review_from_flushed_memory(rec);
                         }
                         if let Err(err) =
                             crate::ipc::commands::commit_graph_updates_now(state.clone()).await
@@ -3408,7 +3409,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             embedding_text: primary_embed_input,
             embedding_model: "all-MiniLM-L6-v2".to_string(), // Default assumption, actual model set in pipeline
             embedding_dim: EMBEDDING_DIM as u32,
-            enrichment_status: String::new(),
+            enrichment_status: "pending".to_string(),
+            reviewed_at_ms: 0,
+            reviewer_generation: 0,
             fallback_reason: None,
             raw_screenshot_stored: false,
             is_consolidated: false,
@@ -4384,6 +4387,10 @@ pub(crate) async fn merge_memory_records_with_policy(
             &incoming.enrichment_status,
             &existing.enrichment_status,
         ),
+        reviewed_at_ms: incoming.reviewed_at_ms.max(existing.reviewed_at_ms),
+        reviewer_generation: incoming
+            .reviewer_generation
+            .max(existing.reviewer_generation),
         fallback_reason: incoming
             .fallback_reason
             .clone()

@@ -38,6 +38,7 @@ const APP_SWITCH_UNIQUE_THRESHOLD: usize = 6;
 const BRIEFING_MIN_MEMORIES: usize = 3;
 const BRIEFING_MAX_CARD_LINES: usize = 20;
 const GRAPH_COMMIT_INTERVAL: Duration = Duration::from_secs(90);
+const MEMORY_REVIEW_INTERVAL: Duration = Duration::from_secs(45);
 
 fn main() {
     // Install default TLS crypto provider (required by rustls 0.23+)
@@ -246,6 +247,15 @@ fn main() {
                         }
                     }
                 });
+            }
+
+            // Background: post-capture memory_review worker. Drains the
+            // pending_memory_reviews queue one job per tick, pressure-gated and
+            // serialized through the global model pipeline lock. See ADR 007
+            // and the memory_review module docs for the full lifecycle.
+            {
+                let review_state = state.clone();
+                fndr_lib::memory_review::spawn_worker(review_state, MEMORY_REVIEW_INTERVAL);
             }
 
             let runtime_state = state.clone();
