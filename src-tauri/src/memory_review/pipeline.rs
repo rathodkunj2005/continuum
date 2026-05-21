@@ -289,7 +289,11 @@ fn apply_reviewed_to_record(
     }
     if !reviewed.related_memory_ids.is_empty() {
         let mut combined = record.related_memory_ids.clone();
-        for id in reviewed.related_memory_ids.iter().take(MAX_RELATED_MEMORY_IDS) {
+        for id in reviewed
+            .related_memory_ids
+            .iter()
+            .take(MAX_RELATED_MEMORY_IDS)
+        {
             if !combined.iter().any(|existing| existing == id) {
                 combined.push(id.clone());
             }
@@ -324,9 +328,7 @@ fn validate_review(
     reviewed: &ReviewedMemory,
     input: &ReviewInput,
 ) -> Result<ReviewedMemory, ReviewError> {
-    if reviewed.memory_context.trim().is_empty()
-        && reviewed.display_summary.trim().is_empty()
-    {
+    if reviewed.memory_context.trim().is_empty() && reviewed.display_summary.trim().is_empty() {
         return Err(ReviewError::EmptyOutput);
     }
 
@@ -365,7 +367,10 @@ fn validate_review(
     }
 
     let mut sanitized = reviewed.clone();
-    sanitized.related_memory_ids.truncate(MAX_RELATED_MEMORY_IDS);
+    sanitized
+        .related_memory_ids
+        .truncate(MAX_RELATED_MEMORY_IDS);
+    sanitized.activity_type = crate::inference::normalize_activity_type(&sanitized.activity_type);
     Ok(sanitized)
 }
 
@@ -485,11 +490,7 @@ mod tests {
         }
     }
 
-    fn input(
-        memory_id: &str,
-        clean_text: &str,
-        candidates: Vec<SameDayCandidate>,
-    ) -> ReviewInput {
+    fn input(memory_id: &str, clean_text: &str, candidates: Vec<SameDayCandidate>) -> ReviewInput {
         ReviewInput {
             memory_id: memory_id.to_string(),
             app_name: "Visual Studio Code".to_string(),
@@ -600,6 +601,26 @@ mod tests {
         };
         let validated = validate_review(&r, &i).expect("valid");
         assert_eq!(validated.related_memory_ids.len(), MAX_RELATED_MEMORY_IDS);
+    }
+
+    #[test]
+    fn review_validation_normalizes_invalid_activity_type() {
+        let i = input(
+            "mem-1",
+            "Reviewed chunk-first retrieval results",
+            Vec::new(),
+        );
+        let r = ReviewedMemory {
+            memory_context: "Reviewed chunk-first retrieval results.".to_string(),
+            display_summary: "Reviewed retrieval results".to_string(),
+            activity_type: "coding|debugging|reviewing_agent_output|researching|unknown"
+                .to_string(),
+            ..ReviewedMemory::default()
+        };
+
+        let validated = validate_review(&r, &i).expect("valid review should pass");
+
+        assert_eq!(validated.activity_type, "unknown");
     }
 
     #[tokio::test]
@@ -771,8 +792,8 @@ mod tests {
 
         let provider = StubProvider {
             result: Ok(ReviewedMemory {
-                memory_context:
-                    "You reviewed memory_compaction.rs and the debounce ticks code.".to_string(),
+                memory_context: "You reviewed memory_compaction.rs and the debounce ticks code."
+                    .to_string(),
                 display_summary: "Reviewed the chunk route".to_string(),
                 ..ReviewedMemory::default()
             }),

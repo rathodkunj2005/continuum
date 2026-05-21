@@ -33,10 +33,12 @@ use crate::config::{
 };
 use crate::context_runtime;
 use crate::embedding::{embed_imported_image, Embedder, EmbeddingBackend, EMBEDDING_DIM};
-use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
+use crate::inference::vlm_router::{
+    should_run_vlm, vlm_capability_label, vlm_runtime_status_label, VlmRouteDecision, VlmRouteInput,
+};
 use crate::inference::{
-    compose_import_memory_context, compose_import_memory_context_with_title,
-    extract_image_semantics, ImageImportSource, StructuredMemoryExtraction,
+    compose_import_memory_context_with_title, extract_image_semantics, ImageImportSource,
+    StructuredMemoryExtraction,
 };
 use crate::memory::reopen::build_reopen_target;
 use crate::memory_compaction::{
@@ -503,6 +505,8 @@ async fn compose_visual_capture_record(
         "semantic_confidence": insight.confidence,
         "visual_admission_novelty": novelty,
         "vlm_route": vlm_route.label(),
+        "vlm_capability": vlm_capability_label(config.use_vlm, host_supports_qwen_vlm, models::pixel_vlm_available(models::configured_vlm_model_id(&config).as_deref(), Some(state.app_data_dir.as_path()))),
+        "vlm_runtime_status": vlm_runtime_status_label(&vlm_route, Some(skip_reason)),
         "vlm_block_reason": vlm_route.fallback_reason(),
         "host_supports_vlm": host_supports_qwen_vlm,
         "pressure_reason": skip_reason,
@@ -1180,7 +1184,16 @@ fn validate_structured_memory_extraction(
     let mut supported = 0usize;
     let mut total = 0usize;
 
-    clear_if_multi_option(&mut extraction.activity_type, &mut issues, "activity_type");
+    let original_activity_type = extraction.activity_type.clone();
+    extraction.activity_type = crate::inference::normalize_activity_type(&original_activity_type);
+    if original_activity_type.contains('|') {
+        issues.push("activity_type_multi_option_dump".to_string());
+    } else if !original_activity_type.trim().is_empty()
+        && extraction.activity_type == "unknown"
+        && original_activity_type.trim().to_ascii_lowercase() != "unknown"
+    {
+        issues.push("activity_type_invalid".to_string());
+    }
     clear_if_multi_option(&mut extraction.topic, &mut issues, "topic");
     clear_if_multi_option(&mut extraction.workflow, &mut issues, "workflow");
     clear_if_multi_option(&mut extraction.user_intent, &mut issues, "user_intent");
@@ -5882,7 +5895,7 @@ Activity patterns and insights dashboard
             "title",
             "valid topic appeared in evidence",
         );
-        assert!(extraction.activity_type.is_empty());
+        assert_eq!(extraction.activity_type, "unknown");
         assert!(
             issues
                 .iter()

@@ -61,9 +61,10 @@ pub fn get_or_init_backend() -> Result<Arc<LlamaBackend>, Box<dyn std::error::Er
     Ok(backend)
 }
 pub use image_semantics::{
-    build_import_raw_evidence, compose_import_memory_context,
-    compose_import_memory_context_with_title, extract_image_semantics, insight_from_ocr_only,
-    insight_from_structured, should_include_import_ocr, synthesize_vision_insight,
+    build_import_raw_evidence, compose_failed_visual_semantics_import_metadata,
+    compose_import_memory_context, compose_import_memory_context_with_title,
+    extract_image_semantics, insight_from_ocr_only, insight_from_structured,
+    should_include_import_ocr, synthesize_vision_insight, visual_semantics_is_grounded,
     ImageImportSource, ImageSemanticInsight, ImportMemoryText, ImportOcrStats,
     SynthesizedVisionMemory,
 };
@@ -626,6 +627,62 @@ pub struct StructuredMemoryExtraction {
     /// Which pipeline branch produced this: "vlm" | "llm" | "browser_semantic" | "fallback"
     #[serde(default)]
     pub synthesis_branch: String,
+}
+
+pub const CANONICAL_ACTIVITY_TYPES: &[&str] = &[
+    "coding",
+    "debugging",
+    "reviewing_agent_output",
+    "researching",
+    "planning",
+    "writing",
+    "studying",
+    "watching_or_listening",
+    "configuring_tool",
+    "testing_workflow",
+    "reading_results",
+    "organizing_information",
+    "communication",
+    "job_or_career_work",
+    "travel_or_logistics",
+    "entertainment_or_personal_interest",
+    "observing",
+    "screen_review",
+    "unknown",
+];
+
+pub fn normalize_activity_type(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase().replace([' ', '-'], "_");
+    if normalized.is_empty() {
+        return String::new();
+    }
+    if normalized.contains('|')
+        || normalized.contains("e.g.")
+        || normalized.contains("schema")
+        || normalized.contains("choose")
+    {
+        return "unknown".to_string();
+    }
+    let mapped = match normalized.as_str() {
+        "research" | "browsing" | "reading" => "researching",
+        "reviewing" | "review" | "agent_review" | "agent_output_review" => "reviewing_agent_output",
+        "configuring" | "configuration" | "setup" => "configuring_tool",
+        "testing" | "test" => "testing_workflow",
+        "reading_result" | "reading_outputs" | "reading_output" => "reading_results",
+        "organizing" | "organization" => "organizing_information",
+        "career" | "job_search" | "job_application" | "applying_to_job" => "job_or_career_work",
+        "travel" | "logistics" => "travel_or_logistics",
+        "entertainment" | "personal_interest" | "watching" | "listening" => {
+            "entertainment_or_personal_interest"
+        }
+        "screen" | "screen_capture" | "screen_reviewing" => "screen_review",
+        other => other,
+    };
+    if CANONICAL_ACTIVITY_TYPES.contains(&mapped) {
+        mapped.to_string()
+    } else {
+        "unknown".to_string()
+    }
 }
 
 // ============================================================================
@@ -1237,7 +1294,10 @@ Rules:\n\
         let candidate = extract_json_object(&raw)?;
         let normalized = normalize_structured_memory_json(&candidate);
         match serde_json::from_str::<StructuredMemoryExtraction>(&normalized) {
-            Ok(draft) => Some(draft),
+            Ok(mut draft) => {
+                draft.activity_type = normalize_activity_type(&draft.activity_type);
+                Some(draft)
+            }
             Err(e) => {
                 tracing::warn!("Failed to parse structured memory JSON: {}", e);
                 // Try repair once
@@ -1250,7 +1310,13 @@ Rules:\n\
                     if let Some(repaired_candidate) = extract_json_object(&repaired_raw) {
                         let normalized_repair =
                             normalize_structured_memory_json(&repaired_candidate);
-                        serde_json::from_str::<StructuredMemoryExtraction>(&normalized_repair).ok()
+                        serde_json::from_str::<StructuredMemoryExtraction>(&normalized_repair)
+                            .map(|mut repaired| {
+                                repaired.activity_type =
+                                    normalize_activity_type(&repaired.activity_type);
+                                repaired
+                            })
+                            .ok()
                     } else {
                         None
                     }
@@ -1341,7 +1407,10 @@ Rules:\n\
         let raw = self.complete(&prompt, 320).await;
         let candidate = extract_json_object(&raw)?;
         match serde_json::from_str::<MemoryReviewPromptOutput>(&candidate) {
-            Ok(parsed) => Some(parsed),
+            Ok(mut parsed) => {
+                parsed.activity_type = normalize_activity_type(&parsed.activity_type);
+                Some(parsed)
+            }
             Err(err) => {
                 tracing::warn!(
                     err = %err,
@@ -1353,7 +1422,12 @@ Rules:\n\
                 let repair_prompt = self.build_prompt(&system_msg, &repair_msg).ok()?;
                 let repaired_raw = self.complete(&repair_prompt, 320).await;
                 let repaired_candidate = extract_json_object(&repaired_raw)?;
-                serde_json::from_str::<MemoryReviewPromptOutput>(&repaired_candidate).ok()
+                serde_json::from_str::<MemoryReviewPromptOutput>(&repaired_candidate)
+                    .map(|mut repaired| {
+                        repaired.activity_type = normalize_activity_type(&repaired.activity_type);
+                        repaired
+                    })
+                    .ok()
             }
         }
     }
@@ -1913,6 +1987,22 @@ mod tests {
         let out = normalize_structured_memory_json(raw);
         let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid json");
         assert_eq!(parsed["entities"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn normalize_activity_type_rejects_enum_instruction_dump() {
+        let raw = "coding|debugging|reviewing_agent_output|researching|planning|writing|unknown";
+        assert_eq!(normalize_activity_type(raw), "unknown");
+    }
+
+    #[test]
+    fn normalize_activity_type_maps_aliases_and_keeps_valid_values() {
+        assert_eq!(normalize_activity_type("Research"), "researching");
+        assert_eq!(
+            normalize_activity_type("job application"),
+            "job_or_career_work"
+        );
+        assert_eq!(normalize_activity_type("debugging"), "debugging");
     }
 
     #[test]

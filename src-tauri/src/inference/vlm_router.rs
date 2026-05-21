@@ -97,6 +97,54 @@ pub fn should_run_vlm(input: &VlmRouteInput) -> VlmRouteDecision {
     VlmRouteDecision::RunQwenVlm
 }
 
+pub fn vlm_capability_label(
+    vlm_enabled: bool,
+    host_supports_qwen_vlm: bool,
+    vlm_available: bool,
+) -> &'static str {
+    if !vlm_enabled {
+        "disabled"
+    } else if !host_supports_qwen_vlm {
+        "unsupported"
+    } else if !vlm_available {
+        "model_missing"
+    } else {
+        "available"
+    }
+}
+
+pub fn vlm_runtime_status_label(
+    decision: &VlmRouteDecision,
+    pressure_reason: Option<&str>,
+) -> &'static str {
+    match decision {
+        VlmRouteDecision::RunQwenVlm => "ready",
+        VlmRouteDecision::FallbackOcrOnly { reason } if reason == "vlm_blocked_low_ram" => {
+            "unsupported"
+        }
+        VlmRouteDecision::FallbackOcrOnly { reason } if reason == "system_pressure" => {
+            match pressure_reason.unwrap_or_default() {
+                "host_memory_high" | "host_memory_moderate" | "process_footprint_over_3gib" => {
+                    "deferred_low_ram"
+                }
+                "process_cpu_saturated" => "deferred_pressure",
+                _ => "deferred_pressure",
+            }
+        }
+        VlmRouteDecision::FallbackOcrOnly { reason } if reason == "vlm_unavailable" => {
+            "model_missing"
+        }
+        VlmRouteDecision::FallbackOcrOnly { reason } if reason == "vlm_disabled" => "disabled",
+        VlmRouteDecision::FallbackOcrOnly { reason } if reason == "vlm_rate_limited" => {
+            "deferred_rate_limited"
+        }
+        VlmRouteDecision::FallbackOcrOnly { .. } => "deferred",
+        VlmRouteDecision::SkipDuplicate
+        | VlmRouteDecision::SkipGoodOcr
+        | VlmRouteDecision::SkipLowValue => "skipped",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +250,33 @@ mod tests {
                 reason: "vlm_unavailable".to_string()
             }
         );
+    }
+
+    #[test]
+    fn capability_is_available_even_when_runtime_pressure_defers() {
+        let mut inp = base_input();
+        inp.system_pressure_skip = true;
+        let decision = should_run_vlm(&inp);
+
+        assert_eq!(
+            vlm_capability_label(
+                inp.vlm_enabled,
+                inp.host_supports_qwen_vlm,
+                inp.vlm_available
+            ),
+            "available"
+        );
+        assert_eq!(
+            vlm_runtime_status_label(&decision, Some("host_memory_moderate")),
+            "deferred_low_ram"
+        );
+    }
+
+    #[test]
+    fn capability_distinguishes_missing_disabled_and_unsupported() {
+        assert_eq!(vlm_capability_label(false, true, true), "disabled");
+        assert_eq!(vlm_capability_label(true, false, true), "unsupported");
+        assert_eq!(vlm_capability_label(true, true, false), "model_missing");
+        assert_eq!(vlm_capability_label(true, true, true), "available");
     }
 }

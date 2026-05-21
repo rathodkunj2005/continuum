@@ -20,8 +20,10 @@ use crate::config::{DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_TEXT_EMBEDDING_DIM};
 use crate::memory::reopen::{build_reopen_target, ReopenKind, ReopenValidationStatus};
 use crate::memory_compaction::{build_lexical_shadow, compact_memory_record_payload};
 use crate::memory_quality::{
-    classify_storage_outcome, default_memory_quality_config, deterministic_dedup_fingerprint,
-    is_supported_dedup_fingerprint, quality_gate_reason as shared_quality_gate_reason,
+    cap_visual_semantics_failed_scores, classify_storage_outcome, default_memory_quality_config,
+    deterministic_dedup_fingerprint, is_supported_dedup_fingerprint,
+    is_visual_semantics_failed_record, quality_gate_reason as shared_quality_gate_reason,
+    VISUAL_SEMANTICS_FAILED_OUTCOME,
 };
 use crate::storage::schema::{
     ExtractedEntity, GraphEdge, GraphNode, IntentAnalysis, IntentCandidate, MeetingSegment,
@@ -240,6 +242,7 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
     if normalized.source_type.trim().is_empty() {
         normalized.source_type = infer_source_type(&normalized);
     }
+    normalized.activity_type = crate::inference::normalize_activity_type(&normalized.activity_type);
     if normalized.reopen_kind == ReopenKind::Unknown {
         let derived = build_reopen_target(
             normalized.url.as_deref(),
@@ -286,10 +289,14 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
     if normalized.raw_evidence.trim().is_empty() {
         normalized.raw_evidence = build_raw_evidence_payload(&normalized);
     }
-    if normalized.extracted_entities_structured.is_empty() {
+    let visual_semantics_failed = is_visual_semantics_failed_record(&normalized);
+    if visual_semantics_failed {
+        normalize_failed_visual_semantics_record(&mut normalized);
+    }
+    if !visual_semantics_failed && normalized.extracted_entities_structured.is_empty() {
         normalized.extracted_entities_structured = derive_structured_entities(&normalized);
     }
-    if normalized.action_items.is_empty() {
+    if !visual_semantics_failed && normalized.action_items.is_empty() {
         normalized.action_items = derive_action_items(&normalized);
     }
     if normalized.topic_confidence <= 0.0 {
@@ -356,6 +363,11 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
     if normalized.quality_gate_reason.trim().is_empty() {
         normalized.quality_gate_reason = shared_quality_gate_reason(&normalized);
     }
+    if visual_semantics_failed {
+        cap_visual_semantics_failed_scores(&mut normalized);
+        normalized.storage_outcome = VISUAL_SEMANTICS_FAILED_OUTCOME.to_string();
+        normalized.quality_gate_reason = shared_quality_gate_reason(&normalized);
+    }
     normalized.anchor_coverage_score = normalized.anchor_coverage_score.clamp(0.0, 1.0);
     if normalized.content_hash.trim().is_empty() {
         normalized.content_hash = compute_content_hash(
@@ -364,11 +376,71 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
             normalized.timestamp,
         );
     }
+    if visual_semantics_failed {
+        normalized.embedding_text = failed_visual_semantics_embedding_text(&normalized);
+        return normalized;
+    }
     crate::memory_insight::derive_insight_for_record(&mut normalized);
     normalized.embedding_text = strip_low_conf_markers(
         &crate::memory_insight::compose_insight_embedding_text(&normalized),
     );
     normalized
+}
+
+fn normalize_failed_visual_semantics_record(record: &mut MemoryRecord) {
+    record.storage_outcome = VISUAL_SEMANTICS_FAILED_OUTCOME.to_string();
+    if record.enrichment_status.trim().is_empty() {
+        record.enrichment_status = "pending_visual_semantics".to_string();
+    }
+    if record.memory_context.trim().is_empty() {
+        record.memory_context = format!(
+            "Visual semantics failed for imported image: {}.",
+            record.window_title.trim()
+        );
+    }
+    if record.clean_text.trim().is_empty() {
+        record.clean_text = record.memory_context.clone();
+    }
+    if record.display_summary.trim().is_empty() {
+        record.display_summary = format!(
+            "Imported image pending visual semantics: {}",
+            record.window_title
+        );
+    }
+    if record.snippet.trim().is_empty() {
+        record.snippet = record.display_summary.clone();
+    }
+    record.summary_source = "visual_semantics_failed".to_string();
+    record.synthesis_branch = "visual_semantics_failed".to_string();
+    record.user_intent = "unknown".to_string();
+    record.intent_analysis.intent_label = "unknown".to_string();
+    record.intent_analysis.confidence = 0.0;
+    if record.topic.trim().is_empty() || record.topic == "unknown" {
+        record.topic = "visual_semantics_failed".to_string();
+    }
+    record.search_aliases.clear();
+    record.entities.clear();
+    record.tags.clear();
+    record.topic_categories.clear();
+    record.extracted_entities_structured.clear();
+    record.action_items.clear();
+    record.insight_what_happened.clear();
+    record.insight_why_mattered.clear();
+    record.insight_what_changed.clear();
+    record.insight_context_thread.clear();
+    record.embedding_text = failed_visual_semantics_embedding_text(record);
+    cap_visual_semantics_failed_scores(record);
+}
+
+fn failed_visual_semantics_embedding_text(record: &MemoryRecord) -> String {
+    let filename = record.window_title.trim();
+    let source = record.source_type.trim();
+    let reason = record
+        .fallback_reason
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("visual_semantics_failed");
+    format!("VISUAL_SEMANTICS_FAILED source:{source} file:{filename} reason:{reason}")
 }
 
 pub(super) fn strip_low_conf_markers(value: &str) -> String {
@@ -2130,5 +2202,55 @@ pub(super) async fn migrate_graph_from_json(
     .await;
     if let Err(e) = result {
         tracing::warn!("Graph migration failed: {}", e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_visual_semantics_normalization_preserves_metadata_only_record() {
+        let record = MemoryRecord {
+            id: "failed-visual-1".to_string(),
+            timestamp: 1_700_000_000_000,
+            app_name: "Meta glasses import".to_string(),
+            window_title: "github-profile.jpeg".to_string(),
+            snippet: "No supporting text was visible on screen".to_string(),
+            display_summary: "No supporting text was visible on screen".to_string(),
+            memory_context: "Visual semantics failed for imported image: github-profile.jpeg."
+                .to_string(),
+            clean_text: "Visual semantics failed for imported image: github-profile.jpeg."
+                .to_string(),
+            source_type: "meta_glasses_import".to_string(),
+            storage_outcome: VISUAL_SEMANTICS_FAILED_OUTCOME.to_string(),
+            raw_evidence: r#"{"extraction_issues":["visual_semantics_failed"],"vlm_route":"fallback_ocr_only","vlm_block_reason":"vlm_blocked_low_ram","ocr_included":false}"#.to_string(),
+            search_aliases: vec!["GitHub".to_string(), "profile".to_string()],
+            entities: vec!["GitHub".to_string()],
+            evidence_confidence: 0.95,
+            agent_usefulness_score: 0.95,
+            retrieval_value_score: 0.95,
+            graph_readiness_score: 0.95,
+            specificity_score: 0.95,
+            intent_score: 1.0,
+            ..Default::default()
+        };
+
+        let normalized = normalize_record_for_index(&record);
+
+        assert_eq!(normalized.storage_outcome, VISUAL_SEMANTICS_FAILED_OUTCOME);
+        assert_eq!(normalized.enrichment_status, "pending_visual_semantics");
+        assert!(normalized.evidence_confidence <= 0.30);
+        assert!(normalized.agent_usefulness_score <= 0.25);
+        assert!(normalized.retrieval_value_score <= 0.25);
+        assert!(normalized.graph_readiness_score <= 0.15);
+        assert!(normalized.specificity_score <= 0.15);
+        assert!(normalized.search_aliases.is_empty());
+        assert!(normalized.entities.is_empty());
+        assert!(normalized
+            .embedding_text
+            .contains("VISUAL_SEMANTICS_FAILED"));
+        assert!(!normalized.embedding_text.contains("GitHub"));
+        assert!(normalized.insight_what_happened.is_empty());
     }
 }

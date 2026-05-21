@@ -36,7 +36,10 @@ pub use pipeline::{
     ReviewedMemory, SameDayCandidate,
 };
 pub use queue::{MemoryReviewJob, MemoryReviewQueue};
-pub use worker::{spawn as spawn_worker, tick_once, DeferReason, TickOutcome};
+pub use worker::{
+    spawn as spawn_worker, status as worker_status, tick_once, DeferReason,
+    MemoryReviewWorkerStatus, TickOutcome,
+};
 
 use crate::AppState;
 use std::sync::atomic::Ordering;
