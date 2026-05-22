@@ -349,20 +349,7 @@ async fn compose_visual_capture_record(
             .map(|s| crate::inference::insight_from_structured(&s))
     };
 
-    if should_skip_ungrounded_low_ram_visual_capture(
-        &vlm_route,
-        observed_text_len,
-        observed_confidence,
-        observed_block_count,
-        config.min_text_length,
-    ) {
-        tracing::info!(
-            app = %app_name,
-            observed_chars = observed_text_len,
-            "compose_visual_capture_record: skipping ungrounded visual-only frame because VLM is blocked by low RAM and OCR/browser text is below the storage gate"
-        );
-        return Err(VISUAL_UNGROUNDED_LOW_RAM_REASON.to_string());
-    }
+    // Removed ungrounded low-RAM visual capture gate: store captures even without OCR/VLM grounding
 
     let insight = if !vlm_route.runs_pixel_vlm() {
         let reason = vlm_route
