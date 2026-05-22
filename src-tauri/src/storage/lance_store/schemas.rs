@@ -564,6 +564,8 @@ pub fn memories_v3_schema() -> Schema {
         Field::new("confidence_score", DataType::Float32, false),
         Field::new("importance_score", DataType::Float32, false),
         Field::new("enrichment_status", DataType::Utf8, false),
+        Field::new("reviewed_at_ms", DataType::Int64, false),
+        Field::new("reviewer_generation", DataType::Utf8, false),
         Field::new("fallback_reason", DataType::Utf8, true),
         Field::new("embedding_model", DataType::Utf8, false),
         Field::new("embedding_dimensions", DataType::Int32, false),

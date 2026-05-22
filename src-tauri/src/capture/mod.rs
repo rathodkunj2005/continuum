@@ -3422,6 +3422,8 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             insight_context_thread: String::new(),
             insight_spans_json: String::new(),
             insight_card_confidence: 0.0,
+            reviewed_at_ms: 0,
+            reviewer_generation: String::new(),
         };
         let incoming_record_id = record.id.clone();
         let batch_size_before = batch.len();
@@ -4385,6 +4387,8 @@ pub(crate) async fn merge_memory_records_with_policy(
         insight_context_thread,
         insight_spans_json,
         insight_card_confidence,
+        reviewed_at_ms: 0,
+        reviewer_generation: String::new(),
     }
 }
 

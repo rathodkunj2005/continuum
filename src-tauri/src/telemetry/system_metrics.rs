@@ -142,12 +142,9 @@ pub fn pressure_recommends_skipping_heavy_models() -> (bool, &'static str) {
     if snap.host_memory.pressure_label == "high" {
         return (true, "host_memory_high");
     }
-    if snap.host_memory.pressure_label == "moderate" {
-        // On moderate pressure we still skip the VLM — better a degraded
-        // fallback than a swap-thrash freeze. The LLM path uses spawn_blocking
-        // and is fine; only the heaviest model is gated here.
-        return (true, "host_memory_moderate");
-    }
+    // Removed moderate pressure gate: on 8 GB Macs, Qwen3-VL-2B can coexist
+    // with FNDR + LLM + text embedding even under moderate pressure. The 3 GiB
+    // process footprint check below catches real memory exhaustion before swap.
     if snap.process_cpu.cpu_percent > 380.0 {
         return (true, "process_cpu_saturated");
     }

@@ -685,6 +685,8 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 embedding_model: get_str(&embedding_models, i),
                 embedding_dim: get_u32(&embedding_dims, i),
                 enrichment_status: String::new(),
+                reviewed_at_ms: 0,
+                reviewer_generation: String::new(),
                 fallback_reason: None,
                 raw_screenshot_stored: false,
                 is_consolidated: get_bool(&is_consolidated_flags, i),
