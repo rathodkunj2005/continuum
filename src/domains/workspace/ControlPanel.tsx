@@ -992,7 +992,7 @@ export function ControlPanel({
                                 </div>
                                 <div className="ai-model-row">
                                     <span className="label">Search model:</span>
-                                    <span className="value">EmbeddingGemma 300M</span>
+                                    <span className="value">MiniLM-L6-v2 (384-d)</span>
                                 </div>
                                 <div className="ai-model-row">
                                     <span className="label">Mode:</span>
