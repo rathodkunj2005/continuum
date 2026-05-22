@@ -564,6 +564,7 @@ async fn compose_visual_capture_record(
         insight_why_mattered: composed.insight_why_mattered.clone(),
         insight_card_confidence: insight.confidence,
         schema_version: 2,
+        enrichment_status: String::new(), // Lifecycle: pending review
         ..Default::default()
     };
     record.dedup_fingerprint =
