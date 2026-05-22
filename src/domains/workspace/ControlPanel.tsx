@@ -1033,7 +1033,13 @@ export function ControlPanel({
                                                 {isDownloaded && <span className="model-badge-downloaded">Downloaded</span>}
                                                 {model.recommended && !isDownloaded && <span className="model-badge-recommended">Recommended</span>}
                                             </div>
-                                            <div className="model-row-meta">{model.size_label} · {model.speed_label} · ~{model.ram_gb} GB RAM</div>
+                                            <div className="model-row-meta">
+                                                {model.size_label} · {model.speed_label} · ~{model.ram_gb} GB RAM
+                                                {isDownloaded && <span className="model-status-loaded"> · Loaded & Ready</span>}
+                                            </div>
+                                            <div className="model-row-specs">
+                                                Disk: ~{(model.size_bytes / (1024 * 1024 * 1024)).toFixed(1)} GB · RAM: ~{model.ram_gb} GB · {model.quality_label}
+                                            </div>
                                             <div className="model-row-desc">{model.description}</div>
                                         </div>
 

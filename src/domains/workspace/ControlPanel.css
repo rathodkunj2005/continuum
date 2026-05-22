@@ -758,6 +758,18 @@
     margin-top: 0.2rem;
 }
 
+.model-status-loaded {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.model-row-specs {
+    font-size: 0.73rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    line-height: 1.3;
+}
+
 .model-row-desc {
     font-size: 0.82rem;
     color: var(--text-secondary);

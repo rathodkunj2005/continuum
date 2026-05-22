@@ -197,9 +197,9 @@ pub fn compute_pressure_label(
     }
 }
 
-/// Hard safety floor for Qwen3-VL 4B (~2.6 GB working set): cannot coexist
-/// with the LLM + BGE + FNDR without thrashing below this.
-pub const VLM_SAFE_MIN_HOST_RAM_BYTES: u64 = 12 * 1024 * 1024 * 1024;
+/// Hard safety floor for Qwen3-VL-2B (~3.5 GB working set): optimized for 8 GB
+/// Macs; can coexist with the LLM + BGE + FNDR without thrashing at this level.
+pub const VLM_SAFE_MIN_HOST_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 /// Safety floor for SmolVLM 500M (~1.2 GB working set): lighter model can
 /// coexist with everything else on 8 GB machines under low pressure.
@@ -236,8 +236,8 @@ pub fn host_total_ram_bytes() -> u64 {
     })
 }
 
-/// Returns true if this host has enough RAM to safely run Qwen3-VL 4B
-/// alongside the LLM and the rest of FNDR (requires ≥ 12 GB).
+/// Returns true if this host has enough RAM to safely run Qwen3-VL-2B
+/// alongside the LLM and the rest of FNDR (requires ≥ 8 GB).
 pub fn host_supports_vlm() -> bool {
     host_total_ram_bytes() >= VLM_SAFE_MIN_HOST_RAM_BYTES
 }
@@ -1005,8 +1005,8 @@ mod tests {
     }
 
     #[test]
-    fn vlm_safe_min_is_twelve_gib() {
-        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES, 12 * 1024 * 1024 * 1024);
+    fn vlm_safe_min_is_eight_gib() {
+        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES, 8 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -1018,10 +1018,10 @@ mod tests {
     }
 
     #[test]
-    fn lightweight_threshold_is_below_heavy_threshold() {
+    fn lightweight_threshold_is_lte_heavy_threshold() {
         assert!(
-            VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT < VLM_SAFE_MIN_HOST_RAM_BYTES,
-            "lightweight gate must be lower than heavy gate"
+            VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT <= VLM_SAFE_MIN_HOST_RAM_BYTES,
+            "lightweight gate must be <= heavy gate (both optimized for 8 GB)"
         );
     }
 
