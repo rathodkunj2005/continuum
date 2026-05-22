@@ -1899,3 +1899,74 @@ export async function getMemoryTimelineThread(
 ): Promise<MemoryTimelineThread> {
     return invoke("get_memory_timeline_thread", { memoryId });
 }
+
+// ── Companion API (iPhone / Apple Watch) ─────────────────────────────────────
+
+export type CompanionDeviceType = "iphone" | "watch" | "other";
+
+export interface CompanionStatusPayload {
+    running: boolean;
+    host: string;
+    port: number;
+    tls: boolean;
+    base_url: string;
+    mac_name: string;
+    last_error: string | null;
+}
+
+export interface CompanionEndpoint {
+    host: string;
+    port: number;
+    base_url: string;
+    tls: boolean;
+    cert_fingerprint_sha256: string | null;
+    mac_name: string;
+    app_version: string;
+}
+
+export interface CompanionPairStartResponse {
+    pairing_code: string;
+    qr_payload: string;
+    expires_at_ms: number;
+    host: string;
+    port: number;
+    cert_fingerprint_sha256: string | null;
+}
+
+export interface CompanionDeviceListEntry {
+    device_id: string;
+    device_name: string;
+    device_type: CompanionDeviceType;
+    paired_at_ms: number;
+    last_seen_at_ms: number;
+    revoked_at_ms: number | null;
+    app_version: string | null;
+}
+
+export async function companionGetStatus(): Promise<CompanionStatusPayload> {
+    return invoke<CompanionStatusPayload>("companion_get_status");
+}
+
+export async function companionGetEndpoint(): Promise<CompanionEndpoint | null> {
+    return invoke<CompanionEndpoint | null>("companion_get_endpoint");
+}
+
+export async function companionStartServer(port?: number): Promise<CompanionStatusPayload> {
+    return invoke<CompanionStatusPayload>("companion_start_server", { port });
+}
+
+export async function companionStopServer(): Promise<CompanionStatusPayload> {
+    return invoke<CompanionStatusPayload>("companion_stop_server");
+}
+
+export async function companionStartPairing(): Promise<CompanionPairStartResponse> {
+    return invoke<CompanionPairStartResponse>("companion_start_pairing");
+}
+
+export async function companionListDevices(): Promise<CompanionDeviceListEntry[]> {
+    return invoke<CompanionDeviceListEntry[]>("companion_list_devices");
+}
+
+export async function companionRevokeDevice(deviceId: string): Promise<boolean> {
+    return invoke<boolean>("companion_revoke_device", { deviceId });
+}

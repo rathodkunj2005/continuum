@@ -55,6 +55,9 @@ pub use retrieval::{
     fndr_quality_status, fndr_search, fndr_timeline,
 };
 
+mod companion;
+pub use companion::*;
+
 #[cfg(test)]
 mod daily_summary_tests {
     use crate::embedding::{Embedder, EmbeddingBackend};

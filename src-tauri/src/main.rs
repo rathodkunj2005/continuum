@@ -537,6 +537,25 @@ fn main() {
 
             app.manage(state.clone());
 
+            // Start the Companion API (iPhone/Watch local-network surface) as a
+            // background task so app startup is not blocked on TLS init. The
+            // server lives on a sibling port to MCP; pairing tokens are issued
+            // and stored via StateStore. See ADR-008.
+            {
+                let companion_state = state.clone();
+                tauri::async_runtime::spawn(async move {
+                    match fndr_lib::companion::start(companion_state, None, None).await {
+                        Ok(s) => tracing::info!(
+                            host = %s.host,
+                            port = s.port,
+                            tls = s.tls,
+                            "Companion API ready"
+                        ),
+                        Err(err) => tracing::warn!("Companion API failed to start: {}", err),
+                    }
+                });
+            }
+
             if let Err(err) =
                 fndr_lib::meeting::bind_runtime(app.handle().clone(), runtime_state.clone())
             {
@@ -582,6 +601,14 @@ fn main() {
             ipc::commands::get_mcp_server_status,
             ipc::commands::start_mcp_server,
             ipc::commands::stop_mcp_server,
+            // Companion API (iPhone / Apple Watch)
+            ipc::commands::companion_get_status,
+            ipc::commands::companion_get_endpoint,
+            ipc::commands::companion_start_server,
+            ipc::commands::companion_stop_server,
+            ipc::commands::companion_start_pairing,
+            ipc::commands::companion_list_devices,
+            ipc::commands::companion_revoke_device,
             ipc::commands::get_context_runtime_status,
             ipc::commands::list_recent_context_packs,
             ipc::commands::fndr_subscribe,
