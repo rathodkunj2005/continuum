@@ -6,19 +6,20 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 
 | #  | Slice                                    | Branch                                       | Status | Notes                                                                                  |
 |----|------------------------------------------|----------------------------------------------|--------|----------------------------------------------------------------------------------------|
-| 1  | Companion API foundation (Rust)          | `companion/slice-1-api-foundation`           | ✅      | Pair/status/capture-control/manual-memory + device registry + React Settings panel.    |
-| 2  | iOS shell + pairing                      | `companion/slice-2-ios-shell`                | ⏳      | Bootstrap `apps/ios/` Xcode project; pair via QR; Keychain token; Status tab.          |
-| 3  | Ask FNDR on iPhone                       | `companion/slice-3-ios-ask`                  | ⏳      | `/v1/ask` wraps `fndr_answer`; Ask tab with source-card list + detail.                 |
-| 4  | Memory search + detail                   | `companion/slice-4-ios-search`               | ⏳      | `/v1/memories/search` wraps `search_hybrid_memories`; Memories tab.                    |
-| 5  | Manual capture + offline queue           | `companion/slice-5-ios-capture`              | ⏳      | iOS SwiftData queue; idempotent retry via `client_event_id`.                           |
-| 6  | Apple Watch MVP                          | `companion/slice-6-watch`                    | ⏳      | watchOS target + WatchConnectivity bridge; 4 screens.                                   |
-| 7  | Hardening + beta polish                  | `companion/slice-7-hardening`                | ⏳      | App lock, App Intents, telemetry, sleep/reconnect, TestFlight prep.                    |
+| 1  | Companion API foundation (Rust)          | `companion/slice-1-api-foundation`           | ✅      | Pair/status/capture-control/manual-memory + device registry + React Settings panel, verified with companion Rust tests. |
+| 2  | iOS shell + pairing                      | `companion/slice-2-ios-shell`                | 🟡      | `FNDRKit`, `FNDR.xcodeproj`, tab shell, pairing/status wiring landed; simulator/device pairing validation blocked until full Xcode is installed and selected. |
+| 3  | Ask FNDR on iPhone                       | `companion/slice-3-ios-ask`                  | 🟡      | `/v1/ask` route + FNDRKit/client + Ask tab landed; no full-Xcode simulator/device runtime evidence yet. |
+| 4  | Memory search + detail                   | `companion/slice-4-ios-search`               | 🟡      | `/v1/memories/search` now uses canonical hybrid retrieval path; iOS memory flows need full-Xcode E2E validation. |
+| 5  | Manual capture + offline queue           | `companion/slice-5-ios-capture`              | 🟡      | Manual capture + durable queue landed with idempotency; simulator/device offline-retry smoke still pending. |
+| 6  | Apple Watch MVP                          | `companion/slice-6-watch`                    | 🟡      | WatchConnectivity relay wiring landed so Watch routes through iPhone; watch simulator/device validation pending. |
+| 7  | Hardening + beta polish                  | `companion/slice-7-hardening`                | 🟡      | Permission-scoped auth, provenance-spoof rejection, and feedback redaction landed; full iOS/watch runtime hardening validation still pending. |
 
 ## Reference
 
 - PRD: `~/Downloads/fndr_ios_watch_mvp_prd.md`
 - Plan: `~/.claude/plans/users-anurupkumar-downloads-fndr-ios-wa-melodic-starfish.md`
 - ADR: [008-companion-api-architecture.md](../decisions/008-companion-api-architecture.md)
+- ADR: [009-mobile-pairing-trust-model.md](../decisions/009-mobile-pairing-trust-model.md)
 - API contract: [api-contract.md](./api-contract.md)
 
 ## Cross-cutting decisions locked at slice 1
@@ -34,3 +35,10 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 - Pre-existing Vitest failures in `src/shared/theme/__tests__/wallpaper-field-colors.test.ts`,
   `cinematic-palettes.test.ts`, and `wallpaper-registry.test.ts` — unrelated to
   companion. Filed as a separate task.
+
+## Validation blocker
+
+- This Codex host does not have full Xcode selected (`xcodebuild` is still
+  pointing at Command Line Tools). Until
+  `/Applications/Xcode.app/Contents/Developer` is active, simulator/device
+  evidence cannot be attached for slices 2-7.

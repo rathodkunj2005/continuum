@@ -5,7 +5,7 @@
 //! a low-cardinality operation (a handful of devices per Mac), so a Vec is
 //! plenty.
 
-use crate::companion::dto::{DeviceType, MobileDevice};
+use crate::companion::dto::MobileDevice;
 use crate::companion::errors::{CompanionError, CompanionResult};
 use crate::storage::StateStore;
 use parking_lot::RwLock;
@@ -99,6 +99,7 @@ impl DeviceRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::companion::dto::DeviceType;
     use tempfile::TempDir;
 
     fn fresh_registry() -> (TempDir, DeviceRegistry) {

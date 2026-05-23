@@ -39,3 +39,14 @@ meetings/
 
 # Migration artifacts
 *.migrated
+
+# Swift Package Manager build artifacts
+.build/
+apps/ios/FNDRKit/.build/
+
+# Xcode / Mac build folders
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+

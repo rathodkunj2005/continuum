@@ -19,6 +19,13 @@ pub struct CompanionAuthState {
     pub registry: Arc<DeviceRegistry>,
 }
 
+const PERM_ASK: &str = "ask";
+const PERM_SEARCH: &str = "search";
+const PERM_STATUS: &str = "status";
+const PERM_CAPTURE_CONTROL: &str = "capture_control";
+const PERM_MANUAL_CAPTURE: &str = "manual_capture";
+const PERM_FEEDBACK: &str = "feedback";
+
 /// Extract a bearer token from an Authorization header.
 ///
 /// Public + tested separately so it can be reused by the WebSocket path later
@@ -41,6 +48,7 @@ pub async fn require_device(
     mut request: Request,
     next: Next,
 ) -> Response {
+    let route_permission = required_permission(request.method().as_str(), request.uri().path());
     let header_value = request
         .headers()
         .get(header::AUTHORIZATION)
@@ -57,8 +65,32 @@ pub async fn require_device(
         return CompanionError::Forbidden.into_response();
     };
 
+    if let Some(permission) = route_permission {
+        let granted = device
+            .permissions
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(permission));
+        if !granted {
+            return CompanionError::InsufficientPermission(permission.to_string()).into_response();
+        }
+    }
+
     request.extensions_mut().insert(Arc::new(device));
     next.run(request).await
+}
+
+fn required_permission(method: &str, path: &str) -> Option<&'static str> {
+    match (method, path) {
+        ("POST", "/v1/ask") => Some(PERM_ASK),
+        ("POST", "/v1/memories/search") => Some(PERM_SEARCH),
+        ("GET", "/v1/memories/:memory_id") => Some(PERM_SEARCH),
+        ("GET", p) if p.starts_with("/v1/memories/") => Some(PERM_SEARCH),
+        ("GET", "/v1/status") => Some(PERM_STATUS),
+        ("POST", "/v1/capture/control") => Some(PERM_CAPTURE_CONTROL),
+        ("POST", "/v1/memories/manual") => Some(PERM_MANUAL_CAPTURE),
+        ("POST", "/v1/feedback") => Some(PERM_FEEDBACK),
+        _ => None,
+    }
 }
 
 /// Pull the authenticated device out of request extensions inside a handler.
@@ -100,6 +132,30 @@ mod tests {
         assert_eq!(extract_bearer(Some("NotBearer abc")), None);
     }
 
+    #[test]
+    fn required_permission_maps_authenticated_routes() {
+        assert_eq!(required_permission("POST", "/v1/ask"), Some(PERM_ASK));
+        assert_eq!(
+            required_permission("POST", "/v1/memories/search"),
+            Some(PERM_SEARCH)
+        );
+        assert_eq!(required_permission("GET", "/v1/memories/abc"), Some(PERM_SEARCH));
+        assert_eq!(required_permission("GET", "/v1/status"), Some(PERM_STATUS));
+        assert_eq!(
+            required_permission("POST", "/v1/capture/control"),
+            Some(PERM_CAPTURE_CONTROL)
+        );
+        assert_eq!(
+            required_permission("POST", "/v1/memories/manual"),
+            Some(PERM_MANUAL_CAPTURE)
+        );
+        assert_eq!(
+            required_permission("POST", "/v1/feedback"),
+            Some(PERM_FEEDBACK)
+        );
+        assert_eq!(required_permission("GET", "/v1/health"), None);
+    }
+
     async fn handler_ok(req: Request<Body>) -> Response {
         let device = device_from_extensions(req.extensions()).expect("device in extensions");
         (
@@ -113,6 +169,7 @@ mod tests {
         let state = Arc::new(CompanionAuthState { registry: reg });
         Router::new()
             .route("/ping", get(handler_ok))
+            .route("/v1/status", get(handler_ok))
             .layer(axum::middleware::from_fn_with_state(
                 state.clone(),
                 require_device,
@@ -211,6 +268,24 @@ mod tests {
                 Request::builder()
                     .uri("/ping")
                     .header(header::AUTHORIZATION, "Bearer wrong")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn missing_route_permission_returns_403() {
+        let (_tmp, reg) = fresh_registry_async().await;
+        reg.insert(sample_device("tok_no_status")).unwrap();
+        let app = build_router(reg);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/status")
+                    .header(header::AUTHORIZATION, "Bearer tok_no_status")
                     .body(Body::empty())
                     .unwrap(),
             )

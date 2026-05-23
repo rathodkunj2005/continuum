@@ -138,6 +138,105 @@ pub struct ManualMemoryResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Ask + search + memory detail
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskRequest {
+    pub query: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// "short" | "detailed" | "context_pack" (currently advisory only).
+    #[serde(default)]
+    pub answer_style: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskResponse {
+    pub query: String,
+    pub answer: String,
+    pub verify_outcome: String,
+    pub source_cards: Vec<CompanionMemoryCard>,
+    pub latency_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySearchRequest {
+    pub query: String,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub time_filter: Option<String>,
+    #[serde(default)]
+    pub app_filter: Option<String>,
+    #[serde(default)]
+    pub project_filter: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySearchResponse {
+    pub query: String,
+    pub cards: Vec<CompanionMemoryCard>,
+    pub total: usize,
+    pub latency_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryDetailResponse {
+    pub card: CompanionMemoryCard,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompanionMemoryCard {
+    pub memory_id: String,
+    pub title: String,
+    pub summary: String,
+    pub display_summary: String,
+    pub internal_context: String,
+    pub timestamp: i64,
+    pub app_name: String,
+    pub window_title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    pub score: f32,
+    pub source_count: usize,
+    pub confidence: f32,
+    #[serde(default)]
+    pub project: String,
+    #[serde(default)]
+    pub topic: String,
+    #[serde(default)]
+    pub activity_type: String,
+    #[serde(default)]
+    pub files_touched: Vec<String>,
+    #[serde(default)]
+    pub raw_snippets: Vec<String>,
+    #[serde(default)]
+    pub evidence_ids: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Feedback
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackRequest {
+    /// e.g. "thumbs_up" | "thumbs_down" | "opened_source" | "copied_answer"
+    pub event: String,
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub memory_id: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedbackResponse {
+    pub status: String,
+}
+
+// ---------------------------------------------------------------------------
 // Device registry (also persisted via StateStore)
 // ---------------------------------------------------------------------------
 
@@ -270,5 +369,48 @@ mod tests {
         let parsed: ManualMemoryRequest = serde_json::from_str(&body).unwrap();
         assert_eq!(parsed.text, "Remember this");
         assert_eq!(parsed.capture_type.as_deref(), Some("idea"));
+    }
+
+    #[test]
+    fn ask_request_round_trip() {
+        let req = AskRequest {
+            query: "What did I work on today?".to_string(),
+            limit: Some(8),
+            answer_style: Some("short".to_string()),
+        };
+        let body = serde_json::to_string(&req).unwrap();
+        let parsed: AskRequest = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed.query, req.query);
+        assert_eq!(parsed.limit, Some(8));
+        assert_eq!(parsed.answer_style.as_deref(), Some("short"));
+    }
+
+    #[test]
+    fn memory_search_request_round_trip() {
+        let req = MemorySearchRequest {
+            query: "fn companion".to_string(),
+            limit: Some(10),
+            time_filter: Some("today".to_string()),
+            app_filter: Some("Cursor".to_string()),
+            project_filter: Some("FNDR".to_string()),
+        };
+        let body = serde_json::to_string(&req).unwrap();
+        let parsed: MemorySearchRequest = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed.query, "fn companion");
+        assert_eq!(parsed.project_filter.as_deref(), Some("FNDR"));
+    }
+
+    #[test]
+    fn feedback_request_round_trip() {
+        let req = FeedbackRequest {
+            event: "thumbs_up".to_string(),
+            query: Some("what was I doing".to_string()),
+            memory_id: Some("mem_1".to_string()),
+            note: None,
+        };
+        let body = serde_json::to_string(&req).unwrap();
+        let parsed: FeedbackRequest = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed.event, "thumbs_up");
+        assert_eq!(parsed.memory_id.as_deref(), Some("mem_1"));
     }
 }
