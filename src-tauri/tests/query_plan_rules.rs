@@ -14,7 +14,7 @@ fn definition_query_uses_graph_evidence() {
     assert_eq!(plan.intent, PlannerIntent::Definition);
     assert_eq!(
         route_names(&plan.retrieval_routes),
-        vec![Route::Vector, Route::Keyword, Route::Graph]
+        vec![Route::Chunk, Route::Vector, Route::Keyword, Route::Graph]
     );
     assert_eq!(plan.graph_expansion.max_hops, 2);
     assert!(plan

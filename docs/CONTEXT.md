@@ -21,11 +21,13 @@ A macOS Tauri application that builds a **searchable local memory** from screen 
 
 ## Engineering vocabulary
 
-- **Memory record**: persisted unit of captured context stored and indexed for search.
+- **Memory record** (`MemoryRecord`): persisted unit of captured context stored and indexed for search. This is the **parent** in the parent-child RAG model — the authoritative record for card synthesis, holding full OCR, insight fields, and metadata.
+- **Memory chunk** (`MemoryChunkRecord`, to be added by Subagent 7): an overlapping text window derived from a parent `MemoryRecord`, carrying its own embedding and a `parent_id` foreign key. Used by the chunk-first retrieval path for higher-precision vector search. See ADR 008.
 - **Memory card**: UI-facing presentation of a search hit / browse item.
 - **Memory Vault**: full-screen browse surface for all memories, the global insight graph (Louvain-clustered layout), and per-project graph scopes (`src/domains/memory-vault/MemoryCardsPanel` + sidebar entry).
 - **Capture pipeline**: screen → OCR / text extraction → chunking → embedding → storage.
 - **Hybrid search**: vector + keyword retrieval with reranking as implemented in Rust.
+- **Parent-child RAG**: retrieval pattern where child chunks are searched first for precision, then matched chunks' parent records are fetched for full-context card synthesis. Governed by ADR 008.
 - **Sidecar**: Python helpers under `src-tauri/sidecars/` for transcription, agent, graph, TTS, etc.
 
 ## Default quality bar

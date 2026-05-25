@@ -7,7 +7,7 @@ use crate::config::DEFAULT_IMAGE_EMBEDDING_DIM;
 use crate::embedding::{Embedder, EMBEDDING_DIM};
 use crate::memory_compaction::{
     build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
-    support_embedding_texts,
+    support_embedding_texts_with_config,
 };
 use crate::storage::MemoryRecord;
 use crate::AppState;
@@ -60,7 +60,8 @@ async fn run_watch_loop(state: Arc<AppState>, watch_path: PathBuf) {
 
     tracing::info!("Downloads tracker watching: {}", watch_path.display());
 
-    let mut text_embedder = match Embedder::new() {
+    let chunking_config = state.config.read().chunking.clone();
+    let mut text_embedder = match Embedder::with_chunking_config(&chunking_config) {
         Ok(e) => Some(e),
         Err(e) => {
             tracing::warn!("Failed to initialize embedder for downloads tracker: {}", e);
@@ -153,7 +154,14 @@ async fn inject_download_memory(
     let lexical_shadow = build_lexical_shadow("Downloads", &snippet, &text, None);
     let compact_summary_text =
         compact_summary_embedding_text("tracker", &snippet, &text, &lexical_shadow);
-    let support_texts = support_embedding_texts("Finder", "Downloads", &text, &lexical_shadow);
+    let chunking_config = state.config.read().chunking.clone();
+    let support_texts = support_embedding_texts_with_config(
+        "Finder",
+        "Downloads",
+        &text,
+        &lexical_shadow,
+        Some(&chunking_config),
+    );
 
     let (embedding, snippet_embedding, support_embedding) = if let Some(emb) = embedder {
         let mut contexts = vec![

@@ -8,7 +8,7 @@ This document reflects the live local-first implementation in this repository.
 - macOS adapter: `src-tauri/src/capture/macos.rs`
 - OCR: `src-tauri/src/ocr/vision.rs`
 - OCR cleanup/noise filtering: `src-tauri/src/capture/text_cleanup.rs`
-- Text chunking and embedding: `src-tauri/src/embed/chunking.rs`, `src-tauri/src/embed/onnx.rs`
+- Text chunking and embedding: `src-tauri/src/embedding/chunking.rs`, `src-tauri/src/embedding/onnx.rs`
 
 Per memory event, FNDR stores:
 - app/window/session metadata
@@ -67,3 +67,17 @@ Recent hardening includes:
 Known work in progress:
 - fully activity-adaptive capture sampling
 - automatic task extraction from memories (task panel exists, extraction wiring is partial)
+
+## 6. Planned: Chunk-first Retrieval and Reviewed-memory Enrichment
+
+These flows are not yet wired but are planned as part of the parent-child RAG upgrade (ADR 008):
+
+**Chunk-first retrieval** (Subagent 8):
+- At query time, the child-chunk table (`memory_chunks_v1_bge_1024`) is searched first using the BGE query prefix and 1024-d vectors.
+- Matched chunks are grouped by `parent_id`; the top-ranked parent records are fetched from the v5 parent table for full context.
+- During the v4→v5 transition period, search fans out to both the v4 parent table and the v5 chunk table, with results merged and deduplicated by parent `id` before card synthesis.
+
+**Reviewed-memory enrichment** (Subagents 9–11):
+- A background review worker will periodically assess memory quality and relevance, adding or updating enrichment fields on parent records without creating new captures.
+- Enriched fields surface in Vault card presentation (Subagent 10) and feed the daily review and backfill cycle (Subagent 11).
+- No dates are committed for these flows.

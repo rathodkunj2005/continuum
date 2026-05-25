@@ -330,7 +330,32 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         synthesis_branch: result.synthesis_branch.clone(),
         topic_categories: result.topic_categories.clone(),
         search_aliases: result.search_aliases.clone(),
-        surfacing_reason: None,
+        surfacing_reason: if result.matched_routes.is_empty() {
+            None
+        } else {
+            Some(crate::context_runtime::context_pack::SurfacingReason {
+                headline: if result
+                    .matched_routes
+                    .iter()
+                    .any(|route| route.eq_ignore_ascii_case("chunk"))
+                {
+                    "Matched a precise memory chunk".to_string()
+                } else {
+                    format!("Matched in {} routes", result.matched_routes.len())
+                },
+                routes: result.matched_routes.clone(),
+                graph_path: None,
+                anchor_terms_hit: Vec::new(),
+                recency_boost: 0.0,
+            })
+        },
+        matched_routes: result.matched_routes.clone(),
+        matched_chunk_ids: result.matched_chunk_ids.clone(),
+        chunk_evidence: result.chunk_evidence.clone(),
+        enrichment_status: result.enrichment_status.clone(),
+        reviewed_at_ms: result.reviewed_at_ms,
+        reviewer_generation: result.reviewer_generation,
+        storage_outcome: result.storage_outcome.clone(),
     }
 }
 

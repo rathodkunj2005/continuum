@@ -33,15 +33,17 @@ use crate::config::{
 };
 use crate::context_runtime;
 use crate::embedding::{embed_imported_image, Embedder, EmbeddingBackend, EMBEDDING_DIM};
-use crate::inference::vlm_router::{should_run_vlm, VlmRouteDecision, VlmRouteInput};
+use crate::inference::vlm_router::{
+    should_run_vlm, vlm_capability_label, vlm_runtime_status_label, VlmRouteDecision, VlmRouteInput,
+};
 use crate::inference::{
-    compose_import_memory_context, compose_import_memory_context_with_title,
-    extract_image_semantics, ImageImportSource, StructuredMemoryExtraction,
+    compose_import_memory_context_with_title, extract_image_semantics, ImageImportSource,
+    StructuredMemoryExtraction,
 };
 use crate::memory::reopen::build_reopen_target;
 use crate::memory_compaction::{
     build_lexical_shadow, build_lexical_shadow_with_aliases, compact_summary_embedding_text,
-    mean_pool_embeddings, support_embedding_texts,
+    mean_pool_embeddings, support_embedding_texts_with_config,
 };
 use crate::memory_quality::{deterministic_dedup_fingerprint, is_supported_dedup_fingerprint};
 use crate::models;
@@ -450,11 +452,13 @@ async fn compose_visual_capture_record(
         &composed.memory_context,
         &lexical_shadow,
     );
-    let support_texts = support_embedding_texts(
+    let chunking_config = state.config.read().chunking.clone();
+    let support_texts = support_embedding_texts_with_config(
         app_name,
         window_title,
         &composed.memory_context,
         &lexical_shadow,
+        Some(&chunking_config),
     );
 
     let mut embedding_inputs = vec![composed.embedding_text.clone(), compact_summary.clone()];
@@ -488,6 +492,8 @@ async fn compose_visual_capture_record(
         "semantic_confidence": insight.confidence,
         "visual_admission_novelty": novelty,
         "vlm_route": vlm_route.label(),
+        "vlm_capability": vlm_capability_label(config.use_vlm, host_supports_qwen_vlm, models::pixel_vlm_available(models::configured_vlm_model_id(&config).as_deref(), Some(state.app_data_dir.as_path()))),
+        "vlm_runtime_status": vlm_runtime_status_label(&vlm_route, Some(skip_reason)),
         "vlm_block_reason": vlm_route.fallback_reason(),
         "host_supports_vlm": host_supports_qwen_vlm,
         "pressure_reason": skip_reason,
@@ -1166,7 +1172,16 @@ fn validate_structured_memory_extraction(
     let mut supported = 0usize;
     let mut total = 0usize;
 
-    clear_if_multi_option(&mut extraction.activity_type, &mut issues, "activity_type");
+    let original_activity_type = extraction.activity_type.clone();
+    extraction.activity_type = crate::inference::normalize_activity_type(&original_activity_type);
+    if original_activity_type.contains('|') {
+        issues.push("activity_type_multi_option_dump".to_string());
+    } else if !original_activity_type.trim().is_empty()
+        && extraction.activity_type == "unknown"
+        && original_activity_type.trim().to_ascii_lowercase() != "unknown"
+    {
+        issues.push("activity_type_invalid".to_string());
+    }
     clear_if_multi_option(&mut extraction.topic, &mut issues, "topic");
     clear_if_multi_option(&mut extraction.workflow, &mut issues, "workflow");
     clear_if_multi_option(&mut extraction.user_intent, &mut issues, "user_intent");
@@ -1816,7 +1831,8 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
     // process. The first stored frame absorbs the ~80-200 ms session load; every
     // subsequent embed is ~30-80 ms on Apple Silicon CPU.
     let models_dir = models::models_dir(state.app_data_dir.as_path());
-    let text_embedder = match Embedder::new() {
+    let chunking_config = state.config.read().chunking.clone();
+    let text_embedder = match Embedder::with_chunking_config(&chunking_config) {
         Ok(embedder) => Some(embedder),
         Err(err) => {
             tracing::warn!("Semantic embeddings unavailable in capture loop: {}", err);
@@ -1902,6 +1918,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         }
                         for rec in batch.iter() {
                             state.enqueue_graph_from_flushed_memory(rec);
+                            state.enqueue_memory_review_from_flushed_memory(rec);
                         }
                         if let Err(err) =
                             crate::ipc::commands::commit_graph_updates_now(state.clone()).await
@@ -2970,11 +2987,12 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             &enriched_clean_text,
             &lexical_shadow,
         );
-        let support_texts = support_embedding_texts(
+        let support_texts = support_embedding_texts_with_config(
             &app_name,
             &window_title,
             &enriched_clean_text,
             &lexical_shadow,
+            Some(&config.chunking),
         );
 
         let mut embedding_inputs = vec![primary_embed_input.clone(), snippet_embed_input.clone()];
@@ -3392,7 +3410,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             embedding_text: primary_embed_input,
             embedding_model: "all-MiniLM-L6-v2".to_string(), // Default assumption, actual model set in pipeline
             embedding_dim: EMBEDDING_DIM as u32,
-            enrichment_status: String::new(),
+            enrichment_status: "pending".to_string(),
+            reviewed_at_ms: 0,
+            reviewer_generation: 0,
             fallback_reason: None,
             raw_screenshot_stored: false,
             is_consolidated: false,
@@ -4063,11 +4083,12 @@ pub(crate) async fn merge_memory_records_with_policy(
         &merged_clean_text,
         &merged_lexical_shadow,
     );
-    let support_texts = support_embedding_texts(
+    let support_texts = support_embedding_texts_with_config(
         &incoming.app_name,
         &merged_window_title,
         &merged_clean_text,
         &merged_lexical_shadow,
+        None,
     );
 
     let merged_embedding = if recompute_embedding && semantic_embeddings_enabled(text_embedder) {
@@ -4369,6 +4390,10 @@ pub(crate) async fn merge_memory_records_with_policy(
             &incoming.enrichment_status,
             &existing.enrichment_status,
         ),
+        reviewed_at_ms: incoming.reviewed_at_ms.max(existing.reviewed_at_ms),
+        reviewer_generation: incoming
+            .reviewer_generation
+            .max(existing.reviewer_generation),
         fallback_reason: incoming
             .fallback_reason
             .clone()
@@ -5862,7 +5887,7 @@ Activity patterns and insights dashboard
             "title",
             "valid topic appeared in evidence",
         );
-        assert!(extraction.activity_type.is_empty());
+        assert_eq!(extraction.activity_type, "unknown");
         assert!(
             issues
                 .iter()

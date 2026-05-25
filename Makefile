@@ -18,7 +18,7 @@ diagnostic:
 	./scripts/run_embedding_search_diagnostic.sh
 
 reset-lancedb:
-	./scripts/reset_lancedb_for_1024_embeddings.sh
+	./scripts/reset_lancedb.sh
 
 clean-dev-cache:
 	./scripts/clean-dev-build-cache.sh --yes

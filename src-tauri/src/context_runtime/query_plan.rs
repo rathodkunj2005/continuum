@@ -40,6 +40,7 @@ pub enum PlannerIntent {
 
 #[derive(Serialize, Deserialize, Type, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Route {
+    Chunk,
     Vector,
     Keyword,
     Temporal,
@@ -284,7 +285,7 @@ fn route_selection(
     has_entities: bool,
     needs_temporal: bool,
 ) -> Vec<Route> {
-    let mut routes = vec![Route::Vector, Route::Keyword];
+    let mut routes = vec![Route::Chunk, Route::Vector, Route::Keyword];
     if has_entities || has_project {
         routes.push(Route::Entity);
     }
