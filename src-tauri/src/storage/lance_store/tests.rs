@@ -35,6 +35,22 @@ fn record(url: Option<&str>, title: &str, snippet: &str) -> MemoryRecord {
     }
 }
 
+fn memory_chunk(id: &str, memory_id: &str, dim: usize) -> MemoryChunkRecord {
+    MemoryChunkRecord {
+        id: id.to_string(),
+        memory_id: memory_id.to_string(),
+        chunk_index: 0,
+        line_kind: "plain".to_string(),
+        text: "High signal memory chunk text for parent child RAG.".to_string(),
+        embedding: vec![0.01; dim],
+        created_at: 1_000,
+        app_name: "Chrome".to_string(),
+        window_title: "Research notes".to_string(),
+        day_bucket: "2026-04-17".to_string(),
+        content_hash: format!("hash-{id}"),
+    }
+}
+
 #[test]
 fn normalize_record_for_index_suppresses_auth_urls() {
     let normalized = normalize_record_for_index(&record(
@@ -163,6 +179,32 @@ fn memory_schema_migration_covers_current_writer_columns() {
         .any(|(name, expr)| name == "embedding_dim" && expr.contains("INTEGER UNSIGNED")));
 }
 
+#[test]
+fn memory_schema_dimensions_keep_v4_and_v5_separate() {
+    let v4 = memory_schema();
+    let v5 = memory_v5_schema();
+    let chunks = memory_chunk_schema();
+
+    assert_eq!(schema_vector_dim(&v4, "embedding"), Some(384));
+    assert_eq!(schema_vector_dim(&v4, "snippet_embedding"), Some(384));
+    assert_eq!(schema_vector_dim(&v4, "support_embedding"), Some(384));
+
+    assert_eq!(schema_vector_dim(&v5, "embedding"), Some(1024));
+    assert_eq!(schema_vector_dim(&v5, "snippet_embedding"), Some(1024));
+    assert_eq!(schema_vector_dim(&v5, "support_embedding"), Some(1024));
+
+    assert_eq!(schema_vector_dim(&chunks, "embedding"), Some(1024));
+    assert!(chunks.field_with_name("memory_id").is_ok());
+    assert!(chunks.field_with_name("content_hash").is_ok());
+}
+
+fn schema_vector_dim(schema: &Schema, column: &str) -> Option<i32> {
+    schema
+        .field_with_name(column)
+        .ok()
+        .and_then(|field| fixed_size_list_dim(field.data_type()))
+}
+
 #[tokio::test]
 async fn current_writer_schema_transforms_create_append_compatible_types() {
     let conn = lancedb::connect("memory://").execute().await.unwrap();
@@ -209,6 +251,200 @@ async fn current_writer_schema_transforms_create_append_compatible_types() {
             .data_type(),
         &DataType::List(Arc::new(Field::new("item", DataType::Utf8, true)))
     );
+}
+
+#[tokio::test]
+async fn store_opens_v4_and_creates_v5_parent_table_without_resetting_v4() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let records = vec![record(
+        Some("https://example.com/v4"),
+        "v4 source",
+        "Body for v4 source memory",
+    )];
+    store.add_batch(&records).await.expect("add v4 record");
+    drop(store);
+
+    let db_path = dir.path().join("lancedb");
+    let db_uri = db_path.to_string_lossy().to_string();
+    let conn = lancedb::connect(&db_uri).execute().await.unwrap();
+    let names = conn.table_names().execute().await.unwrap();
+    assert!(names.contains(&MEMORIES_TABLE.to_string()));
+    assert!(names.contains(&MEMORIES_V5_PARENT_TABLE.to_string()));
+    assert!(names.contains(&MEMORY_CHUNKS_TABLE.to_string()));
+
+    let v4 = conn.open_table(MEMORIES_TABLE).execute().await.unwrap();
+    let v5 = conn
+        .open_table(MEMORIES_V5_PARENT_TABLE)
+        .execute()
+        .await
+        .unwrap();
+    assert_eq!(
+        schema_vector_dim(&v4.schema().await.unwrap(), "embedding"),
+        Some(384)
+    );
+    assert_eq!(
+        schema_vector_dim(&v5.schema().await.unwrap(), "embedding"),
+        Some(1024)
+    );
+    let chunk_table = conn
+        .open_table(MEMORY_CHUNKS_TABLE)
+        .execute()
+        .await
+        .unwrap();
+    assert_eq!(
+        schema_vector_dim(&chunk_table.schema().await.unwrap(), "embedding"),
+        Some(1024)
+    );
+}
+
+#[tokio::test]
+async fn v5_writer_rejects_wrong_dimension_vectors() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let records = vec![record(
+        Some("https://example.com/v5"),
+        "v5 target",
+        "Body for v5 target memory",
+    )];
+    let err = store
+        .add_v5_batch_preserving_ids(&records)
+        .await
+        .expect_err("384-d vectors must not be written to v5");
+    assert!(err.to_string().contains("expected 1024-d BGE"));
+}
+
+#[tokio::test]
+async fn memory_chunk_writer_rejects_wrong_dimension_vectors() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let chunks = vec![memory_chunk(
+        "chunk-1",
+        "memory-1",
+        DEFAULT_TEXT_EMBEDDING_DIM,
+    )];
+    let err = store
+        .upsert_memory_chunks(&chunks)
+        .await
+        .expect_err("384-d vectors must not be written to chunk table");
+    assert!(err.to_string().contains("expected 1024-d BGE"));
+}
+
+#[tokio::test]
+async fn memory_chunks_upsert_list_and_parent_delete_are_linked() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let mut parent = record(
+        Some("https://example.com/chunks"),
+        "Chunk source",
+        "Parent memory for chunk table deletion",
+    );
+    parent.id = "parent-memory".to_string();
+    store.add_batch(&[parent]).await.expect("add parent");
+
+    let chunks = vec![
+        memory_chunk("chunk-1", "parent-memory", BGE_V5_DIMENSIONS),
+        MemoryChunkRecord {
+            id: "chunk-2".to_string(),
+            chunk_index: 1,
+            ..memory_chunk("chunk-2", "parent-memory", BGE_V5_DIMENSIONS)
+        },
+    ];
+    store
+        .upsert_memory_chunks(&chunks)
+        .await
+        .expect("upsert chunks");
+
+    let listed = store
+        .list_chunks_for_memory("parent-memory")
+        .await
+        .expect("list chunks");
+    assert_eq!(listed.len(), 2);
+    assert!(listed
+        .iter()
+        .all(|chunk| chunk.memory_id == "parent-memory"));
+
+    let deleted = store
+        .delete_memory_by_id("parent-memory")
+        .await
+        .expect("delete parent");
+    assert_eq!(deleted, 1);
+    let listed_after = store
+        .list_chunks_for_memory("parent-memory")
+        .await
+        .expect("list chunks after parent delete");
+    assert!(listed_after.is_empty());
+}
+
+#[tokio::test]
+async fn chunk_vector_search_ranks_chunks_and_returns_scores() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let chunks = vec![
+        MemoryChunkRecord {
+            text: "Needle chunk: parent child RAG retrieval".to_string(),
+            embedding: vec![1.0; BGE_V5_DIMENSIONS],
+            ..memory_chunk("chunk-a", "memory-a", BGE_V5_DIMENSIONS)
+        },
+        MemoryChunkRecord {
+            text: "Distractor chunk about unrelated planning".to_string(),
+            embedding: vec![0.0; BGE_V5_DIMENSIONS],
+            ..memory_chunk("chunk-b", "memory-b", BGE_V5_DIMENSIONS)
+        },
+    ];
+    store
+        .upsert_memory_chunks(&chunks)
+        .await
+        .expect("upsert chunks");
+
+    let results = store
+        .chunk_vector_search(&vec![1.0; BGE_V5_DIMENSIONS], 2)
+        .await
+        .expect("chunk vector search");
+
+    assert_eq!(results[0].chunk.id, "chunk-a");
+    assert_eq!(results[0].chunk.memory_id, "memory-a");
+    assert!(results[0].score > results[1].score);
+    assert!(results[0].distance <= results[1].distance);
+}
+
+#[tokio::test]
+async fn chunk_vector_search_rejects_wrong_dimension_query() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+        .await
+        .unwrap();
+
+    let err = store
+        .chunk_vector_search(&vec![0.0; DEFAULT_TEXT_EMBEDDING_DIM], 4)
+        .await
+        .expect_err("384-d chunk query must be rejected");
+
+    assert!(err.to_string().contains("expected 1024-d BGE"));
+    assert!(err
+        .to_string()
+        .contains("No fallback across embedding dimensions"));
 }
 
 #[test]

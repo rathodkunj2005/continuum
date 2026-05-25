@@ -137,9 +137,15 @@ npm run tauri dev
 
 Complete onboarding in the desktop app to grant macOS permissions. FNDR uses two local models in this repo setup: `Qwen3-VL-2B` for memory creation and `all-MiniLM-L6-v2` ONNX for semantic search.
 
+The BGE v5 embedding assets are optional for the staged 1024-d reindex path. Install them only when running the explicit v5 migration command:
+
+```bash
+./scripts/bootstrap/download-embedding-model.sh
+```
+
 ### Meta AI glasses (manual import MVP)
 
-Photos captured on Meta AI glasses typically sync to your phone first, then you can AirDrop or add them to Photos and move them to your Mac. In FNDR, use **Command Palette → Import Meta glasses photo** to index a JPEG/PNG/HEIC: Apple Vision OCR plus BGE text embeddings power search today; a small CLIP vision encoder stores a 512-d vector for future image-aware retrieval.
+Photos captured on Meta AI glasses typically sync to your phone first, then you can AirDrop or add them to Photos and move them to your Mac. In FNDR, use **Command Palette → Import Meta glasses photo** to index a JPEG/PNG/HEIC: Apple Vision OCR plus the local all-MiniLM-L6-v2 text embeddings (384-d) power search today; a small CLIP vision encoder stores a 512-d vector for future image-aware retrieval.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -202,6 +208,7 @@ FNDR runs fully local with two models in this setup:
 | --- | --- | --- | --- |
 | `Qwen3-VL-2B` GGUF | ~1.5 GB | ~3.5 GB | Multimodal memory creation, OCR-grounded extraction |
 | `all-MiniLM-L6-v2.onnx` + `tokenizer.json` | ~90 MB | ~0.5 GB | Semantic memory search embeddings (384-d) |
+| `bge-large-en-v1.5-quantized.onnx` + `tokenizer.json` | ~300 MB+ | loaded only during explicit reindex | Staged v5 parent-memory target embeddings (1024-d) |
 
 `all-MiniLM-L6-v2` is required for search and can be installed with:
 
@@ -217,11 +224,15 @@ Validate the local embedding and LanceDB path with:
 make diagnostic
 ```
 
-If an older prototype database was created with a different vector dimension, back it up and let FNDR recreate the 1024-dimensional schema with:
+The current live search and capture path remains v4 MiniLM 384-d in `memories_v4_minilm_384`. The staged BGE contract writes only to `memories_v5_bge_1024` through the explicit `reindex_memories_v5` maintenance IPC command. FNDR does not silently fall back across dimensions: 384-d MiniLM vectors are refused by the v5 schema path, and 1024-d BGE vectors are kept in the v5 table.
+
+If an older prototype database was created with a different vector dimension, back it up and let FNDR recreate the current 384-d MiniLM schema with:
 
 ```bash
 make reset-lancedb
 ```
+
+The v5 BGE path is additive. It does not delete or reset v4 rows, and missing BGE assets produce a clear maintenance-command error instead of breaking startup.
 
 Generated Rust/Tauri artifacts can become large during repeated local builds. Clear only
 build outputs with:

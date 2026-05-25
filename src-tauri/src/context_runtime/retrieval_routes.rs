@@ -109,6 +109,7 @@ pub trait RetrievalRoute: Send + Sync {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub enum RouteBranch {
+    Chunk,
     Semantic,
     Snippet,
     Keyword,
@@ -202,6 +203,7 @@ fn run_route<'a>(
     ctx: &'a RouteCtx<'a>,
 ) -> BoxFuture<'a, RouteHits> {
     match route {
+        Route::Chunk => crate::context_runtime::chunk_route::ChunkRoute.run(plan, ctx),
         Route::Vector => crate::context_runtime::vector_route::VectorRoute.run(plan, ctx),
         Route::Keyword => crate::context_runtime::keyword_route::KeywordRoute.run(plan, ctx),
         Route::Temporal => crate::context_runtime::temporal_route::TemporalRoute.run(plan, ctx),
@@ -295,6 +297,13 @@ pub fn memory_record_to_search_result(record: &MemoryRecord, score: f32) -> Sear
         insight_card_confidence: record.insight_card_confidence,
         synthesis_branch: record.synthesis_branch.clone(),
         topic_categories: record.topic_categories.clone(),
+        matched_routes: Vec::new(),
+        matched_chunk_ids: Vec::new(),
+        chunk_evidence: Vec::new(),
+        enrichment_status: record.enrichment_status.clone(),
+        reviewed_at_ms: record.reviewed_at_ms,
+        reviewer_generation: record.reviewer_generation,
+        storage_outcome: record.storage_outcome.clone(),
     }
 }
 
@@ -314,6 +323,7 @@ pub fn finish_route(route: Route, started: Instant, hits: Vec<RouteHit>) -> Rout
 
 fn route_name(route: Route) -> &'static str {
     match route {
+        Route::Chunk => "chunk",
         Route::Vector => "vector",
         Route::Keyword => "keyword",
         Route::Temporal => "temporal",
@@ -329,6 +339,7 @@ fn route_metric_ms(name: &'static str) -> &'static str {
         "temporal" => "fndr.retrieval.route.temporal.ms",
         "entity" => "fndr.retrieval.route.entity.ms",
         "graph" => "fndr.retrieval.route.graph.ms",
+        "chunk" => "fndr.retrieval.route.chunk.ms",
         _ => "fndr.retrieval.route.unknown.ms",
     }
 }
@@ -340,6 +351,7 @@ fn route_metric_hits(name: &'static str) -> &'static str {
         "temporal" => "fndr.retrieval.route.temporal.hits",
         "entity" => "fndr.retrieval.route.entity.hits",
         "graph" => "fndr.retrieval.route.graph.hits",
+        "chunk" => "fndr.retrieval.route.chunk.hits",
         _ => "fndr.retrieval.route.unknown.hits",
     }
 }

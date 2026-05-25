@@ -2,9 +2,12 @@
 
 use super::{chunk_screen_text, TextChunker};
 use crate::config::{
-    DEFAULT_EMBEDDING_CACHE_CAPACITY, DEFAULT_EMBEDDING_MAX_BATCH, DEFAULT_EMBEDDING_MAX_SEQ_LEN,
-    DEFAULT_EMBEDDING_MODEL_FILENAME, DEFAULT_EMBEDDING_MODEL_NAME,
-    DEFAULT_EMBEDDING_TOKENIZER_FILENAME, DEFAULT_TEXT_EMBEDDING_DIM,
+    ChunkingConfig, DEFAULT_EMBEDDING_CACHE_CAPACITY, DEFAULT_EMBEDDING_MODEL_NAME,
+    DEFAULT_TEXT_EMBEDDING_DIM,
+};
+use crate::inference::model_config::{
+    active_embedding_contract, embedding_v5_contract, validate_embedding_config_against_contract,
+    TextEmbeddingContract,
 };
 use ndarray::Array2;
 use ort::session::Session;
@@ -17,12 +20,8 @@ use std::sync::{Mutex, OnceLock};
 
 /// Authoritative text embedding dimension for the primary semantic index.
 pub const EMBEDDING_DIM: usize = DEFAULT_TEXT_EMBEDDING_DIM;
-const MAX_SEQ_LEN: usize = DEFAULT_EMBEDDING_MAX_SEQ_LEN;
-const MODEL_FILENAME: &str = DEFAULT_EMBEDDING_MODEL_FILENAME;
-const TOKENIZER_FILENAME: &str = DEFAULT_EMBEDDING_TOKENIZER_FILENAME;
 const MODEL_NAME: &str = DEFAULT_EMBEDDING_MODEL_NAME;
 const EMBEDDING_CACHE_CAPACITY: usize = DEFAULT_EMBEDDING_CACHE_CAPACITY;
-const MAX_BACKEND_BATCH: usize = DEFAULT_EMBEDDING_MAX_BATCH;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmbeddingBackend {
@@ -62,13 +61,18 @@ fn runtime_state() -> &'static Mutex<EmbeddingRuntimeState> {
     })
 }
 
-fn set_runtime_state(backend: &str, degraded: bool, detail: impl Into<String>) {
+fn set_runtime_state_for_contract(
+    contract: TextEmbeddingContract,
+    backend: &str,
+    degraded: bool,
+    detail: impl Into<String>,
+) {
     if let Ok(mut guard) = runtime_state().lock() {
         guard.backend = backend.to_string();
         guard.degraded = degraded;
         guard.detail = detail.into();
-        guard.model_name = MODEL_NAME.to_string();
-        guard.dimension = EMBEDDING_DIM;
+        guard.model_name = contract.model_id.to_string();
+        guard.dimension = contract.dimensions;
     }
 }
 
@@ -94,9 +98,11 @@ pub fn embedding_runtime_status() -> EmbeddingRuntimeStatus {
 
 /// Embedder with pluggable backend.
 pub struct Embedder {
+    contract: TextEmbeddingContract,
     chunker: TextChunker,
     backend: Backend,
     degraded_to_mock: AtomicBool,
+    allow_mock_fallback: bool,
     embedding_cache: Mutex<EmbeddingCache>,
 }
 
@@ -143,48 +149,95 @@ impl EmbeddingCache {
 
 impl Embedder {
     pub fn new() -> Result<Self, String> {
-        let chunker = TextChunker::new();
+        Self::with_chunking_config(&ChunkingConfig::default())
+    }
 
-        match RealEmbedder::new() {
+    pub fn new_bge_v5_for_reindex() -> Result<Self, String> {
+        Self::with_contract_and_chunking_config(
+            embedding_v5_contract(),
+            &ChunkingConfig::default(),
+            false,
+        )
+    }
+
+    pub fn new_bge_v5_for_query() -> Result<Self, String> {
+        Self::with_contract_and_chunking_config(
+            embedding_v5_contract(),
+            &ChunkingConfig::default(),
+            false,
+        )
+    }
+
+    /// Create an `Embedder` whose internal `TextChunker` uses runtime config
+    /// values instead of compiled-in defaults. Prefer this at all sites that
+    /// already hold a loaded `Config`.
+    pub fn with_chunking_config(chunking: &ChunkingConfig) -> Result<Self, String> {
+        Self::with_contract_and_chunking_config(active_embedding_contract(), chunking, true)
+    }
+
+    pub fn with_contract_and_chunking_config(
+        contract: TextEmbeddingContract,
+        chunking: &ChunkingConfig,
+        allow_mock_fallback: bool,
+    ) -> Result<Self, String> {
+        let chunker = TextChunker::from_config(chunking);
+
+        match RealEmbedder::new(contract) {
             Ok(real) => {
-                set_runtime_state("real", false, format!("{MODEL_NAME} embedder ready"));
+                set_runtime_state_for_contract(
+                    contract,
+                    "real",
+                    false,
+                    format!("{} embedder ready", contract.model_id),
+                );
                 Ok(Self {
+                    contract,
                     chunker,
                     backend: Backend::Real(real),
                     degraded_to_mock: AtomicBool::new(false),
+                    allow_mock_fallback,
                     embedding_cache: Mutex::new(EmbeddingCache::new(EMBEDDING_CACHE_CAPACITY)),
                 })
             }
             Err(err) => {
-                if allow_mock_embedder() {
+                if allow_mock_fallback && allow_mock_embedder() {
                     let reason =
                         format!("Semantic embeddings degraded to mock mode. Reason: {}", err);
                     tracing::warn!(
-                        "{MODEL_NAME} embedder fallback active: using MOCK embeddings. {}",
+                        "{} embedder fallback active: using MOCK embeddings. {}",
+                        contract.model_id,
                         reason
                     );
-                    set_runtime_state("mock", true, reason);
+                    set_runtime_state_for_contract(contract, "mock", true, reason);
                     Ok(Self {
+                        contract,
                         chunker,
-                        backend: Backend::Mock(MockEmbedder::default()),
+                        backend: Backend::Mock(MockEmbedder::new(contract.dimensions)),
                         degraded_to_mock: AtomicBool::new(true),
+                        allow_mock_fallback,
                         embedding_cache: Mutex::new(EmbeddingCache::new(EMBEDDING_CACHE_CAPACITY)),
                     })
                 } else {
-                    set_runtime_state(
+                    set_runtime_state_for_contract(
+                        contract,
                         "unavailable",
                         true,
                         format!(
-                            "{MODEL_NAME} embedder failed and mock fallback is disabled: {}",
-                            err
+                            "{} embedder failed and mock fallback is disabled: {}",
+                            contract.model_id, err
                         ),
                     );
                     Err(format!(
-                        "Failed to initialize real {MODEL_NAME} embedder and mock fallback is disabled: {err}"
+                        "Failed to initialize real {} embedder and mock fallback is disabled: {err}",
+                        contract.model_id
                     ))
                 }
             }
         }
+    }
+
+    pub fn dimension(&self) -> usize {
+        self.contract.dimensions
     }
 
     pub fn backend(&self) -> EmbeddingBackend {
@@ -282,7 +335,7 @@ impl Embedder {
         if let Ok(cache) = self.embedding_cache.lock() {
             for (index, text) in texts.iter().enumerate() {
                 if is_embedding_low_signal(text) {
-                    results[index] = Some(vec![0.0; EMBEDDING_DIM]);
+                    results[index] = Some(vec![0.0; self.dimension()]);
                     continue;
                 }
 
@@ -305,7 +358,7 @@ impl Embedder {
             // Cache lock poisoned: fall back to direct dedup without cache.
             for (index, text) in texts.iter().enumerate() {
                 if is_embedding_low_signal(text) {
-                    results[index] = Some(vec![0.0; EMBEDDING_DIM]);
+                    results[index] = Some(vec![0.0; self.dimension()]);
                     continue;
                 }
                 if let Some(unique_idx) = missing_by_text.get(text).copied() {
@@ -321,7 +374,7 @@ impl Embedder {
 
         if !missing_unique.is_empty() {
             let mut computed = Vec::with_capacity(missing_unique.len());
-            for chunk in missing_unique.chunks(MAX_BACKEND_BATCH) {
+            for chunk in missing_unique.chunks(self.contract.max_batch_size.max(1)) {
                 let batch = chunk.to_vec();
                 let vectors = self.backend_embed_batch(&batch)?;
                 computed.extend(vectors);
@@ -340,7 +393,7 @@ impl Embedder {
                     computed
                         .get(*unique_idx)
                         .cloned()
-                        .unwrap_or_else(|| vec![0.0; EMBEDDING_DIM]),
+                        .unwrap_or_else(|| vec![0.0; self.dimension()]),
                 );
             }
 
@@ -353,7 +406,7 @@ impl Embedder {
 
         Ok(results
             .into_iter()
-            .map(|value| value.unwrap_or_else(|| vec![0.0; EMBEDDING_DIM]))
+            .map(|value| value.unwrap_or_else(|| vec![0.0; self.dimension()]))
             .collect())
     }
 
@@ -373,7 +426,7 @@ impl Embedder {
         }
 
         if flattened_chunks.is_empty() {
-            return Ok(vec![vec![0.0; EMBEDDING_DIM]; ranges.len()]);
+            return Ok(vec![vec![0.0; self.dimension()]; ranges.len()]);
         }
 
         let chunk_embeddings = self.embed_chunks_cached(&flattened_chunks)?;
@@ -388,11 +441,11 @@ impl Embedder {
         let mut merged = Vec::with_capacity(ranges.len());
         for (start, end) in ranges {
             if start == end {
-                merged.push(vec![0.0; EMBEDDING_DIM]);
+                merged.push(vec![0.0; self.dimension()]);
                 continue;
             }
             let vectors = &chunk_embeddings[start..end];
-            merged.push(mean_pool(vectors));
+            merged.push(mean_pool(vectors, self.dimension()));
         }
 
         Ok(merged)
@@ -402,23 +455,24 @@ impl Embedder {
         match &self.backend {
             Backend::Real(real) => {
                 if self.degraded_to_mock.load(Ordering::Relaxed) {
-                    return Ok(MockEmbedder.embed_batch(texts));
+                    return Ok(MockEmbedder::new(self.dimension()).embed_batch(texts));
                 }
 
                 match real.embed_batch(texts) {
                     Ok(vectors) => Ok(vectors),
                     Err(err) => {
-                        if allow_mock_embedder() {
+                        if self.allow_mock_fallback && allow_mock_embedder() {
                             self.degraded_to_mock.store(true, Ordering::Relaxed);
                             let detail = format!(
                                 "Runtime embedding failure; switched to mock mode: {}",
                                 err
                             );
                             tracing::warn!("{}", detail);
-                            set_runtime_state("mock", true, detail);
-                            Ok(MockEmbedder.embed_batch(texts))
+                            set_runtime_state_for_contract(self.contract, "mock", true, detail);
+                            Ok(MockEmbedder::new(self.dimension()).embed_batch(texts))
                         } else {
-                            set_runtime_state(
+                            set_runtime_state_for_contract(
+                                self.contract,
                                 "unavailable",
                                 true,
                                 format!("Runtime embedding failure: {}", err),
@@ -449,6 +503,7 @@ impl Default for Embedder {
 }
 
 struct RealEmbedder {
+    contract: TextEmbeddingContract,
     session: Mutex<Session>,
     tokenizer: tokenizers::Tokenizer,
     input_names: Vec<String>,
@@ -456,27 +511,27 @@ struct RealEmbedder {
 }
 
 impl RealEmbedder {
-    fn new() -> Result<Self, String> {
-        let model_dir =
-            resolve_model_dir().ok_or_else(|| "Could not determine model directory".to_string())?;
+    fn new(contract: TextEmbeddingContract) -> Result<Self, String> {
+        let model_dir = resolve_model_dir(contract)
+            .ok_or_else(|| "Could not determine model directory".to_string())?;
 
-        let onnx_path = model_dir.join(MODEL_FILENAME);
-        let tokenizer_path = model_dir.join(TOKENIZER_FILENAME);
+        let onnx_path = model_dir.join(contract.model_filename);
+        let tokenizer_path = model_dir.join(contract.tokenizer_filename);
 
         if !onnx_path.exists() {
             return Err(format!(
                 "ONNX model not found at {}. Download {} and {} or set FNDR_MODEL_DIR.",
                 onnx_path.display(),
-                MODEL_FILENAME,
-                TOKENIZER_FILENAME
+                contract.model_filename,
+                contract.tokenizer_filename
             ));
         }
         if !tokenizer_path.exists() {
             return Err(format!(
                 "Tokenizer not found at {}. Download {} and {} or set FNDR_MODEL_DIR.",
                 tokenizer_path.display(),
-                MODEL_FILENAME,
-                TOKENIZER_FILENAME
+                contract.model_filename,
+                contract.tokenizer_filename
             ));
         }
 
@@ -538,6 +593,7 @@ impl RealEmbedder {
             "Native ort text embedder initialized"
         );
         let embedder = Self {
+            contract,
             session: Mutex::new(session),
             tokenizer,
             input_names,
@@ -546,9 +602,16 @@ impl RealEmbedder {
 
         let probe = embedder.embed_batch(&["FNDR embedding dimension probe".to_string()])?;
         let actual_dim = probe.first().map(|vector| vector.len()).unwrap_or(0);
-        if actual_dim != EMBEDDING_DIM {
+        if actual_dim != contract.dimensions {
             return Err(format!(
-                "Embedding dimension mismatch for {MODEL_NAME}: model returned {actual_dim}, configured schema expects {EMBEDDING_DIM}. Use the 1024-dimensional model from download_embedding_model.sh or reset the embedding configuration and LanceDB schema together."
+                "Embedding dimension mismatch for {}: model file at {} returned {actual_dim}-d vectors but the FNDR contract expects {}-d for table {}. \
+                 Ensure FNDR_MODEL_DIR points at a directory containing {} + {} for the active contract.",
+                contract.model_id,
+                onnx_path.display(),
+                contract.dimensions,
+                contract.table_name,
+                contract.model_filename,
+                contract.tokenizer_filename
             ));
         }
         if probe
@@ -578,10 +641,10 @@ impl RealEmbedder {
             .map(|e| e.get_ids().len())
             .max()
             .unwrap_or(0)
-            .min(MAX_SEQ_LEN);
+            .min(self.contract.max_sequence_length);
 
         if seq_len == 0 {
-            return Ok(vec![vec![0.0f32; EMBEDDING_DIM]; batch_size]);
+            return Ok(vec![vec![0.0f32; self.contract.dimensions]; batch_size]);
         }
 
         let mut input_ids = Array2::<i64>::zeros((batch_size, seq_len));
@@ -649,31 +712,32 @@ impl RealEmbedder {
             [_, _, dim] => *dim,
             _ => 0,
         };
-        if actual_dim != EMBEDDING_DIM {
+        if actual_dim != self.contract.dimensions {
             return Err(format!(
-                "Unexpected hidden state dim {actual_dim}, expected {EMBEDDING_DIM}"
+                "Unexpected hidden state dim {actual_dim}, expected {} for {}",
+                self.contract.dimensions, self.contract.model_id
             ));
         }
 
         let mut embeddings = Vec::with_capacity(batch_size);
         match shape_dims.as_slice() {
-            [actual_batch, actual_dim] if *actual_dim == EMBEDDING_DIM => {
+            [actual_batch, actual_dim] if *actual_dim == self.contract.dimensions => {
                 for i in 0..batch_size.min(*actual_batch) {
-                    let offset = i * EMBEDDING_DIM;
-                    let mut embedding = data[offset..offset + EMBEDDING_DIM].to_vec();
+                    let offset = i * self.contract.dimensions;
+                    let mut embedding = data[offset..offset + self.contract.dimensions].to_vec();
                     normalize(&mut embedding);
                     embeddings.push(embedding);
                 }
             }
-            [actual_batch, actual_seq, actual_dim] if *actual_dim == EMBEDDING_DIM => {
+            [actual_batch, actual_seq, actual_dim] if *actual_dim == self.contract.dimensions => {
                 for i in 0..batch_size.min(*actual_batch) {
-                    let mut sum = vec![0.0f32; EMBEDDING_DIM];
+                    let mut sum = vec![0.0f32; self.contract.dimensions];
                     let mut count = 0.0f32;
                     for j in 0..*actual_seq {
                         let mask_j = j.min(seq_len - 1);
                         if attention_mask_pooling[[i, mask_j]] > 0 {
-                            let offset = (i * *actual_seq + j) * EMBEDDING_DIM;
-                            for k in 0..EMBEDDING_DIM {
+                            let offset = (i * *actual_seq + j) * self.contract.dimensions;
+                            for k in 0..self.contract.dimensions {
                                 sum[k] += data[offset + k];
                             }
                             count += 1.0;
@@ -690,8 +754,8 @@ impl RealEmbedder {
             }
             _ => {
                 return Err(format!(
-                    "Unexpected embedding output shape {:?}; expected [batch, {EMBEDDING_DIM}] or [batch, seq, {EMBEDDING_DIM}]",
-                    shape_dims
+                    "Unexpected embedding output shape {:?}; expected [batch, {}] or [batch, seq, {}]",
+                    shape_dims, self.contract.dimensions, self.contract.dimensions
                 ));
             }
         }
@@ -711,36 +775,42 @@ impl RealEmbedder {
     }
 }
 
-#[derive(Debug, Default)]
-struct MockEmbedder;
+#[derive(Debug)]
+struct MockEmbedder {
+    dimensions: usize,
+}
 
 impl MockEmbedder {
+    fn new(dimensions: usize) -> Self {
+        Self { dimensions }
+    }
+
     fn embed_batch(&self, texts: &[String]) -> Vec<Vec<f32>> {
         texts.iter().map(|text| self.embed_single(text)).collect()
     }
 
     fn embed_single(&self, text: &str) -> Vec<f32> {
         // Feature-hashing bag-of-words fallback for dev/test only.
-        let mut vector = vec![0.0f32; EMBEDDING_DIM];
+        let mut vector = vec![0.0f32; self.dimensions];
         let lower = text.to_lowercase();
 
         for token in lower
             .split(|c: char| !c.is_alphanumeric())
             .filter(|tok| tok.len() > 2)
         {
-            let idx = stable_hash(token) % EMBEDDING_DIM;
+            let idx = stable_hash(token) % self.dimensions;
             vector[idx] += 1.0;
 
             if token.len() > 4 {
                 let prefix = &token[..3];
                 let suffix = &token[token.len() - 3..];
-                vector[stable_hash(prefix) % EMBEDDING_DIM] += 0.4;
-                vector[stable_hash(suffix) % EMBEDDING_DIM] += 0.4;
+                vector[stable_hash(prefix) % self.dimensions] += 0.4;
+                vector[stable_hash(suffix) % self.dimensions] += 0.4;
             }
         }
 
         for window in lower.as_bytes().windows(3) {
-            let idx = stable_hash_bytes(window) % EMBEDDING_DIM;
+            let idx = stable_hash_bytes(window) % self.dimensions;
             vector[idx] += 0.05;
         }
 
@@ -777,12 +847,12 @@ fn parse_env_bool(value: &str) -> bool {
 ///   3. ~/.fndr/models (user-installed, common for Homebrew/manual installs)
 ///   4. ProjectDirs data dir / models (app data location)
 ///   5. CARGO_MANIFEST_DIR/models (dev build fallback)
-fn resolve_model_dir() -> Option<PathBuf> {
+fn resolve_model_dir(contract: TextEmbeddingContract) -> Option<PathBuf> {
     // 1. FNDR_EMBED_MODEL_DIR (new, dedicated embed env var)
     for env_key in &["FNDR_EMBED_MODEL_DIR", "FNDR_MODEL_DIR"] {
         if let Ok(dir) = std::env::var(env_key) {
             let p = PathBuf::from(&dir);
-            if model_assets_present(&p) {
+            if model_assets_present(&p, contract) {
                 tracing::info!("Embedder model loaded from ${} = {}", env_key, p.display());
                 return Some(p);
             }
@@ -792,15 +862,15 @@ fn resolve_model_dir() -> Option<PathBuf> {
                     Download text embeddings with: ./scripts/download_model.sh (or scripts/bootstrap/download-embedding-model.sh).",
                     env_key,
                     p.display(),
-                    MODEL_FILENAME,
-                    TOKENIZER_FILENAME
+                    contract.model_filename,
+                    contract.tokenizer_filename
                 );
             }
         }
     }
 
     for (label, dir) in candidate_embedding_model_dirs() {
-        if model_assets_present(&dir) {
+        if model_assets_present(&dir, contract) {
             tracing::info!("Embedder model found at {} ({label})", dir.display());
             return Some(dir);
         }
@@ -813,8 +883,8 @@ fn resolve_model_dir() -> Option<PathBuf> {
             tracing::warn!(
                 "Embedder model directory exists at {} ({label}), but {} or {} is missing.",
                 dir.display(),
-                MODEL_FILENAME,
-                TOKENIZER_FILENAME
+                contract.model_filename,
+                contract.tokenizer_filename
             );
             return Some(dir);
         }
@@ -858,8 +928,124 @@ fn candidate_embedding_model_dirs() -> Vec<(&'static str, PathBuf)> {
         .collect()
 }
 
-fn model_assets_present(dir: &PathBuf) -> bool {
-    dir.join(MODEL_FILENAME).exists() && dir.join(TOKENIZER_FILENAME).exists()
+fn model_assets_present(dir: &PathBuf, contract: TextEmbeddingContract) -> bool {
+    dir.join(contract.model_filename).exists() && dir.join(contract.tokenizer_filename).exists()
+}
+
+/// Outcome of an embedding-environment preflight check.
+///
+/// Distinguishes "model files on disk + matching contract" from the
+/// well-known failure modes so the caller can log an actionable warning
+/// before any heavy ONNX load is attempted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmbeddingPreflight {
+    /// All assets present and the contract constants are internally
+    /// consistent (config dim == module dim == central contract dim).
+    Ready { model_dir: PathBuf },
+    /// Contract constants disagree across modules. Caller should treat
+    /// as a hard build error; production should never see this.
+    ContractDrift { detail: String },
+    /// No usable model directory could be located on disk. Embedding
+    /// will fall back to mock if `FNDR_ALLOW_MOCK_EMBEDDER=1`.
+    MissingModelDir {
+        searched: Vec<String>,
+        detail: String,
+    },
+    /// Found the directory but the ONNX model file is missing.
+    MissingModelFile { model_dir: PathBuf, detail: String },
+    /// Found the directory but the tokenizer file is missing.
+    MissingTokenizer { model_dir: PathBuf, detail: String },
+}
+
+impl EmbeddingPreflight {
+    pub fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready { .. })
+    }
+
+    /// Human-readable, actionable summary suitable for tracing / startup logs.
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Ready { model_dir } => format!(
+                "Embedding preflight OK: model={MODEL_NAME} dim={EMBEDDING_DIM} dir={}",
+                model_dir.display()
+            ),
+            Self::ContractDrift { detail } => detail.clone(),
+            Self::MissingModelDir { detail, .. } => detail.clone(),
+            Self::MissingModelFile { detail, .. } => detail.clone(),
+            Self::MissingTokenizer { detail, .. } => detail.clone(),
+        }
+    }
+}
+
+/// Cheap, non-blocking validation of the embedding contract + on-disk assets.
+///
+/// Run this once at startup (after `Config::load_or_create()`) so the user
+/// sees a clear actionable error in the log before any silent mock-fallback
+/// engages. This does NOT load the ONNX model — that still happens lazily on
+/// the first `Embedder::new()` and probes the actual output dimension there.
+pub fn preflight_embedding_environment(
+    config: &crate::config::EmbeddingConfig,
+) -> EmbeddingPreflight {
+    preflight_embedding_contract(config, active_embedding_contract())
+}
+
+pub fn preflight_embedding_contract(
+    config: &crate::config::EmbeddingConfig,
+    contract: TextEmbeddingContract,
+) -> EmbeddingPreflight {
+    // 1. Contract consistency — config + module + central all agree.
+    if let Err(detail) = validate_embedding_config_against_contract(config, contract) {
+        return EmbeddingPreflight::ContractDrift { detail };
+    }
+
+    // 2. Locate the model directory on disk.
+    let Some(model_dir) = resolve_model_dir(contract) else {
+        let searched: Vec<String> = candidate_embedding_model_dirs()
+            .into_iter()
+            .map(|(label, dir)| format!("{label}: {}", dir.display()))
+            .collect();
+        let detail = format!(
+            "No embedding model directory found. Install {} + {} ({}-d {}) before using table {}. \
+             Searched: [{}].",
+            contract.model_filename,
+            contract.tokenizer_filename,
+            contract.dimensions,
+            contract.model_id,
+            contract.table_name,
+            searched.join("; ")
+        );
+        return EmbeddingPreflight::MissingModelDir { searched, detail };
+    };
+
+    // 3. Confirm both required files exist.
+    let onnx_path = model_dir.join(contract.model_filename);
+    if !onnx_path.exists() {
+        return EmbeddingPreflight::MissingModelFile {
+            model_dir: model_dir.clone(),
+            detail: format!(
+                "Embedding ONNX model missing at {}. Install the {}-d {} contract assets before writing {}.",
+                onnx_path.display(),
+                contract.dimensions,
+                contract.model_id,
+                contract.table_name
+            ),
+        };
+    }
+    let tokenizer_path = model_dir.join(contract.tokenizer_filename);
+    if !tokenizer_path.exists() {
+        return EmbeddingPreflight::MissingTokenizer {
+            model_dir: model_dir.clone(),
+            detail: format!(
+                "Embedding tokenizer missing at {}. Install {} for {} before writing {}.",
+                tokenizer_path.display(),
+                contract.tokenizer_filename,
+                contract.model_id,
+                contract.table_name
+            ),
+        };
+    }
+
+    EmbeddingPreflight::Ready { model_dir }
 }
 
 fn stable_hash(input: &str) -> usize {
@@ -875,14 +1061,14 @@ fn stable_hash_bytes(input: &[u8]) -> usize {
     hash as usize
 }
 
-fn mean_pool(vectors: &[Vec<f32>]) -> Vec<f32> {
+fn mean_pool(vectors: &[Vec<f32>], dimensions: usize) -> Vec<f32> {
     if vectors.is_empty() {
-        return vec![0.0; EMBEDDING_DIM];
+        return vec![0.0; dimensions];
     }
 
-    let mut pooled = vec![0.0f32; EMBEDDING_DIM];
+    let mut pooled = vec![0.0f32; dimensions];
     for vec in vectors {
-        for (idx, value) in vec.iter().enumerate().take(EMBEDDING_DIM) {
+        for (idx, value) in vec.iter().enumerate().take(dimensions) {
             pooled[idx] += *value;
         }
     }
@@ -914,6 +1100,35 @@ mod tests {
     }
 
     #[test]
+    fn preflight_flags_config_dimension_drift() {
+        let mut config = crate::config::EmbeddingConfig::default();
+        config.dimension = 256;
+        let outcome = preflight_embedding_environment(&config);
+        assert!(!outcome.is_ready());
+        match outcome {
+            EmbeddingPreflight::ContractDrift { detail } => {
+                assert!(detail.contains("contract drift"));
+                assert!(detail.contains("256"));
+            }
+            other => panic!("expected ContractDrift, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn preflight_flags_config_filename_drift() {
+        let mut config = crate::config::EmbeddingConfig::default();
+        config.model_filename = "bge-large-en-v1.5-quantized.onnx".to_string();
+        let outcome = preflight_embedding_environment(&config);
+        match outcome {
+            EmbeddingPreflight::ContractDrift { detail } => {
+                assert!(detail.contains("model_filename"));
+                assert!(detail.contains("bge-large-en-v1.5"));
+            }
+            other => panic!("expected ContractDrift for filename, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn similar_phrases_score_higher_than_unrelated() {
         std::env::set_var("FNDR_ALLOW_MOCK_EMBEDDER", "1");
         let embedder = Embedder::new().expect("embedder should initialize in tests");
@@ -937,7 +1152,8 @@ mod tests {
 
     #[test]
     fn mock_embedding_vectors_match_schema_dimension() {
-        let vectors = MockEmbedder.embed_batch(&["dimension probe".to_string()]);
+        let vectors =
+            MockEmbedder::new(EMBEDDING_DIM).embed_batch(&["dimension probe".to_string()]);
         assert_eq!(vectors.len(), 1);
         assert_eq!(vectors[0].len(), EMBEDDING_DIM);
     }

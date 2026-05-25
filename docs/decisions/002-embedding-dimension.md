@@ -1,9 +1,26 @@
 # 002: Embedding Dimension
 
-FNDR's stable text embedding contract is 1024 dimensions. The current embedding path uses a local ONNX BGE-style model downloaded by `download_embedding_model.sh`, and the LanceDB text vector columns are created and validated against that dimension.
+> **Status (2026-05-20): amended for staged v5.**
 
-The dimension is intentionally treated as an application contract, not a casual runtime preference. Capture, meeting ingestion, downloads ingestion, search queries, snippet embeddings, support embeddings, and LanceDB schema validation all need to agree. If one subsystem silently writes 384-dimensional vectors while another expects 1024-dimensional vectors, vector search either fails at query time or returns misleading results.
+FNDR treats text embedding dimension as an application contract, not a runtime preference. Model identity, ONNX filename, tokenizer filename, vector dimension, and LanceDB table name must move together.
 
-Older prototype code used a MiniLM sidecar that produced 384-dimensional embeddings. That path is no longer part of the stable pipeline because it conflicts with the current schema and duplicates the native ONNX implementation. Keeping both paths would make failures look like search-quality problems when the real issue is schema/model mismatch.
+## Current And Target Contracts
 
-FNDR validates this in two places. Configuration rejects non-1024 text embedding dimensions for this build, and LanceDB schema validation reports a clear error if an existing table has the wrong vector size. Incoming records are also normalized before indexing so malformed vectors are padded, truncated, or zero-filled rather than corrupting the table.
+| Contract | Model | Dimensions | Table | Status |
+|---|---|---|---|---|
+| v4 MiniLM | `sentence-transformers/all-MiniLM-L6-v2` (`all-MiniLM-L6-v2.onnx`) | 384 | `memories_v4_minilm_384` | Current live durable path and v5 migration source |
+| v5 BGE | `BAAI/bge-large-en-v1.5` (`bge-large-en-v1.5-quantized.onnx`) | 1024 | `memories_v5_bge_1024` | Additive target table and explicit reindex path |
+
+Source of truth lives in `src-tauri/src/inference/model_config.rs`. The default app config and `Embedder::new()` remain v4 MiniLM so startup and live search do not require BGE assets. The v5 path is loaded only by explicit maintenance/reindex code.
+
+## Validation Rules
+
+- v4 config validation rejects non-384 defaults for the live path.
+- v5 reindex validation requires BGE model assets and a 1024-d ONNX output.
+- v4 and v5 Lance tables have separate fixed-size vector schemas.
+- FNDR never silently falls back across dimensions. A 384-d MiniLM vector is refused by the v5 writer, and a 1024-d BGE vector is not written into the v4 schema.
+- Existing v4 rows are not deleted or reset during v5 reindexing.
+
+## Migration Policy
+
+The explicit `reindex_memories_v5` maintenance IPC command reads v4 parent rows, embeds parent fields with the BGE document prefix, and writes idempotent v5 parent rows. Rows already present in v5 by `content_hash`, `dedup_fingerprint`, or stable id are skipped. Missing BGE files produce a clear command error and do not affect startup.

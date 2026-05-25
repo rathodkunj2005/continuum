@@ -1,0 +1,14 @@
+{
+  "name": "paragraph_on_page",
+  "app_name": "Safari",
+  "window_title": "FNDR memory vault design notes",
+  "raw_text": "Memory vault design\n\nThe vault renders memory cards in a container-query driven layout. Compact cards stay minimal even when the matched route is Chunk, while the ExpandedMemoryCard reveals the matched chunk evidence with chunk index, score, and a snippet of the winning child chunk.\n\nFusion weights\n\nThe hybrid fusion path now accepts a chunk signal alongside the existing vector and keyword signals. The chunk score contributes a small additive boost when it co-occurs with a keyword match, ensuring chunk-first retrieval reinforces lexical evidence rather than crowding it out.\n\nFallback behavior\n\nIf the BGE 1024 model assets are unavailable, the chunk route logs a single fallback line and yields zero hits. The legacy v4 MiniLM 384 parent path remains the durable readable surface, so the user never sees a hard failure when the additive chunk surface is missing.",
+  "expected_min_chunks": 1,
+  "expected_max_chunks": 6,
+  "must_contain": [
+    "ExpandedMemoryCard reveals the matched chunk evidence",
+    "chunk score contributes a small additive boost",
+    "v4 MiniLM 384 parent path"
+  ],
+  "must_not_contain": []
+}

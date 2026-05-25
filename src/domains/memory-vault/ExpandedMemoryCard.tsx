@@ -93,6 +93,26 @@ export function ExpandedMemoryCard({
             </section>
         ) : undefined;
 
+    const chunkEvidenceNode =
+        Array.isArray(card.chunk_evidence) && card.chunk_evidence.length > 0 ? (
+            <section>
+                <h4 className="fndr-emc-section-heading">Matched chunks</h4>
+                <ul className="fndr-emc-chunks">
+                    {card.chunk_evidence.slice(0, 3).map((chunk) => (
+                        <li key={chunk.chunk_id}>
+                            <span className="fndr-emc-chunk-meta">
+                                Chunk {chunk.chunk_index + 1}
+                                {Number.isFinite(chunk.score)
+                                    ? ` · ${(chunk.score * 100).toFixed(0)}%`
+                                    : ""}
+                            </span>
+                            <span>{chunk.text}</span>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        ) : undefined;
+
     const subgraphNode = (
         <section>
             <h4 className="fndr-emc-section-heading">Subgraph</h4>
@@ -125,6 +145,7 @@ export function ExpandedMemoryCard({
 
     const combinedEvidence = (
         <>
+            {chunkEvidenceNode}
             {evidenceNode}
             {subgraphNode}
             {relatedNode}

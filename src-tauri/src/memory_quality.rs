@@ -8,6 +8,8 @@ use crate::config::{
 use crate::storage::MemoryRecord;
 use serde_json::Value;
 
+pub const VISUAL_SEMANTICS_FAILED_OUTCOME: &str = "visual_semantics_failed";
+
 pub fn default_memory_quality_config() -> MemoryQualityConfig {
     MemoryQualityConfig {
         primary_memory_specificity_min: DEFAULT_PRIMARY_MEMORY_SPECIFICITY_MIN,
@@ -20,6 +22,9 @@ pub fn default_memory_quality_config() -> MemoryQualityConfig {
 }
 
 pub fn classify_storage_outcome(record: &MemoryRecord, config: &MemoryQualityConfig) -> String {
+    if is_visual_semantics_failed_record(record) {
+        return VISUAL_SEMANTICS_FAILED_OUTCOME.to_string();
+    }
     if hard_gate_structured_extraction_failed(record) {
         return "quarantine_low_grounding".to_string();
     }
@@ -55,6 +60,9 @@ pub fn classify_storage_outcome(record: &MemoryRecord, config: &MemoryQualityCon
 }
 
 pub fn quality_gate_reason(record: &MemoryRecord) -> String {
+    if is_visual_semantics_failed_record(record) {
+        return "hard_gate=visual_semantics_failed".to_string();
+    }
     if hard_gate_structured_extraction_failed(record) {
         return "hard_gate=structured_extraction_unavailable_with_zero_grounding".to_string();
     }
@@ -84,6 +92,46 @@ pub fn is_supported_dedup_fingerprint(value: &str) -> bool {
     trimmed
         .chars()
         .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | ':' | '.' | '/'))
+}
+
+pub fn is_visual_semantics_failed_record(record: &MemoryRecord) -> bool {
+    if record
+        .storage_outcome
+        .trim()
+        .eq_ignore_ascii_case(VISUAL_SEMANTICS_FAILED_OUTCOME)
+    {
+        return true;
+    }
+    serde_json::from_str::<Value>(&record.raw_evidence)
+        .ok()
+        .and_then(|json| {
+            json.get("extraction_issues")
+                .and_then(|value| value.as_array())
+                .map(|issues| {
+                    issues.iter().any(|issue| {
+                        issue
+                            .as_str()
+                            .map(|s| s.eq_ignore_ascii_case(VISUAL_SEMANTICS_FAILED_OUTCOME))
+                            .unwrap_or(false)
+                    })
+                })
+        })
+        .unwrap_or(false)
+}
+
+pub fn cap_visual_semantics_failed_scores(record: &mut MemoryRecord) {
+    record.evidence_confidence = record.evidence_confidence.clamp(0.0, 0.30);
+    record.agent_usefulness_score = record.agent_usefulness_score.clamp(0.0, 0.25);
+    record.retrieval_value_score = record.retrieval_value_score.clamp(0.0, 0.25);
+    record.graph_readiness_score = record.graph_readiness_score.clamp(0.0, 0.15);
+    record.specificity_score = record.specificity_score.clamp(0.0, 0.15);
+    record.intent_score = record.intent_score.clamp(0.0, 0.10);
+    record.entity_score = 0.0;
+    record.confidence_score = record.confidence_score.clamp(0.0, 0.20);
+    record.importance_score = record.importance_score.clamp(0.0, 0.20);
+    record.extraction_confidence = record.extraction_confidence.clamp(0.0, 0.15);
+    record.insight_card_confidence = record.insight_card_confidence.clamp(0.0, 0.15);
+    record.intent_analysis.confidence = record.intent_analysis.confidence.clamp(0.0, 0.10);
 }
 
 pub fn deterministic_dedup_fingerprint(
@@ -362,6 +410,56 @@ mod tests {
             quality_gate_reason(&record),
             "hard_gate=machine_marker_in_memory_context"
         );
+    }
+
+    #[test]
+    fn storage_outcome_keeps_failed_visual_semantics_out_of_enriched_cards() {
+        let cfg = default_memory_quality_config();
+        let record = MemoryRecord {
+            storage_outcome: VISUAL_SEMANTICS_FAILED_OUTCOME.to_string(),
+            agent_usefulness_score: 1.0,
+            intent_score: 1.0,
+            specificity_score: 1.0,
+            evidence_confidence: 1.0,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            classify_storage_outcome(&record, &cfg),
+            VISUAL_SEMANTICS_FAILED_OUTCOME
+        );
+        assert_eq!(
+            quality_gate_reason(&record),
+            "hard_gate=visual_semantics_failed"
+        );
+    }
+
+    #[test]
+    fn failed_visual_semantics_score_caps_prevent_intent_inflation() {
+        let mut record = MemoryRecord {
+            evidence_confidence: 0.95,
+            agent_usefulness_score: 0.95,
+            retrieval_value_score: 0.95,
+            graph_readiness_score: 0.95,
+            specificity_score: 0.95,
+            intent_score: 1.0,
+            entity_score: 0.8,
+            confidence_score: 0.95,
+            importance_score: 0.95,
+            extraction_confidence: 0.95,
+            insight_card_confidence: 0.95,
+            ..Default::default()
+        };
+
+        cap_visual_semantics_failed_scores(&mut record);
+
+        assert!(record.evidence_confidence <= 0.30);
+        assert!(record.agent_usefulness_score <= 0.25);
+        assert!(record.retrieval_value_score <= 0.25);
+        assert!(record.graph_readiness_score <= 0.15);
+        assert!(record.specificity_score <= 0.15);
+        assert!(record.intent_score <= 0.10);
+        assert_eq!(record.entity_score, 0.0);
     }
 
     #[test]

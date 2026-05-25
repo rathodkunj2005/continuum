@@ -17,15 +17,15 @@ use crate::memory::reopen::{ReopenKind, ReopenValidationStatus};
 use crate::storage::schema::{
     ActivityEvent, ContextDelta, ContextPack, DecisionLedgerEntry, EdgeType, EntityAliasRecord,
     GraphEdge, GraphNode, KnowledgePage, KnowledgePageType, KnowledgeStability, MeetingSegment,
-    MeetingSession, MemoryRecord, NodeType, PrivacyClass, ProjectContext, SearchResult, Task,
-    TaskType,
+    MeetingSession, MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, NodeType,
+    PrivacyClass, ProjectContext, SearchResult, Task, TaskType,
 };
 
 use super::schemas::{
     activity_event_schema, context_delta_schema, context_pack_schema, decision_ledger_schema,
     edge_schema, edge_type_literal, entity_alias_schema, escape_sql_literal, knowledge_page_schema,
-    meeting_schema, memory_schema, node_schema, project_context_schema, segment_schema,
-    task_schema,
+    meeting_schema, memory_chunk_schema, memory_schema_for_text_dim, node_schema,
+    project_context_schema, segment_schema, task_schema,
 };
 use super::{
     IMAGE_EMBED_DIM, KEYWORD_QUERY_MULTIPLIER, MAX_KEYWORD_SCAN, SEARCH_RESULT_COLUMNS,
@@ -51,7 +51,14 @@ pub(super) fn compute_content_hash(
 }
 
 pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, ArrowError> {
-    let schema = Arc::new(memory_schema());
+    records_to_batch_with_text_dim(records, TEXT_EMBED_DIM)
+}
+
+pub(super) fn records_to_batch_with_text_dim(
+    records: &[MemoryRecord],
+    text_embed_dim: i32,
+) -> Result<RecordBatch, ArrowError> {
+    let schema = Arc::new(memory_schema_for_text_dim(text_embed_dim));
 
     // Scalar string columns
     let ids: Vec<&str> = records.iter().map(|r| r.id.as_str()).collect();
@@ -89,7 +96,7 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
     let text_values = Arc::new(Float32Array::from(flat_text)) as Arc<dyn Array>;
     let embedding_array = FixedSizeListArray::try_new(
         Arc::new(Field::new("item", DataType::Float32, true)),
-        TEXT_EMBED_DIM,
+        text_embed_dim,
         text_values,
         None,
     )?;
@@ -115,7 +122,7 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
     let snip_values = Arc::new(Float32Array::from(flat_snip)) as Arc<dyn Array>;
     let snippet_embedding_array = FixedSizeListArray::try_new(
         Arc::new(Field::new("item", DataType::Float32, true)),
-        TEXT_EMBED_DIM,
+        text_embed_dim,
         snip_values,
         None,
     )?;
@@ -127,7 +134,7 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
     let support_values = Arc::new(Float32Array::from(flat_support)) as Arc<dyn Array>;
     let support_embedding_array = FixedSizeListArray::try_new(
         Arc::new(Field::new("item", DataType::Float32, true)),
-        TEXT_EMBED_DIM,
+        text_embed_dim,
         support_values,
         None,
     )?;
@@ -303,6 +310,12 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
         .map(|r| r.insight_spans_json.as_str())
         .collect();
     let insight_conf: Vec<f32> = records.iter().map(|r| r.insight_card_confidence).collect();
+    let enrichment_statuses: Vec<&str> = records
+        .iter()
+        .map(|r| r.enrichment_status.as_str())
+        .collect();
+    let reviewed_at_ms: Vec<i64> = records.iter().map(|r| r.reviewed_at_ms).collect();
+    let reviewer_generations: Vec<u32> = records.iter().map(|r| r.reviewer_generation).collect();
 
     RecordBatch::try_new(
         schema,
@@ -415,8 +428,114 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
             Arc::new(StringArray::from(insight_thread)),
             Arc::new(StringArray::from(insight_spans)),
             Arc::new(Float32Array::from(insight_conf)),
+            Arc::new(StringArray::from(enrichment_statuses)),
+            Arc::new(Int64Array::from(reviewed_at_ms)),
+            Arc::new(UInt32Array::from(reviewer_generations)),
         ],
     )
+}
+
+pub(super) fn memory_chunks_to_batch(
+    chunks: &[MemoryChunkRecord],
+    embedding_dim: i32,
+) -> Result<RecordBatch, ArrowError> {
+    let schema = Arc::new(memory_chunk_schema());
+    let ids: Vec<&str> = chunks.iter().map(|r| r.id.as_str()).collect();
+    let memory_ids: Vec<&str> = chunks.iter().map(|r| r.memory_id.as_str()).collect();
+    let chunk_indexes: Vec<u32> = chunks.iter().map(|r| r.chunk_index).collect();
+    let line_kinds: Vec<&str> = chunks.iter().map(|r| r.line_kind.as_str()).collect();
+    let texts: Vec<&str> = chunks.iter().map(|r| r.text.as_str()).collect();
+    let flat_embedding: Vec<f32> = chunks
+        .iter()
+        .flat_map(|r| r.embedding.iter().copied())
+        .collect();
+    let embedding_values = Arc::new(Float32Array::from(flat_embedding)) as Arc<dyn Array>;
+    let embedding_array = FixedSizeListArray::try_new(
+        Arc::new(Field::new("item", DataType::Float32, true)),
+        embedding_dim,
+        embedding_values,
+        None,
+    )?;
+    let created_at: Vec<i64> = chunks.iter().map(|r| r.created_at).collect();
+    let app_names: Vec<&str> = chunks.iter().map(|r| r.app_name.as_str()).collect();
+    let window_titles: Vec<&str> = chunks.iter().map(|r| r.window_title.as_str()).collect();
+    let day_buckets: Vec<&str> = chunks.iter().map(|r| r.day_bucket.as_str()).collect();
+    let content_hashes: Vec<&str> = chunks.iter().map(|r| r.content_hash.as_str()).collect();
+
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(StringArray::from(ids)),
+            Arc::new(StringArray::from(memory_ids)),
+            Arc::new(UInt32Array::from(chunk_indexes)),
+            Arc::new(StringArray::from(line_kinds)),
+            Arc::new(StringArray::from(texts)),
+            Arc::new(embedding_array),
+            Arc::new(Int64Array::from(created_at)),
+            Arc::new(StringArray::from(app_names)),
+            Arc::new(StringArray::from(window_titles)),
+            Arc::new(StringArray::from(day_buckets)),
+            Arc::new(StringArray::from(content_hashes)),
+        ],
+    )
+}
+
+pub(super) fn batch_to_memory_chunks(batch: &RecordBatch) -> Vec<MemoryChunkRecord> {
+    let n = batch.num_rows();
+    let ids = str_col(batch, "id");
+    let memory_ids = str_col(batch, "memory_id");
+    let chunk_indexes = u32_col(batch, "chunk_index");
+    let line_kinds = str_col(batch, "line_kind");
+    let texts = str_col(batch, "text");
+    let embed_col = batch
+        .column_by_name("embedding")
+        .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>().cloned());
+    let created_at = i64_col(batch, "created_at");
+    let app_names = str_col(batch, "app_name");
+    let window_titles = str_col(batch, "window_title");
+    let day_buckets = str_col(batch, "day_bucket");
+    let content_hashes = str_col(batch, "content_hash");
+
+    (0..n)
+        .map(|i| MemoryChunkRecord {
+            id: get_str(&ids, i),
+            memory_id: get_str(&memory_ids, i),
+            chunk_index: get_u32(&chunk_indexes, i),
+            line_kind: get_str(&line_kinds, i),
+            text: get_str(&texts, i),
+            embedding: extract_f32_list(
+                &embed_col,
+                i,
+                crate::inference::model_config::BGE_V5_DIMENSIONS,
+            ),
+            created_at: get_i64(&created_at, i),
+            app_name: get_str(&app_names, i),
+            window_title: get_str(&window_titles, i),
+            day_bucket: get_str(&day_buckets, i),
+            content_hash: get_str(&content_hashes, i),
+        })
+        .collect()
+}
+
+pub(super) fn batch_to_memory_chunk_search_results(
+    batch: &RecordBatch,
+) -> Vec<MemoryChunkSearchResult> {
+    let distances = batch
+        .column_by_name("_distance")
+        .and_then(|c| c.as_any().downcast_ref::<Float32Array>().cloned());
+
+    batch_to_memory_chunks(batch)
+        .into_iter()
+        .enumerate()
+        .map(|(idx, chunk)| {
+            let distance = distances.as_ref().map(|c| c.value(idx)).unwrap_or(0.0);
+            MemoryChunkSearchResult {
+                chunk,
+                score: vector_distance_to_similarity(distance),
+                distance,
+            }
+        })
+        .collect()
 }
 
 pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> {
@@ -540,6 +659,9 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
     let insight_thread = str_col(batch, "insight_context_thread");
     let insight_spans = str_col(batch, "insight_spans_json");
     let insight_conf = f32_col(batch, "insight_card_confidence");
+    let enrichment_statuses = str_col(batch, "enrichment_status");
+    let reviewed_at_ms_col = i64_col(batch, "reviewed_at_ms");
+    let reviewer_generations = u32_col(batch, "reviewer_generation");
 
     (0..n)
         .map(|i| {
@@ -684,9 +806,9 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 embedding_text: get_str(&embedding_texts, i),
                 embedding_model: get_str(&embedding_models, i),
                 embedding_dim: get_u32(&embedding_dims, i),
-                enrichment_status: String::new(),
-                reviewed_at_ms: 0,
-                reviewer_generation: String::new(),
+                enrichment_status: get_str(&enrichment_statuses, i),
+                reviewed_at_ms: reviewed_at_ms_col.as_ref().map(|c| c.value(i)).unwrap_or(0),
+                reviewer_generation: get_u32(&reviewer_generations, i),
                 fallback_reason: None,
                 raw_screenshot_stored: false,
                 is_consolidated: get_bool(&is_consolidated_flags, i),
@@ -781,6 +903,10 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
     let insight_conf = f32_col(batch, "insight_card_confidence");
     let search_synthesis_branches = str_col(batch, "synthesis_branch");
     let search_topic_categories = list_str_col(batch, "topic_categories");
+    let search_enrichment_statuses = str_col(batch, "enrichment_status");
+    let search_reviewed_at_ms = i64_col(batch, "reviewed_at_ms");
+    let search_reviewer_generations = u32_col(batch, "reviewer_generation");
+    let search_storage_outcomes = str_col(batch, "storage_outcome");
 
     (0..n)
         .map(|i| {
@@ -888,6 +1014,23 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
                 insight_card_confidence: get_f32(&insight_conf, i),
                 synthesis_branch: get_str(&search_synthesis_branches, i),
                 topic_categories: extract_str_list(&search_topic_categories, i),
+                matched_routes: Vec::new(),
+                matched_chunk_ids: Vec::new(),
+                chunk_evidence: Vec::new(),
+                enrichment_status: get_str(&search_enrichment_statuses, i),
+                reviewed_at_ms: search_reviewed_at_ms
+                    .as_ref()
+                    .map(|c| c.value(i))
+                    .unwrap_or(0),
+                reviewer_generation: get_u32(&search_reviewer_generations, i),
+                storage_outcome: {
+                    let outcome = get_str(&search_storage_outcomes, i);
+                    if outcome.trim().is_empty() {
+                        "enriched_memory_card".to_string()
+                    } else {
+                        outcome
+                    }
+                },
             }
         })
         .collect()
@@ -1180,6 +1323,7 @@ pub(super) fn nodes_to_batch(
     for n in nodes {
         ids.append_value(&n.id);
         types.append_value(match n.node_type {
+            NodeType::Memory => "Memory",
             NodeType::Entity => "Entity",
             NodeType::Task => "Task",
             NodeType::Url => "Url",
@@ -1260,6 +1404,7 @@ pub(super) fn batch_to_nodes(batch: &RecordBatch) -> Vec<GraphNode> {
     let mut nodes = Vec::with_capacity(n);
     for i in 0..n {
         let node_type = match get_str(&types, i).as_str() {
+            "Memory" => NodeType::Memory,
             "Entity" => NodeType::Entity,
             "Task" => NodeType::Task,
             "Url" => NodeType::Url,

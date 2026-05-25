@@ -17,6 +17,7 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use tauri::Emitter;
 
+pub mod chunk_route;
 pub mod composer;
 pub mod context_pack;
 pub mod entity_route;
