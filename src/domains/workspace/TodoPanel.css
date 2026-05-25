@@ -272,6 +272,7 @@
 
 [data-theme="light"] .todo-edit-row input {
     background: var(--surface-elevated);
+    color: var(--text-primary);
 }
 
 [data-theme="light"] .todo-stage-btn.active strong {

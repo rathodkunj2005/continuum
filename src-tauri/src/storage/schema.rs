@@ -433,15 +433,10 @@ pub struct MemoryRecord {
     /// "reviewed_local" / "review_failed".
     #[serde(default)]
     pub enrichment_status: String,
-    /// Unix ms timestamp of the last successful local review. Zero means
-    /// the record has never been reviewed.
     #[serde(default)]
     pub reviewed_at_ms: i64,
-    /// Monotonic counter incremented on each successful local review. Used to
-    /// invalidate downstream artifacts and to attribute writes to a specific
-    /// review pass.
     #[serde(default)]
-    pub reviewer_generation: u32,
+    pub reviewer_generation: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     #[serde(default)]
@@ -585,7 +580,7 @@ impl Default for MemoryRecord {
             embedding_dim: DEFAULT_TEXT_EMBEDDING_DIM as u32,
             enrichment_status: String::new(),
             reviewed_at_ms: 0,
-            reviewer_generation: 0,
+            reviewer_generation: String::new(),
             fallback_reason: None,
             raw_screenshot_stored: false,
             is_consolidated: false,

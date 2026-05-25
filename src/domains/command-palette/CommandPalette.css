@@ -498,3 +498,31 @@
 [data-theme="light"] .cp-confirm-message {
     color: rgba(20, 20, 35, 0.85);
 }
+
+[data-theme="light"] .cp-overlay {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .cp-modal {
+    background: color-mix(in srgb, #ffffff 88%, transparent);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .cp-context-banner {
+    background: rgba(100, 140, 255, 0.08);
+    border-bottom-color: rgba(100, 140, 255, 0.18);
+}
+
+[data-theme="light"] .cp-context-text {
+    color: rgba(60, 100, 180, 0.8);
+}
+
+[data-theme="light"] .cp-confirm-run {
+    background: rgba(100, 130, 220, 0.15);
+    border-color: rgba(100, 130, 220, 0.4);
+    color: rgba(60, 100, 180, 0.95);
+}
+
+[data-theme="light"] .cp-confirm-run:hover {
+    background: rgba(100, 130, 220, 0.25);
+}

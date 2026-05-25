@@ -22,6 +22,12 @@
   background: rgba(120, 60, 20, 0.25);
 }
 
+[data-theme="light"] .insight-low-badge {
+  color: rgba(180, 80, 20, 0.95);
+  border-color: rgba(200, 100, 40, 0.4);
+  background: rgba(255, 220, 180, 0.2);
+}
+
 .insight-row {
   margin-bottom: 8px;
 }

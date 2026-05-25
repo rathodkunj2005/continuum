@@ -6,6 +6,7 @@
 pub mod accessibility;
 pub mod agent;
 pub mod capture;
+pub mod companion;
 pub mod config;
 pub mod context_runtime;
 pub mod downloads;

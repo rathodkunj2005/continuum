@@ -351,20 +351,7 @@ async fn compose_visual_capture_record(
             .map(|s| crate::inference::insight_from_structured(&s))
     };
 
-    if should_skip_ungrounded_low_ram_visual_capture(
-        &vlm_route,
-        observed_text_len,
-        observed_confidence,
-        observed_block_count,
-        config.min_text_length,
-    ) {
-        tracing::info!(
-            app = %app_name,
-            observed_chars = observed_text_len,
-            "compose_visual_capture_record: skipping ungrounded visual-only frame because VLM is blocked by low RAM and OCR/browser text is below the storage gate"
-        );
-        return Err(VISUAL_UNGROUNDED_LOW_RAM_REASON.to_string());
-    }
+    // Removed ungrounded low-RAM visual capture gate: store captures even without OCR/VLM grounding
 
     let insight = if !vlm_route.runs_pixel_vlm() {
         let reason = vlm_route
@@ -583,6 +570,7 @@ async fn compose_visual_capture_record(
         insight_why_mattered: composed.insight_why_mattered.clone(),
         insight_card_confidence: insight.confidence,
         schema_version: 2,
+        enrichment_status: String::new(), // Lifecycle: pending review
         ..Default::default()
     };
     record.dedup_fingerprint =
@@ -3454,6 +3442,8 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             insight_context_thread: String::new(),
             insight_spans_json: String::new(),
             insight_card_confidence: 0.0,
+            reviewed_at_ms: 0,
+            reviewer_generation: String::new(),
         };
         let incoming_record_id = record.id.clone();
         let batch_size_before = batch.len();
@@ -4422,6 +4412,8 @@ pub(crate) async fn merge_memory_records_with_policy(
         insight_context_thread,
         insight_spans_json,
         insight_card_confidence,
+        reviewed_at_ms: 0,
+        reviewer_generation: String::new(),
     }
 }
 
