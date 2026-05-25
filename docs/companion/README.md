@@ -7,7 +7,7 @@ local Wi-Fi.
 
 ## Reading order
 
-1. [008-companion-api-architecture.md](../decisions/008-companion-api-architecture.md) — why this exists and how it's shaped.
+1. [009-companion-api-architecture.md](../decisions/009-companion-api-architecture.md) — why this exists and how it's shaped.
 2. [api-contract.md](./api-contract.md) — versioned route reference + `curl` smoke pack.
 3. [STATUS.md](./STATUS.md) — what's shipped vs. open across the 7-slice roadmap.
 4. [handoffs/](./handoffs/) — per-slice handoff notes (read the highest-numbered file first).

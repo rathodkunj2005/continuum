@@ -41,3 +41,25 @@ meetings/
 
 # Migration artifacts
 *.migrated
+
+# Build output
+build/
+
+# iOS / Xcode
+apps/ios/Local.xcconfig
+apps/ios/DerivedData/
+apps/ios/build/
+apps/ios/*.xcresult
+apps/ios/**/*.xcresult
+apps/ios/.swiftpm/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Fastlane (pre-emptive)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/

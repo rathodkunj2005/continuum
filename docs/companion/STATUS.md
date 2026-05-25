@@ -18,7 +18,7 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 
 - PRD: `~/Downloads/fndr_ios_watch_mvp_prd.md`
 - Plan: `~/.claude/plans/users-anurupkumar-downloads-fndr-ios-wa-melodic-starfish.md`
-- ADR: [008-companion-api-architecture.md](../decisions/008-companion-api-architecture.md)
+- ADR: [009-companion-api-architecture.md](../decisions/009-companion-api-architecture.md)
 - API contract: [api-contract.md](./api-contract.md)
 
 ## Cross-cutting decisions locked at slice 1

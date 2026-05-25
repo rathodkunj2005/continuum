@@ -24,7 +24,7 @@
   durability + idempotent revoke, pairing TTL + single-use + reject paths,
   bearer-token middleware + extension carry-through, deterministic memory
   id derivation, manual-record provenance.
-- Docs: [ADR-008](../../decisions/008-companion-api-architecture.md),
+- Docs: [ADR-009](../../decisions/009-companion-api-architecture.md),
   [README](../README.md), [api-contract.md](../api-contract.md),
   [STATUS.md](../STATUS.md) (this is the file to read first next time).
 
@@ -41,13 +41,13 @@
 - [x] `make test` passes: 460 Rust tests + 36 new companion tests (496 total
       passing). 5 pre-existing theme/wallpaper Vitest failures are NOT
       caused by this slice and are tracked in a spawned task.
-- [x] ADR `docs/decisions/008-companion-api-architecture.md` written.
+- [x] ADR `docs/decisions/009-companion-api-architecture.md` written.
 
 ## What to read first next session
 
 1. `docs/companion/STATUS.md`
 2. This handoff (`slice-01.md`)
-3. `docs/decisions/008-companion-api-architecture.md`
+3. `docs/decisions/009-companion-api-architecture.md`
 4. `docs/companion/api-contract.md` (especially the curl smoke pack)
 
 ## Gotchas observed
