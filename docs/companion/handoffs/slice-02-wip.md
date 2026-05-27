@@ -1,5 +1,7 @@
 # Slice 2 WIP handoff — iOS shell + pairing
 
+> Superseded by `docs/companion/handoffs/slice-02.md`.
+
 **Branch:** `companion/slice-2-ios-shell`  
 **Author model:** GPT-5 Codex  
 **Date:** 2026-05-22

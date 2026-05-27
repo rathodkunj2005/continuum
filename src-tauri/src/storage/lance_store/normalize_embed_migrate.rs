@@ -1881,6 +1881,11 @@ pub(super) fn push_current_memory_writer_column_transforms(
     push("git_stats", null_string_sql());
     push("outcome", "''".to_string());
     push("extraction_confidence", "CAST(0.0 AS FLOAT)".to_string());
+    push("enrichment_status", "''".to_string());
+    push("reviewed_at_ms", "CAST(0 AS BIGINT)".to_string());
+    push("reviewer_generation", "CAST(0 AS INTEGER UNSIGNED)".to_string());
+    push("fallback_reason", null_string_sql());
+    push("raw_screenshot_stored", "FALSE".to_string());
     push("dedup_fingerprint", "''".to_string());
     push("embedding_text", "''".to_string());
     push("embedding_model", "'all-MiniLM-L6-v2'".to_string());

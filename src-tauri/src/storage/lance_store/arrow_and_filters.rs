@@ -303,6 +303,20 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
         .map(|r| r.insight_spans_json.as_str())
         .collect();
     let insight_conf: Vec<f32> = records.iter().map(|r| r.insight_card_confidence).collect();
+    let enrichment_statuses: Vec<&str> = records
+        .iter()
+        .map(|r| r.enrichment_status.as_str())
+        .collect();
+    let reviewed_at_ms: Vec<i64> = records.iter().map(|r| r.reviewed_at_ms).collect();
+    let reviewer_generations: Vec<u32> = records
+        .iter()
+        .map(|r| r.reviewer_generation.parse::<u32>().unwrap_or(0))
+        .collect();
+    let fallback_reasons: Vec<Option<&str>> = records
+        .iter()
+        .map(|r| r.fallback_reason.as_deref())
+        .collect();
+    let raw_screenshot_stored: Vec<bool> = records.iter().map(|r| r.raw_screenshot_stored).collect();
 
     RecordBatch::try_new(
         schema,
@@ -415,6 +429,11 @@ pub(super) fn records_to_batch(records: &[MemoryRecord]) -> Result<RecordBatch, 
             Arc::new(StringArray::from(insight_thread)),
             Arc::new(StringArray::from(insight_spans)),
             Arc::new(Float32Array::from(insight_conf)),
+            Arc::new(StringArray::from(enrichment_statuses)),
+            Arc::new(Int64Array::from(reviewed_at_ms)),
+            Arc::new(UInt32Array::from(reviewer_generations)),
+            Arc::new(StringArray::from(fallback_reasons)),
+            Arc::new(BooleanArray::from(raw_screenshot_stored)),
         ],
     )
 }
@@ -540,6 +559,11 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
     let insight_thread = str_col(batch, "insight_context_thread");
     let insight_spans = str_col(batch, "insight_spans_json");
     let insight_conf = f32_col(batch, "insight_card_confidence");
+    let enrichment_statuses = str_col(batch, "enrichment_status");
+    let reviewed_at = i64_col(batch, "reviewed_at_ms");
+    let reviewer_generations = u32_col(batch, "reviewer_generation");
+    let fallback_reasons = str_col(batch, "fallback_reason");
+    let raw_screenshot_stored = bool_col(batch, "raw_screenshot_stored");
 
     (0..n)
         .map(|i| {
@@ -684,11 +708,11 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 embedding_text: get_str(&embedding_texts, i),
                 embedding_model: get_str(&embedding_models, i),
                 embedding_dim: get_u32(&embedding_dims, i),
-                enrichment_status: String::new(),
-                reviewed_at_ms: 0,
-                reviewer_generation: String::new(),
-                fallback_reason: None,
-                raw_screenshot_stored: false,
+                enrichment_status: get_str(&enrichment_statuses, i),
+                reviewed_at_ms: get_i64(&reviewed_at, i),
+                reviewer_generation: get_u32(&reviewer_generations, i).to_string(),
+                fallback_reason: get_opt_str(&fallback_reasons, i),
+                raw_screenshot_stored: get_bool(&raw_screenshot_stored, i),
                 is_consolidated: get_bool(&is_consolidated_flags, i),
                 is_soft_deleted: get_bool(&is_soft_deleted_flags, i),
                 parent_id: get_opt_str(&parent_ids, i),

@@ -51,9 +51,8 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
-      <RemoteRunnable
-         runnableDebuggingMode = "2"
-         BundleIdentifier = "com.apple.Carousel">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DBC137B0FDAABF784EBD12CF"
@@ -61,7 +60,7 @@
             BlueprintName = "FNDR Watch"
             ReferencedContainer = "container:FNDR.xcodeproj">
          </BuildableReference>
-      </RemoteRunnable>
+      </BuildableProductRunnable>
       <CommandLineArguments>
       </CommandLineArguments>
    </LaunchAction>

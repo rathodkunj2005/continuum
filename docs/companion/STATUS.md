@@ -7,7 +7,7 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 | #  | Slice                                    | Branch                                       | Status | Notes                                                                                  |
 |----|------------------------------------------|----------------------------------------------|--------|----------------------------------------------------------------------------------------|
 | 1  | Companion API foundation (Rust)          | `companion/slice-1-api-foundation`           | ✅      | Pair/status/capture-control/manual-memory + device registry + React Settings panel, verified with companion Rust tests. |
-| 2  | iOS shell + pairing                      | `companion/slice-2-ios-shell`                | 🟡      | `FNDRKit`, `FNDR.xcodeproj`, tab shell, pairing/status wiring landed; simulator/device pairing validation blocked until full Xcode is installed and selected. |
+| 2  | iOS shell + pairing                      | `companion/slice-2-ios-shell`                | 🟡      | `FNDRKit`, `FNDR.xcodeproj`, pairing + Keychain token persistence + Status-tab connectivity landed as a clean slice-2 surface. Ask/search/capture-queue/watch/hardening are deferred to slices 3-7. |
 | 3  | Ask FNDR on iPhone                       | `companion/slice-3-ios-ask`                  | 🟡      | `/v1/ask` route + FNDRKit/client + Ask tab landed; no full-Xcode simulator/device runtime evidence yet. |
 | 4  | Memory search + detail                   | `companion/slice-4-ios-search`               | 🟡      | `/v1/memories/search` now uses canonical hybrid retrieval path; iOS memory flows need full-Xcode E2E validation. |
 | 5  | Manual capture + offline queue           | `companion/slice-5-ios-capture`              | 🟡      | Manual capture + durable queue landed with idempotency; simulator/device offline-retry smoke still pending. |
@@ -38,7 +38,6 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 
 ## Validation blocker
 
-- This Codex host does not have full Xcode selected (`xcodebuild` is still
-  pointing at Command Line Tools). Until
-  `/Applications/Xcode.app/Contents/Developer` is active, simulator/device
-  evidence cannot be attached for slices 2-7.
+- Full Xcode is now selected at `/Applications/Xcode.app/Contents/Developer`,
+  but slice-2 still needs explicit simulator/device runtime evidence (pairing
+  flow + Status tab against a live desktop companion endpoint).

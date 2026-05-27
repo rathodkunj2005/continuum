@@ -230,7 +230,7 @@ pub async fn start(
             post(crate::companion::handlers::search::search_memories),
         )
         .route(
-            "/v1/memories/:memory_id",
+            "/v1/memories/{memory_id}",
             get(crate::companion::handlers::memories::get_memory),
         )
         .route(

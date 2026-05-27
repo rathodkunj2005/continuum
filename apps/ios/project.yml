@@ -16,6 +16,12 @@ targets:
     deploymentTarget: '17.0'
     sources:
       - path: FNDR
+        excludes:
+          - Ask/**
+          - Capture/**
+          - Memories/**
+          - WatchBridge/**
+          - AppIntents/**
     dependencies:
       - package: FNDRKit
         product: FNDRKit
@@ -33,7 +39,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
   FNDR Watch:
-    type: application.watchapp2
+    type: application
     platform: watchOS
     deploymentTarget: '10.0'
     sources:
