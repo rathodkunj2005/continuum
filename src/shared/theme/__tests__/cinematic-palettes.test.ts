@@ -4,6 +4,7 @@ import {
     getWallpaperInkColors,
     PALETTES,
     removePalette,
+    rgbToHex,
 } from "../cinematic-palettes";
 
 describe("applyPalette", () => {
@@ -37,12 +38,13 @@ describe("applyPalette", () => {
         expect(style?.textContent).toContain(`--cp-wall-text-primary: ${ink.primary}`);
     });
 
-    it("injects exact wall swatch hex for CSS fallback", () => {
+    it("injects exact wall swatch hex from aurora table for CSS fallback", () => {
         applyPalette("bladeRunner2049", "dark");
 
         const style = document.getElementById("cinematic-palette-vars");
-        expect(style?.textContent).toContain(`--cp-wall-bg: ${PALETTES.bladeRunner2049.shades[0]}`);
-        expect(style?.textContent).toContain(`--cp-wall-acc: ${PALETTES.bladeRunner2049.shades[6]}`);
+        const aurora = PALETTES.bladeRunner2049.aurora.dark;
+        expect(style?.textContent).toContain(`--cp-wall-bg: ${rgbToHex(aurora.bg)}`);
+        expect(style?.textContent).toContain(`--cp-wall-acc: ${rgbToHex(aurora.acc)}`);
     });
 });
 

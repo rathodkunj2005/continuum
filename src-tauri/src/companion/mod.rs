@@ -9,7 +9,8 @@
 //!     `StateStore` under key `companion_devices`. Tokens are revocable.
 //!   - `/v1/pair/complete`, `/v1/pair/start`, `/v1/status`,
 //!     `/v1/capture/control`, `/v1/memories/manual` are mounted in slice 1.
-//!   - Ask + search arrive in slice 3/4.
+//!   - `/v1/ask`, `/v1/memories/search`, `/v1/memories/:id`, `/v1/feedback`
+//!     cover slices 3-7.
 //!
 //! Endpoint discovery file: `~/.fndr/companion.json` (host, port, tls, cert).
 
@@ -30,12 +31,13 @@ use crate::AppState;
 use axum::routing::{get, post};
 use axum::Router;
 use parking_lot::Mutex;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use tokio::task::JoinHandle;
 use tower_http::cors::{Any, CorsLayer};
 
+const LAN_BIND_HOST: &str = "0.0.0.0";
 const LOOPBACK_HOST: &str = "127.0.0.1";
 
 /// Read once on startup; stays constant for the process lifetime.
@@ -168,10 +170,11 @@ pub async fn start(
         }
     }
 
-    let host = host.unwrap_or_else(|| LOOPBACK_HOST.to_string());
+    let bind_host = host.unwrap_or_else(|| LAN_BIND_HOST.to_string());
+    let advertised_host = resolve_advertised_host(&bind_host);
     let port = port.unwrap_or(0);
 
-    let addr: SocketAddr = format!("{host}:{port}")
+    let addr: SocketAddr = format!("{bind_host}:{port}")
         .parse()
         .map_err(|e| format!("invalid bind address: {e}"))?;
 
@@ -197,14 +200,14 @@ pub async fn start(
 
     let mac_name = crate::companion::handlers::status::mac_display_name();
     let endpoint_hint = PairingEndpointHint {
-        host: host.clone(),
+        host: advertised_host.clone(),
         port: actual_port,
         tls: true,
         mac_name: mac_name.clone(),
         cert_fingerprint_sha256: tls_cert_fingerprint(),
     };
 
-    let base_url = format!("https://{host}:{actual_port}");
+    let base_url = format!("https://{advertised_host}:{actual_port}");
 
     let pairing_state = Arc::new(PairingHttpState {
         service: pairing_service.clone(),
@@ -221,6 +224,15 @@ pub async fn start(
 
     // Authenticated routes share both the app state and the auth middleware.
     let authenticated = Router::new()
+        .route("/v1/ask", post(crate::companion::handlers::ask::ask))
+        .route(
+            "/v1/memories/search",
+            post(crate::companion::handlers::search::search_memories),
+        )
+        .route(
+            "/v1/memories/{memory_id}",
+            get(crate::companion::handlers::memories::get_memory),
+        )
         .route(
             "/v1/status",
             get(crate::companion::handlers::status::get_status),
@@ -232,6 +244,10 @@ pub async fn start(
         .route(
             "/v1/memories/manual",
             post(crate::companion::handlers::memories::create_manual),
+        )
+        .route(
+            "/v1/feedback",
+            post(crate::companion::handlers::feedback::submit_feedback),
         )
         .layer(axum::middleware::from_fn_with_state(
             auth_state.clone(),
@@ -260,7 +276,7 @@ pub async fn start(
         .merge(authenticated)
         .layer(cors);
 
-    write_discovery(&host, actual_port, true, &mac_name);
+    write_discovery(&advertised_host, actual_port, true, &mac_name);
 
     let handle = axum_server::Handle::new();
     let server_handle = handle.clone();
@@ -281,7 +297,7 @@ pub async fn start(
 
     let mut rt = runtime().lock();
     rt.running = true;
-    rt.host = host;
+    rt.host = advertised_host;
     rt.port = actual_port;
     rt.tls = true;
     rt.base_url = base_url;
@@ -294,6 +310,7 @@ pub async fn start(
 
     tracing::info!(
         host = %rt.host,
+        bind_host = %bind_host,
         port = rt.port,
         "Companion API started"
     );
@@ -347,8 +364,46 @@ async fn root_handler() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
         "service": "fndr_companion",
         "version": env!("CARGO_PKG_VERSION"),
-        "endpoints": ["/v1/pair/start", "/v1/pair/complete", "/v1/status", "/v1/capture/control", "/v1/memories/manual"],
+        "endpoints": [
+            "/v1/pair/start",
+            "/v1/pair/complete",
+            "/v1/status",
+            "/v1/capture/control",
+            "/v1/memories/manual",
+            "/v1/memories/search",
+            "/v1/memories/:memory_id",
+            "/v1/ask",
+            "/v1/feedback"
+        ],
     }))
+}
+
+fn resolve_advertised_host(bind_host: &str) -> String {
+    if !is_unspecified_host(bind_host) {
+        return bind_host.to_string();
+    }
+
+    detect_primary_lan_ipv4()
+        .map(|ip| ip.to_string())
+        .unwrap_or_else(|| LOOPBACK_HOST.to_string())
+}
+
+fn is_unspecified_host(host: &str) -> bool {
+    host == LAN_BIND_HOST
+        || host == "::"
+        || host
+            .parse::<IpAddr>()
+            .map(|ip| ip.is_unspecified())
+            .unwrap_or(false)
+}
+
+fn detect_primary_lan_ipv4() -> Option<Ipv4Addr> {
+    let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    socket.connect((Ipv4Addr::new(8, 8, 8, 8), 80)).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip),
+        _ => None,
+    }
 }
 
 async fn health_handler() -> axum::Json<serde_json::Value> {

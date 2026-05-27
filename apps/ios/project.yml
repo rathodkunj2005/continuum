@@ -1,0 +1,71 @@
+name: FNDR
+options:
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    PRODUCT_BUNDLE_IDENTIFIER: com.fndr.ios
+packages:
+  FNDRKit:
+    path: ./FNDRKit
+targets:
+  FNDR:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources:
+      - path: FNDR
+        excludes:
+          - Ask/**
+          - Capture/**
+          - Memories/**
+          - WatchBridge/**
+          - AppIntents/**
+    dependencies:
+      - package: FNDRKit
+        product: FNDRKit
+      - target: FNDR Watch
+        embed: true
+    settings:
+      base:
+        INFOPLIST_KEY_CFBundleDisplayName: FNDR
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleDefault
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: FNDR needs local network access to connect to your Mac companion runtime.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+  FNDR Watch:
+    type: application
+    platform: watchOS
+    deploymentTarget: '10.0'
+    sources:
+      - path: "FNDR Watch"
+    dependencies:
+      - package: FNDRKit
+        product: FNDRKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fndr.ios.watchkitapp
+        INFOPLIST_KEY_CFBundleDisplayName: FNDR Watch
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.fndr.ios
+        INFOPLIST_KEY_WKApplication: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  FNDR:
+    build:
+      targets:
+        FNDR: all
+    run:
+      config: Debug
+  FNDR Watch:
+    build:
+      targets:
+        FNDR Watch: all
+    run:
+      config: Debug

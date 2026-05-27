@@ -17,6 +17,9 @@ pub enum CompanionError {
     #[error("device is revoked or unknown")]
     Forbidden,
 
+    #[error("device is missing required permission: {0}")]
+    InsufficientPermission(String),
+
     #[error("pairing code is invalid or expired")]
     PairingCodeInvalid,
 
@@ -38,6 +41,9 @@ impl CompanionError {
         match self {
             CompanionError::Unauthenticated => (StatusCode::UNAUTHORIZED, "unauthenticated"),
             CompanionError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+            CompanionError::InsufficientPermission(_) => {
+                (StatusCode::FORBIDDEN, "insufficient_permission")
+            }
             CompanionError::PairingCodeInvalid => {
                 (StatusCode::BAD_REQUEST, "pairing_code_invalid")
             }

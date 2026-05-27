@@ -6,11 +6,13 @@
 //! via the caller-supplied `client_event_id`.
 
 use crate::companion::auth::device_from_extensions;
-use crate::companion::dto::{ManualMemoryRequest, ManualMemoryResponse};
+use crate::companion::dto::{DeviceType, ManualMemoryRequest, ManualMemoryResponse, MemoryDetailResponse};
 use crate::companion::errors::{CompanionError, CompanionResult};
+use crate::context_runtime::retrieval_routes::memory_record_to_search_result;
+use crate::search::MemoryCardSynthesizer;
 use crate::storage::MemoryRecord;
 use crate::AppState;
-use axum::extract::{Request, State};
+use axum::extract::{Path, Request, State};
 use axum::Json;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -46,9 +48,8 @@ pub async fn create_manual(
     }
 
     let memory_id = deterministic_memory_id(&device.device_id, &payload.client_event_id);
-    let source_type = payload
-        .source_override
-        .unwrap_or_else(|| device.device_type.manual_capture_source().to_string());
+    let source_type =
+        resolve_manual_source(device.device_type, payload.source_override.as_deref())?;
 
     let record = build_manual_record(
         &memory_id,
@@ -65,19 +66,46 @@ pub async fn create_manual(
     // text + same device + same client_event_id) silently no-ops on the second
     // attempt. The deterministic memory_id is informational; LanceDB does not
     // enforce primary key uniqueness, so we cannot rely on it alone for dedup.
-    app_state
+    let inserted = app_state
         .store
-        .insert_memory_chunk(&record)
+        .add_batch_and_get_count(std::slice::from_ref(&record))
         .await
         .map_err(|e| CompanionError::Internal(format!("insert_memory_chunk failed: {e}")))?;
 
     app_state.invalidate_memory_derived_caches();
+    let duplicate = inserted == 0;
 
     Ok(Json(ManualMemoryResponse {
         memory_id,
-        status: "indexed".to_string(),
+        status: if duplicate {
+            "duplicate".to_string()
+        } else {
+            "indexed".to_string()
+        },
         source_type,
-        duplicate: false,
+        duplicate,
+    }))
+}
+
+pub async fn get_memory(
+    State(app_state): State<Arc<AppState>>,
+    Path(memory_id): Path<String>,
+) -> CompanionResult<Json<MemoryDetailResponse>> {
+    let record = app_state
+        .store
+        .get_memory_by_id(memory_id.trim())
+        .await
+        .map_err(|e| CompanionError::Internal(format!("get_memory_by_id failed: {e}")))?
+        .ok_or(CompanionError::NotFound)?;
+
+    let search_row = memory_record_to_search_result(&record, 1.0);
+    let card = MemoryCardSynthesizer::deterministic_from_results("", &[search_row], 1)
+        .into_iter()
+        .next()
+        .ok_or_else(|| CompanionError::Internal("failed to synthesize memory detail card".into()))?;
+
+    Ok(Json(MemoryDetailResponse {
+        card: crate::companion::handlers::companion_card_from_memory_card(card),
     }))
 }
 
@@ -88,6 +116,21 @@ pub fn deterministic_memory_id(device_id: &str, client_event_id: &str) -> String
     let namespace = Uuid::NAMESPACE_OID;
     let composite = format!("companion::{}::{}", device_id, client_event_id);
     Uuid::new_v5(&namespace, composite.as_bytes()).to_string()
+}
+
+fn resolve_manual_source(
+    device_type: DeviceType,
+    source_override: Option<&str>,
+) -> CompanionResult<String> {
+    let expected_source = device_type.manual_capture_source();
+    if let Some(override_source) = source_override {
+        if override_source.trim() != expected_source {
+            return Err(CompanionError::BadRequest(format!(
+                "source_override must match authenticated device source ({expected_source})"
+            )));
+        }
+    }
+    Ok(expected_source.to_string())
 }
 
 pub(crate) fn build_manual_record(
@@ -209,5 +252,24 @@ mod tests {
         assert!(rec.app_name.contains("Anurup's iPhone"));
         assert!(rec.text.contains("Hello FNDR"));
         assert_eq!(rec.storage_outcome, "manual_capture");
+    }
+
+    #[test]
+    fn resolve_manual_source_rejects_mismatch() {
+        let err =
+            resolve_manual_source(DeviceType::Iphone, Some("watch_manual_capture")).unwrap_err();
+        assert!(matches!(err, CompanionError::BadRequest(_)));
+    }
+
+    #[test]
+    fn resolve_manual_source_accepts_nil_or_matching_override() {
+        assert_eq!(
+            resolve_manual_source(DeviceType::Watch, None).unwrap(),
+            "watch_manual_capture"
+        );
+        assert_eq!(
+            resolve_manual_source(DeviceType::Iphone, Some("iphone_manual_capture")).unwrap(),
+            "iphone_manual_capture"
+        );
     }
 }

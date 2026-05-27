@@ -17,7 +17,7 @@ local Wi-Fi.
 - Rust: `src-tauri/src/companion/`
 - Tauri commands for the desktop React UI: `src-tauri/src/ipc/commands/companion.rs`
 - React Settings panel: `src/domains/companion/CompanionDevicesPanel.tsx`
-- iOS / watchOS apps (planned slice 2+): `apps/ios/`
+- iOS / watchOS apps: `apps/ios/`
 
 ## How to run + test locally
 
@@ -31,7 +31,12 @@ cargo test --lib                    # full Rust suite
 npm run typecheck
 npx vitest run src/domains/companion
 
-# End-to-end (slice 1)
+# FNDRKit package checks (CLI-safe, no XCTest dependency)
+cd ../apps/ios/FNDRKit
+swift run FNDRKitCheck
+
+# End-to-end smoke
+cd ../../
 npm run tauri dev                   # the companion API starts on a random port
 cat ~/.fndr/companion.json          # discovery file with host/port
 # then follow api-contract.md's curl pack

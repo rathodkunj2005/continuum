@@ -315,7 +315,15 @@ pub(super) fn records_to_batch_with_text_dim(
         .map(|r| r.enrichment_status.as_str())
         .collect();
     let reviewed_at_ms: Vec<i64> = records.iter().map(|r| r.reviewed_at_ms).collect();
-    let reviewer_generations: Vec<u32> = records.iter().map(|r| r.reviewer_generation).collect();
+    let reviewer_generations: Vec<u32> = records
+        .iter()
+        .map(|r| r.reviewer_generation.parse::<u32>().unwrap_or(0))
+        .collect();
+    let fallback_reasons: Vec<Option<&str>> = records
+        .iter()
+        .map(|r| r.fallback_reason.as_deref())
+        .collect();
+    let raw_screenshot_stored: Vec<bool> = records.iter().map(|r| r.raw_screenshot_stored).collect();
 
     RecordBatch::try_new(
         schema,
@@ -431,51 +439,8 @@ pub(super) fn records_to_batch_with_text_dim(
             Arc::new(StringArray::from(enrichment_statuses)),
             Arc::new(Int64Array::from(reviewed_at_ms)),
             Arc::new(UInt32Array::from(reviewer_generations)),
-        ],
-    )
-}
-
-pub(super) fn memory_chunks_to_batch(
-    chunks: &[MemoryChunkRecord],
-    embedding_dim: i32,
-) -> Result<RecordBatch, ArrowError> {
-    let schema = Arc::new(memory_chunk_schema());
-    let ids: Vec<&str> = chunks.iter().map(|r| r.id.as_str()).collect();
-    let memory_ids: Vec<&str> = chunks.iter().map(|r| r.memory_id.as_str()).collect();
-    let chunk_indexes: Vec<u32> = chunks.iter().map(|r| r.chunk_index).collect();
-    let line_kinds: Vec<&str> = chunks.iter().map(|r| r.line_kind.as_str()).collect();
-    let texts: Vec<&str> = chunks.iter().map(|r| r.text.as_str()).collect();
-    let flat_embedding: Vec<f32> = chunks
-        .iter()
-        .flat_map(|r| r.embedding.iter().copied())
-        .collect();
-    let embedding_values = Arc::new(Float32Array::from(flat_embedding)) as Arc<dyn Array>;
-    let embedding_array = FixedSizeListArray::try_new(
-        Arc::new(Field::new("item", DataType::Float32, true)),
-        embedding_dim,
-        embedding_values,
-        None,
-    )?;
-    let created_at: Vec<i64> = chunks.iter().map(|r| r.created_at).collect();
-    let app_names: Vec<&str> = chunks.iter().map(|r| r.app_name.as_str()).collect();
-    let window_titles: Vec<&str> = chunks.iter().map(|r| r.window_title.as_str()).collect();
-    let day_buckets: Vec<&str> = chunks.iter().map(|r| r.day_bucket.as_str()).collect();
-    let content_hashes: Vec<&str> = chunks.iter().map(|r| r.content_hash.as_str()).collect();
-
-    RecordBatch::try_new(
-        schema,
-        vec![
-            Arc::new(StringArray::from(ids)),
-            Arc::new(StringArray::from(memory_ids)),
-            Arc::new(UInt32Array::from(chunk_indexes)),
-            Arc::new(StringArray::from(line_kinds)),
-            Arc::new(StringArray::from(texts)),
-            Arc::new(embedding_array),
-            Arc::new(Int64Array::from(created_at)),
-            Arc::new(StringArray::from(app_names)),
-            Arc::new(StringArray::from(window_titles)),
-            Arc::new(StringArray::from(day_buckets)),
-            Arc::new(StringArray::from(content_hashes)),
+            Arc::new(StringArray::from(fallback_reasons)),
+            Arc::new(BooleanArray::from(raw_screenshot_stored)),
         ],
     )
 }
@@ -660,8 +625,10 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
     let insight_spans = str_col(batch, "insight_spans_json");
     let insight_conf = f32_col(batch, "insight_card_confidence");
     let enrichment_statuses = str_col(batch, "enrichment_status");
-    let reviewed_at_ms_col = i64_col(batch, "reviewed_at_ms");
+    let reviewed_at = i64_col(batch, "reviewed_at_ms");
     let reviewer_generations = u32_col(batch, "reviewer_generation");
+    let fallback_reasons = str_col(batch, "fallback_reason");
+    let raw_screenshot_stored = bool_col(batch, "raw_screenshot_stored");
 
     (0..n)
         .map(|i| {
@@ -806,11 +773,11 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 embedding_text: get_str(&embedding_texts, i),
                 embedding_model: get_str(&embedding_models, i),
                 embedding_dim: get_u32(&embedding_dims, i),
-                enrichment_status: String::new(),
-                reviewed_at_ms: 0,
-                reviewer_generation: String::new(),
-                fallback_reason: None,
-                raw_screenshot_stored: false,
+                enrichment_status: get_str(&enrichment_statuses, i),
+                reviewed_at_ms: get_i64(&reviewed_at, i),
+                reviewer_generation: get_u32(&reviewer_generations, i).to_string(),
+                fallback_reason: get_opt_str(&fallback_reasons, i),
+                raw_screenshot_stored: get_bool(&raw_screenshot_stored, i),
                 is_consolidated: get_bool(&is_consolidated_flags, i),
                 is_soft_deleted: get_bool(&is_soft_deleted_flags, i),
                 parent_id: get_opt_str(&parent_ids, i),
