@@ -15,8 +15,8 @@ describe("wallpaper-registry", () => {
         expect(isWallpaperId(null)).toBe(false);
     });
 
-    it("defaults to nebula drift", () => {
-        expect(DEFAULT_WALLPAPER).toBe("nebula");
-        expect(WALLPAPERS.nebula.name).toBe("Nebula Drift");
+    it("defaults to aurora", () => {
+        expect(DEFAULT_WALLPAPER).toBe("aurora");
+        expect(WALLPAPERS.aurora.name).toBe("Aurora");
     });
 });

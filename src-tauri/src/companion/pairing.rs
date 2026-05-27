@@ -22,7 +22,14 @@ pub const PAIRING_TTL_MS: i64 = 5 * 60_000;
 
 const PAIRING_CODE_LEN: usize = 6;
 const ACCESS_TOKEN_LEN: usize = 48;
-const DEFAULT_PERMISSIONS: &[&str] = &["ask", "search", "manual_capture", "capture_control"];
+const DEFAULT_PERMISSIONS: &[&str] = &[
+    "ask",
+    "search",
+    "status",
+    "manual_capture",
+    "capture_control",
+    "feedback",
+];
 
 /// Single outstanding pairing offer keyed by the short numeric code.
 #[derive(Debug, Clone)]

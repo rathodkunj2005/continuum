@@ -279,6 +279,8 @@ pub fn memory_schema_for_text_dim(text_embed_dim: i32) -> Schema {
         Field::new("enrichment_status", DataType::Utf8, false),
         Field::new("reviewed_at_ms", DataType::Int64, false),
         Field::new("reviewer_generation", DataType::UInt32, false),
+        Field::new("fallback_reason", DataType::Utf8, true),
+        Field::new("raw_screenshot_stored", DataType::Boolean, false),
     ])
 }
 

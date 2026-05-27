@@ -42,6 +42,10 @@ meetings/
 # Migration artifacts
 *.migrated
 
+# Swift Package Manager build artifacts
+.build/
+apps/ios/FNDRKit/.build/
+
 # Build output
 build/
 
@@ -52,6 +56,7 @@ apps/ios/build/
 apps/ios/*.xcresult
 apps/ios/**/*.xcresult
 apps/ios/.swiftpm/
+DerivedData/
 xcuserdata/
 *.xcuserstate
 *.xcworkspace/xcuserdata/

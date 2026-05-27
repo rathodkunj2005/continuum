@@ -316,6 +316,11 @@ pub(super) fn records_to_batch_with_text_dim(
         .collect();
     let reviewed_at_ms: Vec<i64> = records.iter().map(|r| r.reviewed_at_ms).collect();
     let reviewer_generations: Vec<u32> = records.iter().map(|r| r.reviewer_generation).collect();
+    let fallback_reasons: Vec<Option<&str>> = records
+        .iter()
+        .map(|r| r.fallback_reason.as_deref())
+        .collect();
+    let raw_screenshot_stored: Vec<bool> = records.iter().map(|r| r.raw_screenshot_stored).collect();
 
     RecordBatch::try_new(
         schema,
@@ -431,6 +436,8 @@ pub(super) fn records_to_batch_with_text_dim(
             Arc::new(StringArray::from(enrichment_statuses)),
             Arc::new(Int64Array::from(reviewed_at_ms)),
             Arc::new(UInt32Array::from(reviewer_generations)),
+            Arc::new(StringArray::from(fallback_reasons)),
+            Arc::new(BooleanArray::from(raw_screenshot_stored)),
         ],
     )
 }
@@ -662,6 +669,8 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
     let enrichment_statuses = str_col(batch, "enrichment_status");
     let reviewed_at_ms_col = i64_col(batch, "reviewed_at_ms");
     let reviewer_generations = u32_col(batch, "reviewer_generation");
+    let fallback_reasons = str_col(batch, "fallback_reason");
+    let raw_screenshot_stored = bool_col(batch, "raw_screenshot_stored");
 
     (0..n)
         .map(|i| {
@@ -809,8 +818,8 @@ pub(super) fn batch_to_memory_records(batch: &RecordBatch) -> Vec<MemoryRecord> 
                 enrichment_status: get_str(&enrichment_statuses, i),
                 reviewed_at_ms: reviewed_at_ms_col.as_ref().map(|c| c.value(i)).unwrap_or(0),
                 reviewer_generation: get_u32(&reviewer_generations, i),
-                fallback_reason: None,
-                raw_screenshot_stored: false,
+                fallback_reason: get_opt_str(&fallback_reasons, i),
+                raw_screenshot_stored: get_bool(&raw_screenshot_stored, i),
                 is_consolidated: get_bool(&is_consolidated_flags, i),
                 is_soft_deleted: get_bool(&is_soft_deleted_flags, i),
                 parent_id: get_opt_str(&parent_ids, i),

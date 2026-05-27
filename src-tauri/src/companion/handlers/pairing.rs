@@ -1,7 +1,7 @@
 //! Pairing endpoints — the only routes mounted *without* the auth middleware.
 //!
-//! `POST /v1/pair/start` is reserved for the Mac-side React UI and is mounted
-//! on a loopback-only sub-router. iOS only ever hits `POST /v1/pair/complete`
+//! `POST /v1/pair/start` is reserved for the Mac-side React UI. iOS only ever
+//! hits `POST /v1/pair/complete`
 //! with the short code it scanned from the Mac's QR.
 
 use crate::companion::dto::{PairCompleteRequest, PairCompleteResponse, PairStartResponse};
