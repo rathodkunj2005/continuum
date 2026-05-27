@@ -35,6 +35,7 @@ pub struct QueryProfile {
 
 #[derive(Debug, Clone, Default)]
 struct FusionSignals {
+    chunk_score: Option<f32>,
     semantic_score: Option<f32>,
     snippet_score: Option<f32>,
     keyword_score: Option<f32>,
@@ -434,12 +435,17 @@ impl HybridSearcher {
         );
 
         let mut route_plan = plan_query(query, &PlanHints::default());
-        route_plan.retrieval_routes = vec![Route::Vector, Route::Keyword];
+        route_plan.retrieval_routes = if search_config.use_chunk_first_retrieval {
+            vec![Route::Chunk, Route::Vector, Route::Keyword]
+        } else {
+            vec![Route::Vector, Route::Keyword]
+        };
         let route_ctx = RouteCtx::new(store, &search_config)
             .with_embedder(embedder)
             .with_limits(limit, time_filter, app_filter, expansion);
         let route_hits = RouteRunner::dispatch(&route_plan, &route_ctx).await;
 
+        let mut chunk_results = Vec::new();
         let mut semantic_results = Vec::new();
         let mut snippet_results = Vec::new();
         let mut keyword_results = Vec::new();
@@ -457,6 +463,7 @@ impl HybridSearcher {
                     continue;
                 };
                 match hit.signals.branch {
+                    RouteBranch::Chunk => chunk_results.push(result),
                     RouteBranch::Semantic => semantic_results.push(result),
                     RouteBranch::Snippet => snippet_results.push(result),
                     RouteBranch::Keyword => keyword_results.push(result),
@@ -466,6 +473,7 @@ impl HybridSearcher {
         }
 
         tracing::info!(
+            chunk_count = chunk_results.len(),
             semantic_count = semantic_results.len(),
             snippet_count = snippet_results.len(),
             keyword_count = keyword_results.len(),
@@ -478,6 +486,7 @@ impl HybridSearcher {
 
         let fused = Self::hybrid_fusion(
             &profile,
+            &chunk_results,
             &semantic_results,
             &snippet_results,
             &keyword_results,
@@ -503,12 +512,13 @@ impl HybridSearcher {
     ) -> Vec<SearchResult> {
         let profile = QueryProfile::from_query(query);
         let config = SearchConfig::default();
-        let fused = Self::hybrid_fusion(&profile, semantic, &[], keyword, &config);
+        let fused = Self::hybrid_fusion(&profile, &[], semantic, &[], keyword, &config);
         Self::rerank_with_profile(&profile, fused, limit, &config)
     }
 
     fn hybrid_fusion(
         profile: &QueryProfile,
+        chunk: &[SearchResult],
         semantic: &[SearchResult],
         snippet: &[SearchResult],
         keyword: &[SearchResult],
@@ -517,12 +527,42 @@ impl HybridSearcher {
         let mut signals: HashMap<String, FusionSignals> = HashMap::new();
         let mut candidates: HashMap<String, SearchResult> = HashMap::new();
 
+        for result in chunk {
+            candidates
+                .entry(result.id.clone())
+                .and_modify(|existing| {
+                    if result.score > existing.score {
+                        replace_preserving_retrieval_fields(existing, result);
+                    } else {
+                        merge_additive_retrieval_fields(existing, result);
+                    }
+                })
+                .or_insert_with(|| result.clone());
+
+            signals
+                .entry(result.id.clone())
+                .and_modify(|signal| {
+                    signal.chunk_score = Some(
+                        signal
+                            .chunk_score
+                            .map(|current| current.max(result.score))
+                            .unwrap_or(result.score),
+                    );
+                })
+                .or_insert_with(|| FusionSignals {
+                    chunk_score: Some(result.score),
+                    ..FusionSignals::default()
+                });
+        }
+
         for result in semantic {
             candidates
                 .entry(result.id.clone())
                 .and_modify(|existing| {
                     if result.score > existing.score {
-                        *existing = result.clone();
+                        replace_preserving_retrieval_fields(existing, result);
+                    } else {
+                        merge_additive_retrieval_fields(existing, result);
                     }
                 })
                 .or_insert_with(|| result.clone());
@@ -548,7 +588,9 @@ impl HybridSearcher {
                 .entry(result.id.clone())
                 .and_modify(|existing| {
                     if result.score > existing.score {
-                        *existing = result.clone();
+                        replace_preserving_retrieval_fields(existing, result);
+                    } else {
+                        merge_additive_retrieval_fields(existing, result);
                     }
                 })
                 .or_insert_with(|| result.clone());
@@ -574,7 +616,9 @@ impl HybridSearcher {
                 .entry(result.id.clone())
                 .and_modify(|existing| {
                     if result.score > existing.score {
-                        *existing = result.clone();
+                        replace_preserving_retrieval_fields(existing, result);
+                    } else {
+                        merge_additive_retrieval_fields(existing, result);
                     }
                 })
                 .or_insert_with(|| result.clone());
@@ -628,8 +672,12 @@ impl HybridSearcher {
             }
         }
 
-        let has_semantic_signals = !semantic.is_empty() || !snippet.is_empty();
+        let has_semantic_signals = !chunk.is_empty() || !semantic.is_empty() || !snippet.is_empty();
 
+        let chunk_values = signals
+            .values()
+            .map(|s| s.chunk_score.unwrap_or(0.0))
+            .collect::<Vec<_>>();
         let semantic_values = signals
             .values()
             .map(|s| s.semantic_score.unwrap_or(0.0))
@@ -643,6 +691,7 @@ impl HybridSearcher {
             .map(|s| s.lexical_score)
             .collect::<Vec<_>>();
 
+        let chunk_range = value_range(&chunk_values);
         let semantic_range = value_range(&semantic_values);
         let snippet_range = value_range(&snippet_values);
         let lexical_range = value_range(&lexical_values);
@@ -651,6 +700,7 @@ impl HybridSearcher {
         for (id, mut result) in candidates {
             let signal = signals.get(&id).cloned().unwrap_or_default();
 
+            let chunk_norm = normalize_range(signal.chunk_score.unwrap_or(0.0), chunk_range);
             let semantic_norm =
                 normalize_range(signal.semantic_score.unwrap_or(0.0), semantic_range);
             let snippet_norm = normalize_range(signal.snippet_score.unwrap_or(0.0), snippet_range);
@@ -658,7 +708,8 @@ impl HybridSearcher {
 
             let (semantic_weight, snippet_weight, lexical_weight) =
                 fusion_weights(profile, has_semantic_signals, search_config);
-            let mut score = semantic_norm * semantic_weight
+            let vector_norm = semantic_norm.max(chunk_norm);
+            let mut score = vector_norm * semantic_weight
                 + snippet_norm * snippet_weight
                 + lexical_norm * lexical_weight;
             score += signal.coverage * 0.12;
@@ -673,8 +724,13 @@ impl HybridSearcher {
                 score *= 0.72;
             }
 
-            if signal.semantic_score.is_some() && signal.keyword_score.is_some() {
+            if (signal.semantic_score.is_some() || signal.chunk_score.is_some())
+                && signal.keyword_score.is_some()
+            {
                 score += 0.05;
+            }
+            if signal.chunk_score.is_some() {
+                score += 0.04;
             }
 
             if profile.intent == QueryIntent::Definition
@@ -1067,10 +1123,22 @@ fn apply_relevance_gate(
 }
 
 fn candidate_text(result: &SearchResult) -> String {
-    if !result.clean_text.trim().is_empty() {
+    let base = if !result.clean_text.trim().is_empty() {
         result.clean_text.clone()
     } else {
         result.text.clone()
+    };
+    let chunk_text = result
+        .chunk_evidence
+        .iter()
+        .map(|evidence| evidence.text.trim())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if chunk_text.is_empty() {
+        base
+    } else {
+        format!("{chunk_text} {base}")
     }
 }
 
@@ -1082,6 +1150,43 @@ fn merged_candidate_text(result: &SearchResult) -> String {
         result.snippet,
         result.url.clone().unwrap_or_default()
     )
+}
+
+fn merge_additive_retrieval_fields(target: &mut SearchResult, source: &SearchResult) {
+    for route in &source.matched_routes {
+        if !target
+            .matched_routes
+            .iter()
+            .any(|existing| existing == route)
+        {
+            target.matched_routes.push(route.clone());
+        }
+    }
+    for chunk_id in &source.matched_chunk_ids {
+        if !target
+            .matched_chunk_ids
+            .iter()
+            .any(|existing| existing == chunk_id)
+        {
+            target.matched_chunk_ids.push(chunk_id.clone());
+        }
+    }
+    for evidence in &source.chunk_evidence {
+        if !target
+            .chunk_evidence
+            .iter()
+            .any(|existing| existing.chunk_id == evidence.chunk_id)
+        {
+            target.chunk_evidence.push(evidence.clone());
+        }
+    }
+}
+
+fn replace_preserving_retrieval_fields(target: &mut SearchResult, replacement: &SearchResult) {
+    let previous = target.clone();
+    *target = replacement.clone();
+    merge_additive_retrieval_fields(target, &previous);
+    merge_additive_retrieval_fields(target, replacement);
 }
 
 fn session_key(result: &SearchResult) -> String {
@@ -1958,6 +2063,7 @@ mod tests {
         let profile = QueryProfile::from_query("hybrid search ranking");
         let fused = HybridSearcher::hybrid_fusion(
             &profile,
+            &[],
             &semantic,
             &[],
             &keyword,
@@ -1971,6 +2077,57 @@ mod tests {
         assert!(ids.contains(&"semantic-only"));
         assert!(ids.contains(&"keyword-only"));
         assert_eq!(ids.iter().filter(|id| **id == "shared").count(), 1);
+    }
+
+    #[test]
+    fn hybrid_fusion_preserves_chunk_and_keyword_signals() {
+        let mut chunk_hit = sr(
+            "shared",
+            "Chunk note",
+            "Parent text without the exact retrieval phrase",
+            0.88,
+        );
+        chunk_hit.matched_routes = vec!["Chunk".to_string()];
+        chunk_hit.matched_chunk_ids = vec!["chunk-1".to_string()];
+        chunk_hit.chunk_evidence = vec![crate::storage::MatchedChunkEvidence {
+            chunk_id: "chunk-1".to_string(),
+            memory_id: "shared".to_string(),
+            chunk_index: 2,
+            text: "Needle phrase from the winning child chunk".to_string(),
+            score: 0.88,
+            distance: 0.12,
+            app_name: "Chrome".to_string(),
+            window_title: "Chunk note".to_string(),
+            day_bucket: "2026-05-20".to_string(),
+        }];
+        let keyword = vec![sr(
+            "keyword-only",
+            "Keyword note",
+            "Keyword exact match for needle phrase",
+            0.71,
+        )];
+
+        let profile = QueryProfile::from_query("needle phrase");
+        let fused = HybridSearcher::hybrid_fusion(
+            &profile,
+            &[chunk_hit],
+            &[],
+            &[],
+            &keyword,
+            &SearchConfig::default(),
+        );
+
+        let shared = fused
+            .iter()
+            .find(|result| result.id == "shared")
+            .expect("chunk parent survives fusion");
+        assert_eq!(shared.matched_routes, vec!["Chunk"]);
+        assert_eq!(shared.matched_chunk_ids, vec!["chunk-1"]);
+        assert!(shared
+            .chunk_evidence
+            .iter()
+            .any(|evidence| evidence.text.contains("winning child chunk")));
+        assert!(fused.iter().any(|result| result.id == "keyword-only"));
     }
 
     #[test]

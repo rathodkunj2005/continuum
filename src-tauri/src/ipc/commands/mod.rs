@@ -46,6 +46,9 @@ pub use graph::*;
 mod glasses_import;
 pub use glasses_import::*;
 
+mod daily_review;
+pub use daily_review::*;
+
 pub mod debug;
 pub use debug::{get_memory_timeline_thread, inspect_memory_pipeline};
 
@@ -54,6 +57,9 @@ pub use retrieval::{
     fndr_answer, fndr_build_context_pack, fndr_get_memory_subgraph, fndr_get_related_memories,
     fndr_quality_status, fndr_search, fndr_timeline,
 };
+
+mod companion;
+pub use companion::*;
 
 #[cfg(test)]
 mod daily_summary_tests {

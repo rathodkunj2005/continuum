@@ -417,6 +417,62 @@ pub fn compose_import_memory_context_with_title(
     }
 }
 
+pub fn visual_semantics_is_grounded(
+    insight: &ImageSemanticInsight,
+    ocr_included: bool,
+    vlm_route: &str,
+    vlm_block_reason: Option<&str>,
+) -> bool {
+    if ocr_included {
+        return true;
+    }
+    if vlm_route != "fallback_ocr_only" {
+        return true;
+    }
+    if vlm_block_reason
+        .map(|reason| reason.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return true;
+    }
+    let has_visual_semantics = !insight.visible_objects.is_empty()
+        || !insight.people_roles.is_empty()
+        || !insight.entities.is_empty()
+        || !insight.actions.is_empty();
+    let is_ocr_only = insight.model_id.trim().is_empty() || insight.model_id == "ocr_only";
+    !(is_ocr_only && !has_visual_semantics)
+}
+
+pub fn compose_failed_visual_semantics_import_metadata(
+    filename: &str,
+    source: ImageImportSource,
+    reason: Option<&str>,
+) -> ImportMemoryText {
+    let reason = reason
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("visual_semantics_unavailable");
+    let memory_context = format!(
+        "Visual semantics failed for imported image: {filename}. Metadata only; not semantically enriched."
+    );
+    ImportMemoryText {
+        memory_context: memory_context.clone(),
+        embedding_text: format!(
+            "VISUAL_SEMANTICS_FAILED source:{} file:{} reason:{}",
+            source.api_label(),
+            filename,
+            reason
+        ),
+        search_aliases: Vec::new(),
+        topic: "visual_semantics_failed".to_string(),
+        activity_type: "unknown".to_string(),
+        user_intent: "unknown".to_string(),
+        insight_what_happened: String::new(),
+        insight_why_mattered: String::new(),
+        topic_categories: Vec::new(),
+    }
+}
+
 /// Extract action verb from activity_type deterministically.
 /// Maps activity type to specific, past-tense action verbs.
 /// Returns (verb, confidence) tuple.
@@ -1621,6 +1677,60 @@ mod tests {
             "llm_ocr_grounded insight must not duplicate the OCR: {}",
             composed.memory_context
         );
+    }
+
+    #[test]
+    fn visual_semantics_grounding_rejects_blocked_empty_ocr_fallback() {
+        let insight = insight_from_ocr_only("profile.jpeg", None, None, "");
+
+        assert!(!visual_semantics_is_grounded(
+            &insight,
+            false,
+            "fallback_ocr_only",
+            Some("vlm_blocked_low_ram")
+        ));
+    }
+
+    #[test]
+    fn visual_semantics_grounding_accepts_ocr_or_vlm_semantics() {
+        let mut insight = insight_from_ocr_only(
+            "receipt.jpeg",
+            Some("Meta glasses import"),
+            None,
+            "Receipt total $12.49",
+        );
+        assert!(visual_semantics_is_grounded(
+            &insight,
+            true,
+            "fallback_ocr_only",
+            Some("vlm_blocked_low_ram")
+        ));
+
+        insight.model_id = "qwen3-vl-2b".to_string();
+        insight.visible_objects = vec!["laptop".to_string()];
+        assert!(visual_semantics_is_grounded(
+            &insight,
+            false,
+            "run_qwen_vlm",
+            None
+        ));
+    }
+
+    #[test]
+    fn failed_visual_semantics_metadata_has_failure_marker_without_fake_aliases() {
+        let composed = compose_failed_visual_semantics_import_metadata(
+            "github-profile.jpeg",
+            ImageImportSource::MetaGlasses,
+            Some("vlm_blocked_low_ram"),
+        );
+
+        assert_eq!(composed.search_aliases.len(), 0);
+        assert_eq!(composed.activity_type, "unknown");
+        assert!(composed.embedding_text.contains("VISUAL_SEMANTICS_FAILED"));
+        assert!(!composed
+            .memory_context
+            .contains("No supporting text was visible on screen"));
+        assert!(!composed.memory_context.contains("The OCR text indicates"));
     }
 
     #[test]

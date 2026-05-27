@@ -1,5 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { getRuntimeMetrics, type RuntimeMetricsSnapshot } from "@/shared/ipc/tauri";
+import {
+    getMemoryReviewStatus,
+    getRuntimeMetrics,
+    type MemoryReviewWorkerStatus,
+    type RuntimeMetricsSnapshot,
+} from "@/shared/ipc/tauri";
 import { usePolling } from "@/shared/hooks/usePolling";
 import "./PipelineInspectorPanel.css";
 
@@ -39,6 +44,7 @@ interface EngineMetricsCardProps {
 export function EngineMetricsCard({ enabled, title }: EngineMetricsCardProps) {
     const [runtimeMetrics, setRuntimeMetrics] = useState<RuntimeMetricsSnapshot | null>(null);
     const [runtimeMetricsError, setRuntimeMetricsError] = useState<string | null>(null);
+    const [reviewStatus, setReviewStatus] = useState<MemoryReviewWorkerStatus | null>(null);
 
     const loadRuntimeMetrics = useCallback(async (isMounted: () => boolean) => {
         try {
@@ -54,7 +60,17 @@ export function EngineMetricsCard({ enabled, title }: EngineMetricsCardProps) {
         }
     }, []);
 
+    const loadReviewStatus = useCallback(async (isMounted: () => boolean) => {
+        try {
+            const status = await getMemoryReviewStatus();
+            if (isMounted()) setReviewStatus(status);
+        } catch {
+            // Best-effort surface — never block the primary metrics panel.
+        }
+    }, []);
+
     usePolling(loadRuntimeMetrics, 3000, enabled);
+    usePolling(loadReviewStatus, 5000, enabled);
 
     const system = runtimeMetrics?.system;
     const modelMemory = useMemo(() => {
@@ -95,6 +111,31 @@ export function EngineMetricsCard({ enabled, title }: EngineMetricsCardProps) {
                                 ? runtimeMetrics.inference.loaded_model_id ?? "loaded"
                                 : "not loaded"}
                         </strong>
+                        {reviewStatus && (
+                            <>
+                                <span>Memory review</span>
+                                <strong
+                                    data-testid="memory-review-status"
+                                    title={
+                                        reviewStatus.last_error_kind
+                                            ? `last error: ${reviewStatus.last_error_kind}`
+                                            : reviewStatus.pressure_blocked
+                                            ? "blocked by system pressure / inference unavailable"
+                                            : reviewStatus.worker_enabled
+                                            ? "running"
+                                            : "disabled"
+                                    }
+                                >
+                                    {reviewStatus.worker_enabled
+                                        ? reviewStatus.pressure_blocked
+                                            ? "deferred"
+                                            : "running"
+                                        : "off"}
+                                    {" · queue "}
+                                    {reviewStatus.queue_depth}
+                                </strong>
+                            </>
+                        )}
                     </div>
 
                     {system && (

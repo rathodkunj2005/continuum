@@ -5,13 +5,17 @@ use crate::capture::{
     continuity_anchor_for_memory, eligible_for_story_merge, merge_memory_records_with_policy,
     passes_merge_threshold, score_memory_candidate,
 };
+use crate::embedding::prefixes::prefix_document_for_index;
+use crate::embedding::{select_salient_memory_chunks, Embedder, EmbeddingBackend};
+use crate::inference::model_config::{embedding_v5_contract, FNDR_MODEL_PROFILE};
 use crate::memory_compaction::{
-    best_embedding_text, best_snippet_embedding_text, best_support_embedding_texts,
+    best_embedding_text, best_snippet_embedding_text, best_support_embedding_texts_with_config,
     compact_memory_record_payload, is_low_signal_embedding, mean_pool_embeddings,
 };
-use crate::storage::MemoryRecord;
+use crate::storage::{MemoryChunkRecord, MemoryRecord, MEMORIES_TABLE, MEMORIES_V5_PARENT_TABLE};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -60,6 +64,24 @@ pub struct StorageHealth {
     pub dev_build_cache_bytes: u64,
     pub runtime_total_bytes: u64,
     pub measured_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReindexMemoriesV5Summary {
+    pub source_table: String,
+    pub target_table: String,
+    pub model_name: String,
+    pub dimension: usize,
+    pub source_total: usize,
+    pub already_indexed: usize,
+    pub reindexed: usize,
+    #[serde(default)]
+    pub chunks_reindexed: usize,
+    #[serde(default)]
+    pub chunk_failures: usize,
+    pub skipped_empty: usize,
+    pub failed: usize,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +140,360 @@ const STORAGE_RECLAIM_HEARTBEAT_MS: u64 = 850;
 const STORAGE_RECLAIM_EMBED_BATCH: usize = 48;
 static MEMORY_REPAIR_RUNNING: AtomicBool = AtomicBool::new(false);
 static STORAGE_RECLAIM_RUNNING: AtomicBool = AtomicBool::new(false);
+static V5_REINDEX_RUNNING: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub async fn reindex_memories_v5(
+    state: State<'_, Arc<AppState>>,
+) -> Result<ReindexMemoriesV5Summary, String> {
+    reindex_memories_v5_for_state(state.inner().clone()).await
+}
+
+async fn reindex_memories_v5_for_state(
+    state: Arc<AppState>,
+) -> Result<ReindexMemoriesV5Summary, String> {
+    if V5_REINDEX_RUNNING.swap(true, Ordering::AcqRel) {
+        return Err("BGE v5 memory reindex is already running".to_string());
+    }
+    struct V5ReindexRunGuard;
+    impl Drop for V5ReindexRunGuard {
+        fn drop(&mut self) {
+            V5_REINDEX_RUNNING.store(false, Ordering::Release);
+        }
+    }
+    let _run_guard = V5ReindexRunGuard;
+
+    let contract = embedding_v5_contract();
+    let mut status = bge_v5_resource_status();
+    let embedder = Embedder::new_bge_v5_for_reindex().map_err(|err| {
+        format!(
+            "BGE v5 reindex unavailable for {}: {}. Install {} and {} with scripts/bootstrap/download-embedding-model.sh. No v5 rows were written.",
+            FNDR_MODEL_PROFILE,
+            err,
+            contract.model_filename,
+            contract.tokenizer_filename
+        )
+    })?;
+    if !matches!(embedder.backend(), EmbeddingBackend::Real)
+        || embedder.dimension() != contract.dimensions
+    {
+        return Err(format!(
+            "BGE v5 reindex refused: backend={:?} dimension={} expected {}. No fallback across embedding dimensions is allowed.",
+            embedder.backend(),
+            embedder.dimension(),
+            contract.dimensions
+        ));
+    }
+
+    let source = state
+        .store
+        .list_all_memories()
+        .await
+        .map_err(|err| err.to_string())?;
+    let mut existing = state
+        .store
+        .list_v5_reindex_identities()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let mut already_indexed = 0usize;
+    let mut skipped_empty = 0usize;
+    let mut failed = 0usize;
+    let mut reindexed = 0usize;
+    let mut chunks_reindexed = 0usize;
+    let mut chunk_failures = 0usize;
+    let mut pending = Vec::new();
+    let mut pending_chunks = Vec::new();
+    let chunking_config = state.config.read().chunking.clone();
+
+    for memory in &source {
+        if should_skip_v5_reindex(memory, &existing) {
+            already_indexed = already_indexed.saturating_add(1);
+            continue;
+        }
+
+        match build_v5_reindexed_record(memory, &embedder, &chunking_config) {
+            Ok(Some(mut record)) => {
+                match build_v5_memory_chunks(memory, &embedder, &chunking_config) {
+                    Ok(chunks) => {
+                        if let Some(best_chunk) = chunks.first() {
+                            record.embedding = best_chunk.embedding.clone();
+                        }
+                        chunks_reindexed = chunks_reindexed.saturating_add(chunks.len());
+                        pending_chunks.extend(chunks);
+                    }
+                    Err(err) => {
+                        chunk_failures = chunk_failures.saturating_add(1);
+                        tracing::warn!(
+                            memory_id = %memory.id,
+                            error = %err,
+                            "bge_v5_reindex: failed to build memory chunks; parent row will still be written"
+                        );
+                    }
+                }
+                existing.insert(v5_reindex_identity(memory));
+                pending.push(record);
+                reindexed = reindexed.saturating_add(1);
+            }
+            Ok(None) => {
+                skipped_empty = skipped_empty.saturating_add(1);
+            }
+            Err(err) => {
+                failed = failed.saturating_add(1);
+                tracing::warn!(
+                    memory_id = %memory.id,
+                    error = %err,
+                    "bge_v5_reindex: failed to embed memory"
+                );
+            }
+        }
+    }
+
+    if !pending.is_empty() {
+        state
+            .store
+            .add_v5_batch_preserving_ids(&pending)
+            .await
+            .map_err(|err| err.to_string())?;
+    }
+    for memory in &pending {
+        state
+            .store
+            .delete_chunks_for_memory(&memory.id)
+            .await
+            .map_err(|err| err.to_string())?;
+    }
+    if !pending_chunks.is_empty() {
+        state
+            .store
+            .upsert_memory_chunks(&pending_chunks)
+            .await
+            .map_err(|err| err.to_string())?;
+    }
+
+    if failed > 0 {
+        status = format!("{status}; completed with {failed} embedding failures");
+    }
+    if chunk_failures > 0 {
+        status = format!("{status}; completed with {chunk_failures} chunk failures");
+    }
+
+    Ok(ReindexMemoriesV5Summary {
+        source_table: MEMORIES_TABLE.to_string(),
+        target_table: MEMORIES_V5_PARENT_TABLE.to_string(),
+        model_name: contract.model_id.to_string(),
+        dimension: contract.dimensions,
+        source_total: source.len(),
+        already_indexed,
+        reindexed,
+        chunks_reindexed,
+        chunk_failures,
+        skipped_empty,
+        failed,
+        status,
+    })
+}
+
+fn build_v5_memory_chunks(
+    source: &MemoryRecord,
+    embedder: &Embedder,
+    chunking: &crate::config::ChunkingConfig,
+) -> Result<Vec<MemoryChunkRecord>, String> {
+    let clean_text = if source.clean_text.trim().is_empty() {
+        source.text.as_str()
+    } else {
+        source.clean_text.as_str()
+    };
+    if clean_text.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let selected = select_salient_memory_chunks(
+        chunking,
+        &source.app_name,
+        &source.window_title,
+        clean_text,
+        chunking.max_chunks_per_memory,
+    );
+    if selected.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let prefixed = selected
+        .iter()
+        .map(|chunk| prefix_document_for_index(&chunk.text))
+        .collect::<Vec<_>>();
+    let vectors = embedder.embed_batch(&prefixed)?;
+    if vectors.len() != selected.len() {
+        return Err(format!(
+            "BGE v5 returned {} chunk vectors for {} chunks",
+            vectors.len(),
+            selected.len()
+        ));
+    }
+
+    let now = chrono::Utc::now().timestamp_millis();
+    selected
+        .into_iter()
+        .zip(vectors.into_iter())
+        .map(|(chunk, embedding)| {
+            if embedding.len() != embedding_v5_contract().dimensions {
+                return Err(format!(
+                    "BGE v5 produced wrong chunk vector dimensions for memory {}",
+                    source.id
+                ));
+            }
+            let content_hash = memory_chunk_content_hash(source, &chunk.text);
+            Ok(MemoryChunkRecord {
+                id: format!(
+                    "{}:chunk:{:04}:{}",
+                    source.id,
+                    chunk.chunk_index,
+                    content_hash.chars().take(12).collect::<String>()
+                ),
+                memory_id: source.id.clone(),
+                chunk_index: chunk.chunk_index as u32,
+                line_kind: chunk.line_kind.to_string(),
+                text: chunk.text,
+                embedding,
+                created_at: now,
+                app_name: source.app_name.clone(),
+                window_title: source.window_title.clone(),
+                day_bucket: source.day_bucket.clone(),
+                content_hash,
+            })
+        })
+        .collect()
+}
+
+fn memory_chunk_content_hash(source: &MemoryRecord, chunk_text: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(source.id.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(source.content_hash.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(chunk_text.trim().as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn build_v5_reindexed_record(
+    source: &MemoryRecord,
+    embedder: &Embedder,
+    chunking: &crate::config::ChunkingConfig,
+) -> Result<Option<MemoryRecord>, String> {
+    let primary_text = best_embedding_text(source);
+    if primary_text.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let mut record = compact_memory_record_payload(source);
+    record.embedding_text = primary_text.clone();
+    record.embedding = embedder
+        .embed_batch(&[prefix_document_for_index(&primary_text)])
+        .and_then(|mut vectors| {
+            vectors
+                .pop()
+                .ok_or_else(|| "BGE v5 primary embedding returned no vector".to_string())
+        })?;
+
+    let snippet_text = best_snippet_embedding_text(source);
+    record.snippet_embedding = if snippet_text.trim().is_empty() {
+        record.embedding.clone()
+    } else {
+        embedder
+            .embed_batch(&[prefix_document_for_index(&snippet_text)])
+            .and_then(|mut vectors| {
+                vectors
+                    .pop()
+                    .ok_or_else(|| "BGE v5 snippet embedding returned no vector".to_string())
+            })?
+    };
+
+    let support_inputs = best_support_embedding_texts_with_config(source, Some(chunking));
+    record.support_embedding = if support_inputs.is_empty() {
+        record.embedding.clone()
+    } else {
+        let prefixed = support_inputs
+            .iter()
+            .map(|text| prefix_document_for_index(text))
+            .collect::<Vec<_>>();
+        let vectors = embedder.embed_batch(&prefixed)?;
+        mean_pool_embeddings(&vectors)
+    };
+
+    record.embedding_model = embedding_v5_contract().model_id.to_string();
+    record.embedding_dim = embedding_v5_contract().dimensions as u32;
+
+    if record.embedding.len() != embedding_v5_contract().dimensions
+        || record.snippet_embedding.len() != embedding_v5_contract().dimensions
+        || record.support_embedding.len() != embedding_v5_contract().dimensions
+    {
+        return Err(format!(
+            "BGE v5 produced wrong vector dimensions for memory {}",
+            source.id
+        ));
+    }
+
+    Ok(Some(record))
+}
+
+fn bge_v5_resource_status() -> String {
+    if FNDR_MODEL_PROFILE == "m1_8gb_default" {
+        "BGE v5 load is deferred until this explicit reindex command on m1_8gb_default; startup and live search remain v4 MiniLM".to_string()
+    } else {
+        "BGE v5 load is explicit to the reindex command; startup and live search remain v4 MiniLM"
+            .to_string()
+    }
+}
+
+fn v5_reindex_identity(memory: &MemoryRecord) -> String {
+    if !memory.content_hash.trim().is_empty() {
+        return format!("content:{}", memory.content_hash.trim());
+    }
+    if !memory.dedup_fingerprint.trim().is_empty() {
+        return format!("dedup:{}", memory.dedup_fingerprint.trim());
+    }
+    format!("id:{}", memory.id.trim())
+}
+
+fn should_skip_v5_reindex(memory: &MemoryRecord, existing: &HashSet<String>) -> bool {
+    existing.contains(&v5_reindex_identity(memory))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v5_reindex_identity_prefers_content_hash_for_idempotency() {
+        let mut memory = MemoryRecord {
+            id: "memory-id".to_string(),
+            content_hash: "stable-content".to_string(),
+            dedup_fingerprint: "dedup:other".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(v5_reindex_identity(&memory), "content:stable-content");
+
+        memory.content_hash.clear();
+        assert_eq!(v5_reindex_identity(&memory), "dedup:dedup:other");
+
+        memory.dedup_fingerprint.clear();
+        assert_eq!(v5_reindex_identity(&memory), "id:memory-id");
+    }
+
+    #[test]
+    fn v5_reindex_skip_helper_is_idempotent() {
+        let memory = MemoryRecord {
+            id: "memory-id".to_string(),
+            content_hash: "stable-content".to_string(),
+            ..Default::default()
+        };
+        let existing = HashSet::from(["content:stable-content".to_string()]);
+
+        assert!(should_skip_v5_reindex(&memory, &existing));
+        assert!(!should_skip_v5_reindex(&memory, &HashSet::new()));
+    }
+}
 
 #[tauri::command]
 pub async fn run_memory_repair_backfill(
@@ -502,7 +878,9 @@ async fn run_memory_repair_backfill_for_state(
         }
 
         if is_low_signal_embedding(&memory.support_embedding) {
-            let support_inputs = best_support_embedding_texts(memory);
+            let chunking_config = state.config.read().chunking.clone();
+            let support_inputs =
+                best_support_embedding_texts_with_config(memory, Some(&chunking_config));
             if !support_inputs.is_empty() {
                 let contexts = support_inputs
                     .into_iter()
@@ -1161,7 +1539,9 @@ async fn reclaim_memory_storage_for_state(
         }
 
         if is_low_signal_embedding(&compacted.support_embedding) {
-            let support_inputs = best_support_embedding_texts(&compacted);
+            let chunking_config = state.config.read().chunking.clone();
+            let support_inputs =
+                best_support_embedding_texts_with_config(&compacted, Some(&chunking_config));
             if !support_inputs.is_empty() {
                 support_embedding_jobs.push((
                     rewritten_memories.len(),

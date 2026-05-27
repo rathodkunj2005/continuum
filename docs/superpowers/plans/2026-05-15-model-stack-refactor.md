@@ -1,5 +1,8 @@
 # Model Stack Refactor: Qwen3-VL-2B + EmbeddingGemma 256-dim
 
+> **Status (2026-05-20): SUPERSEDED — abandoned, do not implement.**
+> The Qwen3-VL-2B half of this plan landed and is in use. The EmbeddingGemma 256-d half (v3 LanceDB table, `MEMORIES_V3_TABLE`, `memories_v3_schema`, `open_or_create_memories_v3`, `reindex_memories_to_embeddinggemma_256`, the `embed/embedding_gemma.rs` API stubs) never completed migration and was deleted in the embedding-contract-drift stabilization slice. The current durable text embedding contract is the v4 all-MiniLM-L6-v2 384-d path tracked in `src-tauri/src/inference/model_config.rs`. A future BGE 1024-d upgrade (placeholder `MEMORIES_V5_TABLE`) will be tracked in a separate plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the 3-model VLM catalog (Llama 1B, SmolVLM 500M, Qwen 4B) and bge-large-1024 embedding stack with exactly two models: Qwen3-VL-2B-Instruct-GGUF Q4_K_M for memory synthesis and EmbeddingGemma 300M with 256-dim output for vector search, optimized for an 8 GB M1 MacBook.

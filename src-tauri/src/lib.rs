@@ -6,6 +6,7 @@
 pub mod accessibility;
 pub mod agent;
 pub mod capture;
+pub mod companion;
 pub mod config;
 pub mod context_runtime;
 pub mod downloads;
@@ -22,6 +23,7 @@ pub mod memory;
 pub mod memory_compaction;
 pub mod memory_insight;
 pub mod memory_quality;
+pub mod memory_review;
 pub mod models;
 pub mod ocr;
 pub mod privacy;
@@ -341,6 +343,11 @@ pub struct AppState {
     pub app_handle: RwLock<Option<tauri::AppHandle>>,
     /// High-confidence graph extractions waiting for idle Lance commit.
     pub pending_graph_updates: Mutex<Vec<PendingGraphUpdate>>,
+    /// Post-capture review jobs waiting for the memory_review worker. Each
+    /// `memory_id` appears at most once; the worker drains FIFO and the
+    /// pressure gate in [`memory_review::allows_memory_review_worker`] decides
+    /// whether to defer the next pop.
+    pub pending_memory_reviews: memory_review::MemoryReviewQueue,
     /// Extractions below the auto-commit confidence threshold (never auto-written).
     pub low_confidence_graph_candidates: Mutex<Vec<PendingGraphUpdate>>,
     /// When true, idle graph commit treats the machine as battery-saver tier.
@@ -388,6 +395,7 @@ impl AppState {
             runtime_subscriptions: RwLock::new(std::collections::HashSet::new()),
             app_handle: RwLock::new(None),
             pending_graph_updates: Mutex::new(Vec::new()),
+            pending_memory_reviews: memory_review::MemoryReviewQueue::new(),
             low_confidence_graph_candidates: Mutex::new(Vec::new()),
             graph_governor_battery_saver: AtomicBool::new(false),
         }
@@ -430,6 +438,28 @@ impl AppState {
             );
             self.low_confidence_graph_candidates.lock().push(update);
         }
+    }
+
+    /// Queue a flushed memory for the post-capture review worker. Capture
+    /// has already written the row with `enrichment_status = "pending"`; this
+    /// just notifies the worker. Deduplicates by `memory_id`.
+    pub fn enqueue_memory_review_from_flushed_memory(&self, record: &storage::MemoryRecord) {
+        if record.id.trim().is_empty() {
+            return;
+        }
+        let job = memory_review::MemoryReviewJob {
+            memory_id: record.id.clone(),
+            day_bucket: record.day_bucket.clone(),
+            enqueued_at_ms: chrono::Utc::now().timestamp_millis(),
+        };
+        let inserted = self.pending_memory_reviews.enqueue(job);
+        tracing::info!(
+            target: "fndr::memory_review",
+            memory_id = %record.id,
+            inserted,
+            queue_depth = self.pending_memory_reviews.len(),
+            "memory_review queued"
+        );
     }
 
     pub fn set_app_handle(&self, handle: tauri::AppHandle) {

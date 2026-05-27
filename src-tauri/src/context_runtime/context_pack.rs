@@ -28,6 +28,7 @@ pub struct SurfacingReason {
 /// stages (verifier, composer) can reason about provenance.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type, PartialEq)]
 pub struct FusionSignals {
+    pub chunk: f32,
     pub vector: f32,
     pub keyword: f32,
     pub temporal: f32,
@@ -42,6 +43,7 @@ pub struct FusionSignals {
 /// returns intent-tuned defaults.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq)]
 pub struct FusionWeights {
+    pub chunk: f32,
     pub vector: f32,
     pub keyword: f32,
     pub temporal: f32,
@@ -53,6 +55,7 @@ pub struct FusionWeights {
 impl Default for FusionWeights {
     fn default() -> Self {
         Self {
+            chunk: 0.45,
             vector: 0.45,
             keyword: 0.20,
             temporal: 0.10,
@@ -68,27 +71,32 @@ impl FusionWeights {
         let base = Self::default();
         match intent {
             PlannerIntent::Debug => Self {
+                chunk: 0.40,
                 vector: 0.35,
                 graph: 0.20,
                 ..base
             },
             PlannerIntent::Lookup => Self {
+                chunk: 0.40,
                 vector: 0.35,
                 keyword: 0.30,
                 ..base
             },
             PlannerIntent::Timeline => Self {
+                chunk: 0.35,
                 vector: 0.30,
                 temporal: 0.25,
                 ..base
             },
             PlannerIntent::ResumeWork => Self {
+                chunk: 0.40,
                 vector: 0.35,
                 temporal: 0.20,
                 graph: 0.15,
                 ..base
             },
             PlannerIntent::RelatedTo => Self {
+                chunk: 0.40,
                 vector: 0.35,
                 graph: 0.20,
                 ..base

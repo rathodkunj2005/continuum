@@ -38,6 +38,7 @@ const APP_SWITCH_UNIQUE_THRESHOLD: usize = 6;
 const BRIEFING_MIN_MEMORIES: usize = 3;
 const BRIEFING_MAX_CARD_LINES: usize = 20;
 const GRAPH_COMMIT_INTERVAL: Duration = Duration::from_secs(90);
+const MEMORY_REVIEW_INTERVAL: Duration = Duration::from_secs(45);
 
 fn main() {
     // Install default TLS crypto provider (required by rustls 0.23+)
@@ -91,7 +92,24 @@ fn main() {
             let config = Config::load_or_create()?;
             tracing::info!("Configuration loaded");
 
-            // Initialize store (LanceDB)
+            // Validate the embedding environment up-front so the user sees one
+            // clear actionable error if the on-disk model files don't match
+            // the centralized contract (model file, tokenizer, dimension).
+            // This is intentionally non-fatal: a missing model still falls
+            // back to mock when FNDR_ALLOW_MOCK_EMBEDDER=1, and the real
+            // dimension check still runs inside RealEmbedder::new(). The
+            // preflight just turns silent fallback into an obvious log line.
+            let preflight = fndr_lib::embedding::preflight_embedding_environment(&config.embedding);
+            if preflight.is_ready() {
+                tracing::info!("{}", preflight.describe());
+            } else {
+                tracing::warn!(target: "fndr::embedding", "{}", preflight.describe());
+            }
+
+            // Initialize store (LanceDB) — open_all_tables internally calls
+            // validate_memory_vector_schema, which surfaces a clear error if
+            // an existing Lance table's vector dimension diverges from the
+            // current contract.
             let data_dir = app.path().app_data_dir()?;
             let store = Store::new(&data_dir)?;
             let store_arc = Arc::new(store);
@@ -229,6 +247,25 @@ fn main() {
                         }
                     }
                 });
+            }
+
+            // Background: post-capture memory_review worker. Drains the
+            // pending_memory_reviews queue one job per tick, pressure-gated and
+            // serialized through the global model pipeline lock. See ADR 007
+            // and the memory_review module docs for the full lifecycle.
+            {
+                let review_state = state.clone();
+                fndr_lib::memory_review::spawn_worker(review_state, MEMORY_REVIEW_INTERVAL);
+            }
+
+            // Background: daily memory-review scheduler. Wakes hourly and runs
+            // the previous calendar day's batch review pass once per day when
+            // the inference engine is loaded and the pressure gate allows. The
+            // pipeline itself acquires the model_pipeline_lock so capture is
+            // never blocked.
+            {
+                let daily_state = state.clone();
+                fndr_lib::memory_review::spawn_daily_scheduler(daily_state);
             }
 
             let runtime_state = state.clone();
@@ -537,6 +574,25 @@ fn main() {
 
             app.manage(state.clone());
 
+            // Start the Companion API (iPhone/Watch local-network surface) as a
+            // background task so app startup is not blocked on TLS init. The
+            // server lives on a sibling port to MCP; pairing tokens are issued
+            // and stored via StateStore. See ADR-008.
+            {
+                let companion_state = state.clone();
+                tauri::async_runtime::spawn(async move {
+                    match fndr_lib::companion::start(companion_state, None, None).await {
+                        Ok(s) => tracing::info!(
+                            host = %s.host,
+                            port = s.port,
+                            tls = s.tls,
+                            "Companion API ready"
+                        ),
+                        Err(err) => tracing::warn!("Companion API failed to start: {}", err),
+                    }
+                });
+            }
+
             if let Err(err) =
                 fndr_lib::meeting::bind_runtime(app.handle().clone(), runtime_state.clone())
             {
@@ -578,10 +634,21 @@ fn main() {
             ipc::commands::search::find_visually_similar_memories,
             ipc::commands::get_fun_greeting,
             ipc::commands::get_status,
+            ipc::commands::get_memory_review_status,
+            ipc::commands::run_daily_memory_review_cmd,
+            ipc::commands::backfill_memory_review,
             // MCP
             ipc::commands::get_mcp_server_status,
             ipc::commands::start_mcp_server,
             ipc::commands::stop_mcp_server,
+            // Companion API (iPhone / Apple Watch)
+            ipc::commands::companion_get_status,
+            ipc::commands::companion_get_endpoint,
+            ipc::commands::companion_start_server,
+            ipc::commands::companion_stop_server,
+            ipc::commands::companion_start_pairing,
+            ipc::commands::companion_list_devices,
+            ipc::commands::companion_revoke_device,
             ipc::commands::get_context_runtime_status,
             ipc::commands::list_recent_context_packs,
             ipc::commands::fndr_subscribe,
@@ -616,6 +683,7 @@ fn main() {
             ipc::commands::get_storage_health,
             ipc::commands::clean_dev_build_cache,
             ipc::commands::run_memory_repair_backfill,
+            ipc::commands::reindex_memories_v5,
             ipc::commands::get_memory_repair_progress,
             ipc::commands::get_memory_debug_inspector,
             ipc::commands::debug::inspect_memory_pipeline,

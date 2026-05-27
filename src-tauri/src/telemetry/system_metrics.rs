@@ -206,35 +206,48 @@ pub const VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT: u64 = 8 * 1024 * 1024 * 1024;
 pub fn host_total_ram_bytes() -> u64 {
     static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *CACHED.get_or_init(|| {
+        if let Some(total) = read_host_total_ram_bytes_sysctl() {
+            return total;
+        }
         let snap = latest_snapshot();
         if snap.host_memory.total_bytes > 0 {
-            return snap.host_memory.total_bytes;
-        }
-        // Fallback before the sampler has run: read directly via sysctl.
-        #[cfg(target_os = "macos")]
-        unsafe {
-            let mut mem: u64 = 0;
-            let mut size = std::mem::size_of::<u64>();
-            let mib = [libc::CTL_HW, libc::HW_MEMSIZE];
-            if libc::sysctl(
-                mib.as_ptr() as *mut _,
-                mib.len() as u32,
-                &mut mem as *mut _ as *mut _,
-                &mut size as *mut _ as *mut _,
-                std::ptr::null_mut(),
-                0,
-            ) == 0
-            {
-                return mem;
-            }
+            return host_total_ram_bytes_from_sources(None, snap.host_memory.total_bytes);
         }
         // Conservative default if we can't read: assume 8 GB.
         8 * 1024 * 1024 * 1024
     })
 }
 
-/// Returns true if this host has enough RAM to safely run Qwen3-VL-2B
-/// alongside the LLM and the rest of FNDR (requires ≥ 8 GB).
+fn read_host_total_ram_bytes_sysctl() -> Option<u64> {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let mut mem: u64 = 0;
+        let mut size = std::mem::size_of::<u64>();
+        let mib = [libc::CTL_HW, libc::HW_MEMSIZE];
+        if libc::sysctl(
+            mib.as_ptr() as *mut _,
+            mib.len() as u32,
+            &mut mem as *mut _ as *mut _,
+            &mut size as *mut _ as *mut _,
+            std::ptr::null_mut(),
+            0,
+        ) == 0
+            && mem > 0
+        {
+            return Some(mem);
+        }
+    }
+    None
+}
+
+fn host_total_ram_bytes_from_sources(sysctl_total: Option<u64>, sampled_total: u64) -> u64 {
+    sysctl_total
+        .filter(|value| *value > 0)
+        .unwrap_or(sampled_total)
+}
+
+/// Returns true if this host has enough RAM to safely run Qwen3-VL 4B
+/// alongside the LLM and the rest of FNDR (requires ≥ 12 GB).
 pub fn host_supports_vlm() -> bool {
     host_total_ram_bytes() >= VLM_SAFE_MIN_HOST_RAM_BYTES
 }
@@ -1002,8 +1015,19 @@ mod tests {
     }
 
     #[test]
-    fn vlm_safe_min_is_eight_gib() {
-        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES, 8 * 1024 * 1024 * 1024);
+    fn host_total_ram_prefers_physical_sysctl_over_sampled_vm_total() {
+        let sampled = 6 * 1024 * 1024 * 1024;
+        let sysctl = 8 * 1024 * 1024 * 1024;
+
+        assert_eq!(
+            host_total_ram_bytes_from_sources(Some(sysctl), sampled),
+            sysctl
+        );
+    }
+
+    #[test]
+    fn vlm_safe_min_is_twelve_gib() {
+        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES, 12 * 1024 * 1024 * 1024);
     }
 
     #[test]

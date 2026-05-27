@@ -1,0 +1,18 @@
+{
+  "name": "browser_chrome_heavy",
+  "app_name": "Google Chrome",
+  "window_title": "Parent/Child Chunk RAG - ChatGPT",
+  "raw_text": "Chrome\nFile\nEdit\nView\nHistory\nBookmarks\nProfiles\nTab\nWindow\nHelp\nReload\nForward\nNew Tab\nClose Tab\n\nThe parent/child chunk RAG architecture splits each captured memory into salient chunks. Each child chunk gets its own BGE 1024 embedding, while the parent vector is the best salient child rollup. At query time, the chunk-first route runs ANN against the child table, then groups winning chunks by memory id and fetches the v5 parent row.\n\nNew Chat\nShare\nClear Conversations\nSettings\nLog out",
+  "expected_min_chunks": 1,
+  "expected_max_chunks": 3,
+  "must_contain": [
+    "parent/child chunk RAG architecture",
+    "BGE 1024 embedding",
+    "chunk-first route"
+  ],
+  "must_not_contain": [
+    "Bookmarks\nProfiles",
+    "Log out",
+    "Reload\nForward"
+  ]
+}
