@@ -39,6 +39,7 @@ pub const DEFAULT_SEARCH_SEMANTIC_TIMEOUT_MS: u64 = 950;
 pub const DEFAULT_SEARCH_SNIPPET_TIMEOUT_MS: u64 = 760;
 pub const DEFAULT_SEARCH_KEYWORD_TIMEOUT_MS: u64 = 900;
 pub const DEFAULT_SEARCH_KEYWORD_VARIANT_TIMEOUT_MS: u64 = 320;
+pub const DEFAULT_SEARCH_USE_CHUNK_FIRST_RETRIEVAL: bool = true;
 
 pub const DEFAULT_CAPTURE_FLUSH_INTERVAL_SECS: u64 = 30;
 pub const DEFAULT_CAPTURE_MAX_BATCH_SIZE: usize = 100;
@@ -151,6 +152,8 @@ pub struct ChunkingConfig {
     pub ocr_target_min_chars: usize,
     #[serde(default = "default_chunk_ocr_target_max_chars")]
     pub ocr_target_max_chars: usize,
+    #[serde(default = "default_max_chunks_per_memory")]
+    pub max_chunks_per_memory: usize,
 }
 
 impl Default for ChunkingConfig {
@@ -162,6 +165,7 @@ impl Default for ChunkingConfig {
             chars_per_token: default_chars_per_token(),
             ocr_target_min_chars: default_chunk_ocr_target_min_chars(),
             ocr_target_max_chars: default_chunk_ocr_target_max_chars(),
+            max_chunks_per_memory: default_max_chunks_per_memory(),
         }
     }
 }
@@ -176,6 +180,7 @@ impl ChunkingConfig {
         self.ocr_target_max_chars = self
             .ocr_target_max_chars
             .clamp(self.ocr_target_min_chars, 8_000);
+        self.max_chunks_per_memory = self.max_chunks_per_memory.clamp(1, 64);
         self
     }
 }
@@ -223,6 +228,8 @@ pub struct SearchConfig {
     pub keyword_timeout_ms: u64,
     #[serde(default = "default_search_keyword_variant_timeout_ms")]
     pub keyword_variant_timeout_ms: u64,
+    #[serde(default = "default_search_use_chunk_first_retrieval")]
+    pub use_chunk_first_retrieval: bool,
 }
 
 impl Default for SearchConfig {
@@ -248,6 +255,7 @@ impl Default for SearchConfig {
             snippet_timeout_ms: default_search_snippet_timeout_ms(),
             keyword_timeout_ms: default_search_keyword_timeout_ms(),
             keyword_variant_timeout_ms: default_search_keyword_variant_timeout_ms(),
+            use_chunk_first_retrieval: default_search_use_chunk_first_retrieval(),
         }
     }
 }
@@ -707,6 +715,10 @@ fn default_chunk_ocr_target_max_chars() -> usize {
     DEFAULT_CHUNK_OCR_TARGET_MAX_CHARS
 }
 
+fn default_max_chunks_per_memory() -> usize {
+    12
+}
+
 fn default_search_candidate_multiplier() -> usize {
     DEFAULT_SEARCH_CANDIDATE_MULTIPLIER
 }
@@ -785,6 +797,10 @@ fn default_search_keyword_timeout_ms() -> u64 {
 
 fn default_search_keyword_variant_timeout_ms() -> u64 {
     DEFAULT_SEARCH_KEYWORD_VARIANT_TIMEOUT_MS
+}
+
+fn default_search_use_chunk_first_retrieval() -> bool {
+    DEFAULT_SEARCH_USE_CHUNK_FIRST_RETRIEVAL
 }
 
 fn default_capture_flush_interval_secs() -> u64 {

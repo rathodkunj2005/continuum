@@ -7,6 +7,11 @@ static BANNED_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
     [
         r"(?i)^you reviewed",
         r"(?i)^user viewed",
+        r"(?i)^the user is viewing",
+        r"(?i)^the ocr text indicates",
+        r"(?i)\bvisual-only frame\b",
+        r"(?i)\bno visible content\b",
+        r"(?i)^screen capture shows",
         r"(?i)noting\s+[A-Z]",
         r"(?i)then\s+you",
         r"(?i)\buser\.$",
@@ -22,6 +27,11 @@ static SCRUB_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
     [
         r"(?i)^you reviewed\s+",
         r"(?i)^user viewed\s+",
+        r"(?i)^the user is viewing\s+",
+        r"(?i)^the ocr text indicates\s+",
+        r"(?i)\bvisual-only frame\b",
+        r"(?i)\bno visible content\b",
+        r"(?i)^screen capture shows\s+",
         r"(?i)^then\s+you\s+",
         r"(?i)\bnoting\s+[A-Z][^,.!?]*",
         r"(?i)\bmemory_compaction\b",
@@ -82,6 +92,10 @@ mod tests {
             "You reviewed memory_compaction.rs and tests"
         ));
         assert!(narration_filter_hits("User viewed dashboard"));
+        assert!(narration_filter_hits(
+            "The OCR text indicates a visual-only frame with no visible content"
+        ));
+        assert!(narration_filter_hits("Screen capture shows a browser page"));
         assert!(!narration_filter_hits("Watched IPL highlights on YouTube."));
     }
 

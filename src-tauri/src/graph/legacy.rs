@@ -51,28 +51,7 @@ impl GraphStore {
         } else {
             record.snippet.clone()
         };
-        let node = GraphNode {
-            id: memory_node_id.clone(),
-            node_type: NodeType::MemoryChunk,
-            label: compress_node_label(record),
-            created_at: record.timestamp,
-            metadata: json!({
-                "app_name": record.app_name,
-                "bundle_id": record.bundle_id,
-                "window_title": record.window_title,
-                "day_bucket": record.day_bucket,
-                "session_id": record.session_id,
-                "session_key": record.session_key,
-                "summary_source": record.summary_source,
-                "memory_context": narrative,
-                "memory_type": classify_memory_type(
-                    &record.app_name,
-                    record.url.as_deref(),
-                    &record.summary_source,
-                ),
-                "url": record.url,
-            }),
-        };
+        let node = graph_node_for_memory_record(record, memory_node_id.clone(), narrative);
 
         let session_node_id = session_node_id(&record.session_id);
         let s_node = GraphNode {
@@ -549,6 +528,35 @@ fn memory_node_id(memory_id: &str) -> String {
     format!("memory:{memory_id}")
 }
 
+fn graph_node_for_memory_record(
+    record: &MemoryRecord,
+    memory_node_id: String,
+    narrative: String,
+) -> GraphNode {
+    GraphNode {
+        id: memory_node_id,
+        node_type: NodeType::Memory,
+        label: compress_node_label(record),
+        created_at: record.timestamp,
+        metadata: json!({
+            "app_name": record.app_name,
+            "bundle_id": record.bundle_id,
+            "window_title": record.window_title,
+            "day_bucket": record.day_bucket,
+            "session_id": record.session_id,
+            "session_key": record.session_key,
+            "summary_source": record.summary_source,
+            "memory_context": narrative,
+            "memory_type": classify_memory_type(
+                &record.app_name,
+                record.url.as_deref(),
+                &record.summary_source,
+            ),
+            "url": record.url,
+        }),
+    }
+}
+
 fn session_node_id(session_id: &str) -> String {
     format!("session:{session_id}")
 }
@@ -604,7 +612,7 @@ fn task_edges_by_memory(nodes: &[GraphNode], edges: &[GraphEdge]) -> HashMap<Str
         let Some(target) = node_map.get(edge.target.as_str()) else {
             continue;
         };
-        if source.node_type != NodeType::Task || target.node_type != NodeType::MemoryChunk {
+        if source.node_type != NodeType::Task || target.node_type != NodeType::Memory {
             continue;
         }
 
@@ -640,7 +648,7 @@ fn related_urls_for_task_from_snapshot(
         if let Some(target) = node_map.get(edge.target.as_str()) {
             match target.node_type {
                 NodeType::Url => urls.push(target.label.clone()),
-                NodeType::MemoryChunk => memory_targets.push(target.id.clone()),
+                NodeType::Memory => memory_targets.push(target.id.clone()),
                 _ => {}
             }
         }
@@ -718,8 +726,8 @@ fn unique_keep_order(values: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod compress_node_label_tests {
-    use super::compress_node_label;
-    use crate::storage::MemoryRecord;
+    use super::{compress_node_label, graph_node_for_memory_record, memory_node_id};
+    use crate::storage::{MemoryRecord, NodeType};
 
     #[test]
     fn prefers_non_unknown_topic_within_length_cap() {
@@ -804,5 +812,20 @@ mod compress_node_label_tests {
         let label = compress_node_label(&r);
         assert!(!label.contains('|'));
         assert!(label.to_ascii_lowercase().contains("genuine narrative"));
+    }
+
+    #[test]
+    fn parent_memory_node_uses_memory_type_not_memory_chunk() {
+        let mut r = MemoryRecord::default();
+        r.id = "parent-memory".to_string();
+        r.timestamp = 1_700_000_000_000;
+        r.topic = "Chunk retrieval".to_string();
+        r.memory_context = "Parent memory for chunk-first retrieval.".to_string();
+
+        let node =
+            graph_node_for_memory_record(&r, memory_node_id(&r.id), r.memory_context.clone());
+
+        assert_eq!(node.id, "memory:parent-memory");
+        assert_eq!(node.node_type, NodeType::Memory);
     }
 }

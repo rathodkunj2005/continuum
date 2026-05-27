@@ -1,0 +1,385 @@
+/* =============================================================
+   HomeHero — cinematic home screen hero.
+   Design spec: docs/superpowers/specs/2026-05-18-hero-parallax-design.md
+
+   Tokens used: --cp-* (palette), --film-font-*, --film-track-stamp,
+   --film-ease-iris, v2 spacing --s-*, --radius-full.
+   No major design-system churn: existing .ui-action-btn is reused for CTAs.
+   ============================================================= */
+
+/* ─── Root container ──────────────────────────────────────────────────────── */
+
+.home-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    gap: 0;
+    padding: 0 var(--s-5);
+    /* Ensure the parallax layers don't clip outside the hero box */
+    overflow: visible;
+}
+
+/* ─── Date chip ───────────────────────────────────────────────────────────── */
+
+.home-hero__date {
+    font-family: var(--film-font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    opacity: 0.85;
+    margin: 0 0 var(--s-3);
+    animation: heroIn 0.55s var(--film-ease-iris) 0.05s both;
+}
+
+/* ─── Greeting title ──────────────────────────────────────────────────────── */
+
+.home-hero__title {
+    font-family: var(--film-font-display);
+    font-size: clamp(44px, 6.5vw, 68px);
+    font-weight: 500;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: var(--cp-wall-text-primary, var(--text-primary));
+    margin: 0 0 var(--s-3);
+    max-width: 18ch;
+    text-shadow:
+        0 1px 2px color-mix(in srgb, var(--cp-dominant-1, #000) 75%, transparent),
+        0 10px 36px color-mix(in srgb, var(--cp-dominant-1, #000) 50%, transparent);
+    animation: heroIn 0.55s var(--film-ease-iris) 0.1s both;
+}
+
+/* ─── Subtitle ────────────────────────────────────────────────────────────── */
+
+.home-hero__subtitle {
+    font-family: var(--film-font-body);
+    font-size: clamp(17px, 2vw, 21px);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    margin: 0 0 var(--s-6);
+    opacity: 0.92;
+    max-width: 28ch;
+    text-shadow: 0 6px 24px color-mix(in srgb, var(--cp-dominant-1, #000) 45%, transparent);
+    animation: heroIn 0.55s var(--film-ease-iris) 0.15s both;
+}
+
+/* ─── Search pill wrapper ─────────────────────────────────────────────────── */
+
+.home-hero__search-wrap {
+    width: 100%;
+    max-width: 620px;
+    margin-bottom: var(--s-6);
+    animation: heroIn 0.55s var(--film-ease-iris) 0.2s both;
+}
+
+/* ─── Search pill ─────────────────────────────────────────────────────────── */
+
+.home-hero__search-pill {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 56px;
+    border-radius: 28px;
+    padding: 0 8px 0 20px;
+    background: color-mix(in srgb, var(--cp-dominant-2, var(--cp-surface)) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cp-secondary-1, var(--cp-accent)) 48%, transparent);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow:
+        0 0 28px color-mix(in srgb, var(--cp-secondary-2, var(--cp-accent)) 14%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.home-hero__search-pill:focus-within,
+.home-hero__search-pill.is-recording {
+    border-color: color-mix(in srgb, var(--cp-secondary-2, var(--cp-accent)) 72%, transparent);
+    box-shadow:
+        0 0 40px color-mix(in srgb, var(--cp-accent-raw, var(--cp-accent)) 22%, transparent),
+        0 0 0 2px color-mix(in srgb, var(--cp-accent-raw, var(--cp-accent)) 16%, transparent);
+}
+
+/* ─── Search icon ─────────────────────────────────────────────────────────── */
+
+.home-hero__search-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    opacity: 0.7;
+    margin-right: 10px;
+}
+
+/* ─── Search input ────────────────────────────────────────────────────────── */
+
+.home-hero__search-input {
+    flex: 1;
+    height: 100%;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-family: var(--film-font-body);
+    font-size: 17px;
+    font-weight: 400;
+    color: var(--cp-wall-text-primary, var(--text-primary));
+    padding: 0;
+    /* prevent browser chrome from styling it */
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.home-hero__search-input::placeholder {
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    opacity: 0.55;
+}
+
+/* ─── Voice button ────────────────────────────────────────────────────────── */
+
+.home-hero__voice-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: 19px;
+    border: 1px solid color-mix(in srgb, var(--cp-secondary-1, var(--cp-border)) 50%, transparent);
+    background: color-mix(in srgb, var(--cp-dominant-1, var(--cp-surface)) 60%, transparent);
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    font-family: var(--film-font-ui);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease;
+}
+
+.home-hero__voice-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.home-hero__voice-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--cp-accent) 18%, transparent);
+    border-color: color-mix(in srgb, var(--cp-accent) 55%, transparent);
+    color: var(--cp-wall-text-primary, var(--text-primary));
+}
+
+.home-hero__voice-btn.is-recording {
+    background: color-mix(in srgb, var(--cp-accent) 22%, transparent);
+    border-color: color-mix(in srgb, var(--cp-accent) 65%, transparent);
+    color: var(--cp-accent, var(--accent));
+}
+
+.home-hero__voice-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ─── Voice waveform bars (recording state) ───────────────────────────────── */
+
+.home-hero__voice-wave {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 14px;
+}
+
+.home-hero__voice-wave span {
+    display: block;
+    width: 2.5px;
+    border-radius: 1.5px;
+    background: var(--cp-accent, var(--accent));
+    animation: voiceBar 0.9s ease-in-out infinite;
+}
+
+.home-hero__voice-wave span:nth-child(1) { height: 6px; animation-delay: 0s; }
+.home-hero__voice-wave span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+.home-hero__voice-wave span:nth-child(3) { height: 8px; animation-delay: 0.3s; }
+
+@keyframes voiceBar {
+    0%, 100% { transform: scaleY(0.6); opacity: 0.7; }
+    50%       { transform: scaleY(1);   opacity: 1; }
+}
+
+/* ─── Submit button ───────────────────────────────────────────────────────── */
+
+.home-hero__search-submit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--cp-secondary-1, var(--cp-border)) 40%, transparent);
+    background: color-mix(in srgb, var(--cp-accent) 18%, transparent);
+    color: var(--cp-accent, var(--accent));
+    cursor: pointer;
+    margin-left: 6px;
+    flex-shrink: 0;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.12s var(--film-ease-iris);
+}
+
+.home-hero__search-submit svg {
+    width: 16px;
+    height: 16px;
+}
+
+.home-hero__search-submit:not(:disabled):hover {
+    background: color-mix(in srgb, var(--cp-accent) 30%, transparent);
+    border-color: color-mix(in srgb, var(--cp-accent) 70%, transparent);
+    transform: translateX(1px);
+}
+
+.home-hero__search-submit:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ─── Voice status line ───────────────────────────────────────────────────── */
+
+.home-hero__voice-status {
+    margin-top: var(--s-2);
+    font-family: var(--film-font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    opacity: 0.75;
+    text-align: center;
+    animation: heroIn 0.3s ease both;
+}
+
+/* ─── CTAs ────────────────────────────────────────────────────────────────── */
+
+.home-hero__ctas {
+    display: flex;
+    gap: var(--s-3);
+    margin-bottom: var(--s-8);
+    animation: heroIn 0.55s var(--film-ease-iris) 0.25s both;
+}
+
+.home-hero__cta-reel {
+    min-width: 140px;
+}
+
+.home-hero__cta-work {
+    min-width: 140px;
+}
+
+/* ─── Scroll indicator ────────────────────────────────────────────────────── */
+
+.home-hero__scroll-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: heroIn 0.55s var(--film-ease-iris) 0.3s both;
+}
+
+.home-hero__scroll-label {
+    font-family: var(--film-font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-stamp);
+    text-transform: uppercase;
+    color: var(--cp-wall-text-secondary, var(--text-secondary));
+    opacity: 0.45;
+}
+
+.home-hero__scroll-line {
+    width: 1px;
+    height: 48px;
+    background: color-mix(in srgb, var(--cp-wall-text-secondary, var(--text-secondary)) 35%, transparent);
+}
+
+.home-hero__scroll-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--cp-wall-text-secondary, var(--text-secondary));
+    opacity: 0.5;
+    animation: scrollBounce 1.8s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+    0%   { transform: translateY(0); opacity: 0.5; }
+    50%  { transform: translateY(40px); opacity: 0.8; }
+    100% { transform: translateY(0); opacity: 0.5; }
+}
+
+/* ─── Entry animation ─────────────────────────────────────────────────────── */
+
+@keyframes heroIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ─── Light mode overrides ────────────────────────────────────────────────── */
+
+[data-theme="light"] .home-hero__search-pill {
+    background: color-mix(in srgb, var(--cp-surface, #fff) 88%, transparent);
+    box-shadow:
+        0 2px 16px color-mix(in srgb, var(--cp-dominant-1, #000) 8%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .home-hero__voice-btn {
+    background: color-mix(in srgb, var(--cp-surface, #fff) 80%, transparent);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+    .home-hero__ctas {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+
+/* ─── Reduced motion ──────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .home-hero__date,
+    .home-hero__title,
+    .home-hero__subtitle,
+    .home-hero__search-wrap,
+    .home-hero__ctas,
+    .home-hero__scroll-indicator {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .home-hero__scroll-dot {
+        animation: none;
+    }
+
+    .home-hero__voice-wave span {
+        animation: none;
+    }
+
+    /* Disable hover transform */
+    .home-hero__search-submit:not(:disabled):hover {
+        transform: none;
+    }
+}

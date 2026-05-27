@@ -206,27 +206,12 @@ pub const VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT: u64 = 8 * 1024 * 1024 * 1024;
 pub fn host_total_ram_bytes() -> u64 {
     static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *CACHED.get_or_init(|| {
+        if let Some(total) = read_host_total_ram_bytes_sysctl() {
+            return total;
+        }
         let snap = latest_snapshot();
         if snap.host_memory.total_bytes > 0 {
-            return snap.host_memory.total_bytes;
-        }
-        // Fallback before the sampler has run: read directly via sysctl.
-        #[cfg(target_os = "macos")]
-        unsafe {
-            let mut mem: u64 = 0;
-            let mut size = std::mem::size_of::<u64>();
-            let mib = [libc::CTL_HW, libc::HW_MEMSIZE];
-            if libc::sysctl(
-                mib.as_ptr() as *mut _,
-                mib.len() as u32,
-                &mut mem as *mut _ as *mut _,
-                &mut size as *mut _ as *mut _,
-                std::ptr::null_mut(),
-                0,
-            ) == 0
-            {
-                return mem;
-            }
+            return host_total_ram_bytes_from_sources(None, snap.host_memory.total_bytes);
         }
         // Conservative default if we can't read: assume 8 GB.
         8 * 1024 * 1024 * 1024

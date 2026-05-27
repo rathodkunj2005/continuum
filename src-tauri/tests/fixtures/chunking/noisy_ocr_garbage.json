@@ -1,0 +1,14 @@
+{
+  "name": "noisy_ocr_garbage",
+  "app_name": "Preview",
+  "window_title": "Scanned notes",
+  "raw_text": "x\n§\n.\n_\n—\nzZ\nq\nThe knowledge graph schema persists typed nodes for entities, projects, and memories. Each edge has a confidence score and an evidenced_by link back to the source memory id. Stale edges decay over time and are pruned during nightly compaction.\nq\n—\n.\n_\nx\n§",
+  "expected_min_chunks": 1,
+  "expected_max_chunks": 3,
+  "must_contain": [
+    "knowledge graph schema",
+    "evidenced_by",
+    "nightly compaction"
+  ],
+  "must_not_contain": []
+}

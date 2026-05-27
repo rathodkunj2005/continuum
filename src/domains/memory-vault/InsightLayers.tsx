@@ -1,4 +1,5 @@
 import type { MemoryCard } from "@/shared/ipc/tauri";
+import { isMetaOcrNarration } from "./MemoryCard";
 import "./InsightLayers.css";
 
 /** The 4 canonical insight slots — always rendered in order so the *shape*
@@ -35,7 +36,10 @@ export function InsightLayers({ card, evalUi = false }: { card: MemoryCard; eval
             </div>
             {SLOTS.map((slot) => {
                 const raw = (card as unknown as Record<string, unknown>)[slot.field];
-                const value = typeof raw === "string" ? raw.trim() : "";
+                const trimmed = typeof raw === "string" ? raw.trim() : "";
+                // Strip meta-OCR narration ("The OCR text indicates…") so the
+                // panel never dresses up a noisy raw extraction as an insight.
+                const value = trimmed && !isMetaOcrNarration(trimmed) ? trimmed : "";
                 const empty = value.length === 0;
                 return (
                     <div

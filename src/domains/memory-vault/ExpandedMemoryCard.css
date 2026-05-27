@@ -128,6 +128,36 @@
     font-size: 11px;
 }
 
+.fndr-emc-chunks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fndr-emc-chunks li {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-3) 82%, transparent);
+    color: var(--fg-2);
+    font-size: var(--t-body-sm);
+    line-height: 1.45;
+}
+
+.fndr-emc-chunk-meta {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: var(--film-track-label);
+    text-transform: uppercase;
+    color: var(--fg-3);
+}
+
 .fndr-emc-extra-actions {
     display: flex;
     gap: 10px;

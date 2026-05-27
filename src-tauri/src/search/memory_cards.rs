@@ -97,6 +97,25 @@ pub struct MemoryCard {
     /// legacy code paths so existing frontend / serde consumers stay unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surfacing_reason: Option<crate::context_runtime::context_pack::SurfacingReason>,
+    #[serde(default)]
+    pub matched_routes: Vec<String>,
+    #[serde(default)]
+    pub matched_chunk_ids: Vec<String>,
+    #[serde(default)]
+    pub chunk_evidence: Vec<crate::storage::MatchedChunkEvidence>,
+    /// Lifecycle status from `MemoryRecord.enrichment_status` — surfaced so the
+    /// vault can render DEVELOPED / PENDING / REVIEW_FAILED chips deterministically.
+    #[serde(default)]
+    pub enrichment_status: String,
+    /// Unix ms timestamp of the last successful review (0 = never).
+    #[serde(default)]
+    pub reviewed_at_ms: i64,
+    /// Monotonic counter of successful review passes.
+    #[serde(default)]
+    pub reviewer_generation: u32,
+    /// Persisted storage gate outcome, e.g. "visual_semantics_failed".
+    #[serde(default)]
+    pub storage_outcome: String,
 }
 
 #[derive(Debug, Clone)]
@@ -312,7 +331,14 @@ impl MemoryCardSynthesizer {
                 synthesis_branch: anchor.synthesis_branch.clone(),
                 topic_categories: anchor.topic_categories.clone(),
                 search_aliases: anchor.search_aliases.clone(),
-                surfacing_reason: None,
+                surfacing_reason: surfacing_reason_from_result(&anchor),
+                matched_routes: anchor.matched_routes.clone(),
+                matched_chunk_ids: anchor.matched_chunk_ids.clone(),
+                chunk_evidence: anchor.chunk_evidence.clone(),
+                enrichment_status: anchor.enrichment_status.clone(),
+                reviewed_at_ms: anchor.reviewed_at_ms,
+                reviewer_generation: anchor.reviewer_generation,
+                storage_outcome: anchor.storage_outcome.clone(),
             });
         }
 
@@ -513,6 +539,23 @@ fn collect_group_snippets(results: &[SearchResult]) -> Vec<String> {
     let mut seen = HashSet::new();
 
     for result in results {
+        for evidence in &result.chunk_evidence {
+            let text = evidence.text.trim();
+            if text.is_empty() {
+                continue;
+            }
+            let normalized = normalize_for_dedup(text);
+            if seen.insert(normalized) {
+                snippets.push(text.to_string());
+            }
+            if snippets.len() >= MAX_GROUP_SNIPPETS {
+                break;
+            }
+        }
+        if snippets.len() >= MAX_GROUP_SNIPPETS {
+            break;
+        }
+
         let primary = if !result.memory_context.trim().is_empty() {
             result.memory_context.trim().to_string()
         } else if !result.snippet.trim().is_empty() {
@@ -546,6 +589,20 @@ fn collect_group_snippets(results: &[SearchResult]) -> Vec<String> {
 fn collect_grounded_snippets(results: &[SearchResult]) -> Vec<String> {
     let mut snippets = Vec::new();
     for result in results.iter().take(MAX_GROUP_SNIPPETS) {
+        if let Some(evidence) = result
+            .chunk_evidence
+            .iter()
+            .find(|evidence| !evidence.text.trim().is_empty())
+        {
+            snippets.push(format!(
+                "[{}:{}] {}",
+                short_id(&result.id),
+                evidence.chunk_index,
+                evidence.text.trim()
+            ));
+            continue;
+        }
+
         let snippet = if !result.memory_context.trim().is_empty() {
             result.memory_context.trim().to_string()
         } else if !result.snippet.trim().is_empty() {
@@ -819,8 +876,39 @@ fn fallback_card_for_result(query: &str, result: &SearchResult) -> MemoryCard {
         synthesis_branch: result.synthesis_branch.clone(),
         topic_categories: result.topic_categories.clone(),
         search_aliases: result.search_aliases.clone(),
-        surfacing_reason: None,
+        surfacing_reason: surfacing_reason_from_result(result),
+        matched_routes: result.matched_routes.clone(),
+        matched_chunk_ids: result.matched_chunk_ids.clone(),
+        chunk_evidence: result.chunk_evidence.clone(),
+        enrichment_status: result.enrichment_status.clone(),
+        reviewed_at_ms: result.reviewed_at_ms,
+        reviewer_generation: result.reviewer_generation,
+        storage_outcome: result.storage_outcome.clone(),
     }
+}
+
+fn surfacing_reason_from_result(
+    result: &SearchResult,
+) -> Option<crate::context_runtime::context_pack::SurfacingReason> {
+    if result.matched_routes.is_empty() {
+        return None;
+    }
+    let headline = if result
+        .matched_routes
+        .iter()
+        .any(|route| route.eq_ignore_ascii_case("chunk"))
+    {
+        "Matched a precise memory chunk".to_string()
+    } else {
+        format!("Matched in {} routes", result.matched_routes.len())
+    };
+    Some(crate::context_runtime::context_pack::SurfacingReason {
+        headline,
+        routes: result.matched_routes.clone(),
+        graph_path: None,
+        anchor_terms_hit: Vec::new(),
+        recency_boost: 0.0,
+    })
 }
 
 /// `pub(crate)` re-export used by `context_runtime::composer` to build cards

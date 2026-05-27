@@ -5,9 +5,42 @@ use std::sync::Arc;
 use crate::storage::schema::{EdgeType, GraphEdge};
 use arrow_schema::{DataType, Field, Schema};
 
+use crate::inference::model_config::BGE_V5_DIMENSIONS_I32;
+
 use super::{IMAGE_EMBED_DIM, TEXT_EMBED_DIM};
 
 pub fn memory_schema() -> Schema {
+    memory_schema_for_text_dim(TEXT_EMBED_DIM)
+}
+
+pub fn memory_v5_schema() -> Schema {
+    memory_schema_for_text_dim(BGE_V5_DIMENSIONS_I32)
+}
+
+pub fn memory_chunk_schema() -> Schema {
+    Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("memory_id", DataType::Utf8, false),
+        Field::new("chunk_index", DataType::UInt32, false),
+        Field::new("line_kind", DataType::Utf8, false),
+        Field::new("text", DataType::Utf8, false),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                BGE_V5_DIMENSIONS_I32,
+            ),
+            false,
+        ),
+        Field::new("created_at", DataType::Int64, false),
+        Field::new("app_name", DataType::Utf8, false),
+        Field::new("window_title", DataType::Utf8, false),
+        Field::new("day_bucket", DataType::Utf8, false),
+        Field::new("content_hash", DataType::Utf8, false),
+    ])
+}
+
+pub fn memory_schema_for_text_dim(text_embed_dim: i32) -> Schema {
     Schema::new(vec![
         Field::new("id", DataType::Utf8, false),
         Field::new("timestamp", DataType::Int64, false),
@@ -31,7 +64,7 @@ pub fn memory_schema() -> Schema {
             "embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                TEXT_EMBED_DIM,
+                text_embed_dim,
             ),
             false,
         ),
@@ -49,7 +82,7 @@ pub fn memory_schema() -> Schema {
             "snippet_embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                TEXT_EMBED_DIM,
+                text_embed_dim,
             ),
             false,
         ),
@@ -57,7 +90,7 @@ pub fn memory_schema() -> Schema {
             "support_embedding",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                TEXT_EMBED_DIM,
+                text_embed_dim,
             ),
             false,
         ),

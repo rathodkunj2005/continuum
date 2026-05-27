@@ -1,5 +1,6 @@
 //! Helpers for compacting persisted memory payloads.
 
+use crate::config::ChunkingConfig;
 use crate::embedding::{TextChunker, EMBEDDING_DIM};
 use crate::storage::MemoryRecord;
 
@@ -126,11 +127,19 @@ pub fn best_snippet_embedding_text(record: &MemoryRecord) -> String {
 }
 
 pub fn best_support_embedding_texts(record: &MemoryRecord) -> Vec<String> {
-    support_embedding_texts(
+    best_support_embedding_texts_with_config(record, None)
+}
+
+pub fn best_support_embedding_texts_with_config(
+    record: &MemoryRecord,
+    chunking_cfg: Option<&ChunkingConfig>,
+) -> Vec<String> {
+    support_embedding_texts_with_config(
         &record.app_name,
         &record.window_title,
         &record.clean_text,
         &record.lexical_shadow,
+        chunking_cfg,
     )
 }
 
@@ -172,7 +181,21 @@ pub fn support_embedding_texts(
     clean_text: &str,
     lexical_shadow: &str,
 ) -> Vec<String> {
-    let chunker = TextChunker::new();
+    support_embedding_texts_with_config(app_name, window_title, clean_text, lexical_shadow, None)
+}
+
+/// Variant that uses runtime `ChunkingConfig` values when available.
+pub fn support_embedding_texts_with_config(
+    app_name: &str,
+    window_title: &str,
+    clean_text: &str,
+    lexical_shadow: &str,
+    chunking_cfg: Option<&ChunkingConfig>,
+) -> Vec<String> {
+    let chunker = match chunking_cfg {
+        Some(cfg) => TextChunker::from_config(cfg),
+        None => TextChunker::new(),
+    };
     let chunks = chunker.chunk_ocr_text(app_name, window_title, clean_text);
     let mut selected = Vec::new();
 

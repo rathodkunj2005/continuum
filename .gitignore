@@ -16,6 +16,8 @@ src-tauri/models/*.gguf
 *.json.migrated
 !src-tauri/capabilities/
 !src-tauri/capabilities/*.json
+!src-tauri/tests/fixtures/
+!src-tauri/tests/fixtures/**/*.json
 *.lancedb/
 *.db/
 *.lance/
