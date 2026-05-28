@@ -1,133 +1,118 @@
-<a id="readme-top"></a>
-
 # FNDR
 
-[![Version][version-shield]][github-url]
-[![Tauri][tauri-shield]][tauri-url]
-[![React][react-shield]][react-url]
-[![Rust][rust-shield]][rust-url]
-[![macOS][macos-shield]][tauri-config]
-[![License: MIT][license-shield]][cargo-manifest]
+**A local-first multimodal memory engine for desktop context, semantic search, and agent-ready recall.**
 
-FNDR is a macOS desktop app for building a searchable local memory from screen context, meetings, tasks, downloads, and app activity. The app combines a React/Tauri UI with a Rust capture and search backend, LanceDB storage, local ONNX embeddings, and selectable local GGUF models.
+FNDR is a macOS desktop system that continuously captures foreground context, extracts text and metadata, and stores compact memory records for retrieval. It is designed as an engineering-first memory layer, not a screenshot archive.
 
-## Table Of Contents
+The core runtime is a React + TypeScript UI (`src/`) on top of a Tauri 2 + Rust backend (`src-tauri/`). The backend handles capture, OCR, normalization, embeddings, LanceDB persistence, hybrid retrieval, and MCP serving for external agents.
 
-| Section | Description |
-| --- | --- |
-| [About](#about) | Current product scope and capabilities |
-| [Architecture](#architecture) | Repository layout and major runtime components |
-| [Getting Started](#getting-started) | Prerequisites, setup, and local launch |
-| [Configuration](#configuration) | Environment variables and runtime settings |
-| [MCP Deployment](#mcp-deployment) | Local, tunnel, and public MCP transport setup |
-| [Local Models](#local-models) | Model catalog used by onboarding and settings |
-| [Privacy Controls](#privacy-controls) | Verified capture and data controls present in source |
-| [Known Limitations](#known-limitations) | Current stable-pipeline boundaries |
-| [Development](#development) | Test and verification commands |
-| [Links](#links) | Repository remotes |
+---
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+## 1. Project Overview
 
-## About
+FNDR captures desktop activity and converts it into structured memory records. A memory record includes cleaned text, app/window/url metadata, retrieval fields, embeddings, and insight fields used to improve recall quality.
 
-FNDR captures macOS screen context, extracts OCR text, stores compact memory records, and exposes search and reconstruction workflows in the desktop UI. The current codebase includes the following product areas:
+Search is hybrid by design: semantic vector retrieval and lexical retrieval run together, then get fused and reranked. This avoids the common failure mode where pure vector search loses exact identifiers and pure keyword search misses paraphrases.
 
-| Area | Current implementation |
-| --- | --- |
-| Capture | macOS screen capture, OCR, adaptive sampling, perceptual deduplication, semantic deduplication, and batched memory writes |
-| Search | Hybrid vector and keyword search, sentence-aware reranking, Memory Vault / memory cards, timeline browsing, and raw result inspection |
-| Memory Vault | Expanded memory cards, surfacing-reason chips, query-scoped knowledge graph, memory provenance strip, and one-click copy for agent context |
-| Context Runtime | Agentic retrieval pipeline: rule-based query planner, multi-route modular retrieval, fusion ranker, evidence packer, verifier, and context composer |
-| Summaries | Local model-backed memory summaries, daily summaries, daily briefings, and search-result synthesis |
-| Tasks | Todo, reminder, and follow-up parsing with persisted task state |
-| Meetings | Meeting detection heuristics, ffmpeg-based segmented audio capture, Whisper sidecar transcription, transcript search, and markdown/json export |
-| Speech | Voice transcription and local text-to-speech command paths |
-| Graph | Local graph store, typed-entity/edge graph with Window, App, and Command nodes, agentic graph-RAG via `fndr.*` MCP namespace, and graph visualization panel |
-| Immersive UI | Full-screen cinematic scroll experience (ScrollModeShell) with parallax sections, Aurora wallpaper, chapter rail, sticky scenes, and section-transition bridges |
-| Downloads | Downloads folder watcher that injects local file-arrival memory records |
-| Autofill | Global shortcut-driven autofill retrieval and injection settings |
+FNDR also supports retrieval-grounded answering (`fndr_answer`) through a context runtime that plans retrieval routes, composes evidence, and returns cited answers. The same local memory can be exposed to external tools through an MCP server with explicit local/tunnel/public deployment modes.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Knowledge graph support exists in two forms: a legacy graph and an insight graph persisted in LanceDB (`graph_nodes`, `graph_edges`) for typed entities/relations and graph-aware recall workflows.
 
-## Architecture
+Privacy is a first-class system constraint: data stays local by default, capture can be paused, blocklists are enforced, and destructive deletion operations are implemented in source.
 
-### Project map
+---
 
-**Frontend (`src/`)**
+## 2. Why FNDR Exists
 
-| Path | Role |
-| --- | --- |
-| `src/app/` | App shell: `App.tsx`, `main.tsx`, `ScrollModeShell.tsx` (immersive), `WorkModeShell.tsx` (standard), autofill entry, sidebar, panels host, global `styles/`. |
-| `src/domains/immersive/` | Full-screen cinematic scroll experience: `sections/` (Hero, Capture, Search, Graph, Agent, Privacy, Workspace), `components/` (ParallaxLayer, StickyScene, ChapterRail, SectionTransitionBridge, ScrollProgressIndicator, MorphMemoryCard). |
-| `src/domains/` | User-facing product areas (Memory Vault, search bar, timeline, command palette, workspace panels). See `src/domains/README.md`. |
-| `src/shared/components/` | Reusable UI: `atoms/` (Button, Field, Pill, Stamp, DossierFrame, …), `AuroraWallpaper.tsx`, `CursorInverter.tsx`, `StatusBar.tsx`. |
-| `src/shared/motion/` | Animation primitives: motion tokens, scroll config, Framer Motion variants, and a `useReducedMotionSafe` hook. |
-| `src/shared/theme/` | Design tokens: `cinematic-palettes.ts` (10 palettes) and `film-paper.css` (CSS custom properties). |
-| `src/shared/` | Reusable UI glue: `ipc/` (Tauri `invoke` bindings), `hooks/`, `utils/`. |
+Personal context gets fragmented across browser tabs, terminals, editors, docs, chat windows, and meeting tools. Standard file search is mostly keyword-only and often fails when the user remembers intent but not exact wording.
 
-**Backend (`src-tauri/`)**
+LLM chats are session-scoped and do not reliably remember a user’s real desktop workflow history unless context is re-supplied. Cloud memory tools add privacy and control concerns because raw personal activity is uploaded to external services.
 
-| Path | Role |
-| --- | --- |
-| `src-tauri/src/ipc/` | Thin Tauri command handlers (`ipc/commands/*`), including `retrieval.rs` for agentic context-pack commands. |
-| `src-tauri/src/capture/` | Screen capture pipeline. |
-| `src-tauri/src/ocr/` | Apple Vision OCR. |
-| `src-tauri/src/embedding/` | Chunking and embeddings. |
-| `src-tauri/src/search/` | Hybrid retrieval and memory cards. |
-| `src-tauri/src/context_runtime/` | Agentic retrieval: query planner, multi-route retrieval, fusion ranker, evidence packer, verifier, and context composer. |
-| `src-tauri/src/storage/` | LanceDB and filesystem persistence. |
-| `src-tauri/src/memory/` | Memory-centric typed graph with Window, App, Command, and 5+ edge variants (`memory/graph/`). |
-| `src-tauri/src/inference/` | Local LLM / VLM. |
-| `src-tauri/src/privacy/` | Privacy enforcement. |
-| `src-tauri/src/mcp/` | MCP server with `fndr.*` namespace for agentic graph-RAG tools. |
-| `src-tauri/sidecars/` | Python helpers (Whisper, TTS, etc.). |
+FNDR addresses this by building a local, inspectable memory layer:
 
-```text
-fndr/
-├── src/                 # React + Vite frontend (see Project map above)
-├── src-tauri/           # Tauri / Rust backend + `sidecars/` Python helpers
-├── docs/                # Product, architecture, setup — start at docs/README.md
-├── scripts/             # bootstrap/, dev utilities, release helpers
-├── tools/bin/           # Local tool binaries (e.g. pinned npm)
-├── public/              # Static assets copied verbatim at build (see public/README.md)
-├── Makefile
-├── package.json
-└── README.md
+- Capture context on-device.
+- Convert it into structured, retrieval-ready records.
+- Keep vector + lexical retrieval local.
+- Expose memory to agents through controlled MCP interfaces.
+
+---
+
+## 3. Key Features
+
+| Area | Implementation in this repo | Status |
+| --- | --- | --- |
+| Local-first capture pipeline | Rust capture loop with batching, dedupe, quality gates (`src-tauri/src/capture/`) | Stable |
+| OCR and context extraction | Apple Vision OCR + structured memory synthesis | Stable |
+| Metadata extraction | App name, window title, URL/domain, session/event fields in `MemoryRecord` | Stable |
+| Memory cards / Memory Vault | UI surfaces under `src/domains/memory-vault/` | Stable |
+| Semantic embeddings | Local ONNX embedder (`all-MiniLM-L6-v2`, 384-d) | Stable |
+| Hybrid retrieval | Semantic + keyword fusion and reranking (`src-tauri/src/search/`) | Stable |
+| Retrieval-grounded Q&A | `fndr_answer` / context runtime pipeline (`src-tauri/src/context_runtime/`) | Stable |
+| Local vector store | LanceDB-backed memory + graph tables | Stable |
+| Visual similarity retrieval | CLIP-based `image_embedding` + `find_visually_similar_memories` | Stable |
+| Insight knowledge graph | Typed node/edge tables + graph UI hooks | Stable |
+| MCP server for agents | `src-tauri/src/mcp/`, MCP deployment modes + auth/tls controls | Stable |
+| Agent-oriented tools/prompts | `agent.*`, `memory.*`, prompt/resources in MCP | Stable |
+| Manual photo import (Meta glasses flow) | `import_meta_glasses_photo` pipeline | Experimental |
+| Some graph-RAG subgraph APIs | `fndr_get_memory_subgraph` currently returns bounded empty descriptor | Experimental |
+
+---
+
+## 4. Technical Architecture
+
+```mermaid
+flowchart LR
+    A["Foreground Screen Capture"] --> B["Privacy / Blocklist / Safety Gates"]
+    B --> C["OCR + Metadata Extraction"]
+    C --> D["Structured Memory Normalization"]
+    D --> E["Text Embedding (MiniLM 384-d)"]
+    D --> F["Image Embedding (CLIP 512-d)"]
+    D --> G["LanceDB Memory Tables"]
+    E --> G
+    F --> G
+    G --> H["Hybrid Retrieval (Vector + Keyword + Rerank)"]
+    H --> I["Memory Cards / Memory Vault UI"]
+    H --> J["Context Runtime (fndr_search / fndr_answer)"]
+    G --> K["Insight Graph (graph_nodes / graph_edges)"]
+    J --> L["MCP Server (local/tunnel/public)"]
+    K --> L
 ```
 
-| Component | Primary paths |
+### Core module map
+
+| Module | Responsibility |
 | --- | --- |
-| Frontend shell | `src/app/App.tsx`, `src/app/main.tsx`, `src/app/ScrollModeShell.tsx`, `src/app/WorkModeShell.tsx` |
-| Immersive scroll | `src/domains/immersive/` |
-| Design system | `src/shared/theme/`, `src/shared/motion/`, `src/shared/components/atoms/` |
-| Tauri commands | `src-tauri/src/ipc/commands/` |
-| Capture pipeline | `src-tauri/src/capture/` |
-| Search + Memory Vault | `src-tauri/src/search/` |
-| Context runtime | `src-tauri/src/context_runtime/` |
-| LanceDB | `src-tauri/src/storage/` |
-| Graph store | `src-tauri/src/memory/graph/` |
-| MCP (fndr.* namespace) | `src-tauri/src/mcp/` |
-| Model catalog | `src-tauri/src/models.rs` |
-| Runtime config | `src-tauri/src/config.rs` |
-| Privacy controls | `src-tauri/src/privacy/` |
-| Meeting recorder | `src-tauri/src/meeting/`, `src-tauri/sidecars/whisper_gguf_runner.py` |
+| `src-tauri/src/capture/` | Screen sampling, dedupe, quality gates, memory assembly |
+| `src-tauri/src/ocr/` | OCR extraction and metadata |
+| `src-tauri/src/embedding/` | Text and image embedding utilities |
+| `src-tauri/src/storage/lance_store/` | LanceDB schema, normalization, persistence, retrieval IO |
+| `src-tauri/src/search/` | Hybrid search, scoring, reranking, memory card shaping |
+| `src-tauri/src/context_runtime/` | Retrieval planning, evidence composition, grounded answering |
+| `src-tauri/src/graph/` | Insight graph entities/edges/store/pathing |
+| `src-tauri/src/mcp/` | MCP transport, auth/origin controls, tool/resource/prompt handlers |
+| `src/domains/*` | Search, Memory Vault, timeline, command palette, workspace UI |
 
-See `docs/architecture/ARCHITECTURE.md` for the capture → OCR → chunking → embedding → LanceDB → hybrid search → Memory Vault / cards → UI pipeline map.
+### Data + retrieval notes
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+- Default text embedding contract in current code: `384` dimensions (`all-MiniLM-L6-v2`).
+- Image embedding contract: `512` dimensions (CLIP column for visual similarity retrieval).
+- Hybrid ranking combines semantic and lexical branches, then reranks with quality and relevance signals.
+- Insight fields (for example `memory_context`, `insight_what_happened`, `insight_why_mattered`) are persisted and reused during retrieval/composition.
 
-## Getting Started
+---
 
-| Requirement | Notes |
-| --- | --- |
-| macOS | macOS 13.0 or newer, matching `src-tauri/tauri.conf.json` |
-| Xcode Command Line Tools | Required for native macOS and Rust builds |
-| Node.js and npm | Runs the Vite/React frontend and Tauri CLI |
-| Rust toolchain | Builds the Tauri backend |
-| Python 3 | Runs optional sidecar workflows |
-| ffmpeg | Required for meeting audio capture |
+## 5. Installation and Run (macOS)
 
-Install dependencies and launch the development app from the repository root:
+### Prerequisites
+
+- macOS 13.0+ (from `src-tauri/tauri.conf.json`)
+- Xcode Command Line Tools
+- Node.js + npm
+- Rust toolchain
+- Python 3 (for bootstrap/sidecar helpers)
+- `ffmpeg` (meeting capture path)
+
+### Quickstart
 
 ```bash
 npm install
@@ -135,184 +120,122 @@ npm install
 npm run tauri dev
 ```
 
-Complete onboarding in the desktop app to grant macOS permissions. FNDR uses two local models in this repo setup: `Qwen3-VL-2B` for memory creation and `all-MiniLM-L6-v2` ONNX for semantic search.
+Optional: if you want the multimodal local model available for richer memory synthesis/import flows, download the Qwen3-VL assets into the same models directory.
 
-The BGE v5 embedding assets are optional for the staged 1024-d reindex path. Install them only when running the explicit v5 migration command:
+### First run
 
-```bash
-./scripts/bootstrap/download-embedding-model.sh
-```
+Grant required macOS permissions during onboarding (screen capture/accessibility as prompted). FNDR stores app data under the Tauri app identifier path (`com.fndr.app`).
 
-### Meta AI glasses (manual import MVP)
+---
 
-Photos captured on Meta AI glasses typically sync to your phone first, then you can AirDrop or add them to Photos and move them to your Mac. In FNDR, use **Command Palette → Import Meta glasses photo** to index a JPEG/PNG/HEIC: Apple Vision OCR plus the local all-MiniLM-L6-v2 text embeddings (384-d) power search today; a small CLIP vision encoder stores a 512-d vector for future image-aware retrieval.
+## 6. How to Use FNDR
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+1. Keep FNDR running while working normally across apps.
+2. Use Search or Memory Vault to retrieve previous context.
+3. Use Ask-style queries (`fndr_answer`) for grounded recall over stored memories.
+4. Use workspace controls to pause/resume capture, manage blocklists, and inspect status.
+5. Optionally start MCP for external agent access to local memory tools.
 
-## Configuration
+---
 
-Runtime app configuration is written through `src-tauri/src/config.rs`. The `.env.example` file documents optional environment variables used by experimental or sidecar features:
+## 7. Privacy and Safety Controls
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `ANTHROPIC_API_KEY` | No | Enables experimental Claude Agent SDK UI paths |
-| `OPENAI_API_KEY` | No | Supports optional graph or external knowledge workflows |
-| `NEO4J_URI` | No | Connects optional graph workflows to Neo4j |
-| `NEO4J_USER` | No | Username for optional Neo4j graph workflows |
-| `NEO4J_PASSWORD` | No | Password for optional Neo4j graph workflows |
-| `VITE_EVAL_UI` | No | Hides selected feature panels when set to `true` for evaluation builds |
-| `FNDR_MEETING_AUDIO_DEVICE` | No | Overrides macOS avfoundation meeting-recorder audio device selection |
-| `FNDR_MCP_MODE` | No | MCP deployment mode: `local` (default), `tunnel`, or `public` |
-| `FNDR_MCP_REQUIRE_AUTH` | No | Forces MCP bearer auth on or off (default follows mode) |
-| `FNDR_MCP_ALLOW_LOOPBACK_AUTH_BYPASS` | No | Allows localhost initialize/tools-list bypass (default only in `local` mode) |
-| `FNDR_MCP_ENABLE_TLS` | No | Enables self-signed HTTPS for the MCP server |
-| `FNDR_MCP_ALLOWED_ORIGINS` | No | Comma-separated allowed `Origin` list for non-local modes |
-| `FNDR_MCP_PUBLIC_BASE_URL` | No | Public tunnel base URL exposed in MCP status/discovery metadata |
+Implemented controls include:
 
-Core runtime settings include capture cadence, dedupe threshold, retention days, app blocklist, screenshot retention, proactive surface behavior, and autofill behavior.
+- Pause/resume capture (`pause_capture`, `resume_capture`)
+- App/site blocklist management (`get_blocklist`, `set_blocklist`, `add_to_blocklist`)
+- Retention and deletion (`delete_older_than`, `delete_all_data`)
+- Sensitive-context safety checks and private/incognito title heuristics (`src-tauri/src/privacy/`)
+- MCP auth/origin policies for non-local deployment modes
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+FNDR is local-first by default. Optional environment variables can enable external integrations; review `.env.example` before enabling them.
 
-## MCP Deployment
+---
 
-FNDR MCP supports both the legacy HTTP+SSE flow and streamable-HTTP style `GET/POST /mcp` routing. Recommended deployment modes:
+## 8. MCP and Agent Integration
 
-- `local` (default): localhost-only personal use.
-- `tunnel`: localhost bind with auth required, intended for Cloudflare/ngrok/Tailscale tunneling.
-- `public`: explicit non-loopback bind for controlled network environments.
+FNDR includes an MCP server with:
 
-For remote ChatGPT/Claude/Cursor-style access with Cloudflare tunnel:
+- Transport endpoints for streamable HTTP and legacy SSE compatibility
+- Deployment modes: `local`, `tunnel`, `public`
+- Optional TLS + bearer auth + allowed-origin controls
+- Memory + agent tool surfaces (`memory.*`, `fndr.*`, `agent.*`)
 
-```bash
-export FNDR_MCP_MODE=tunnel
-export FNDR_MCP_REQUIRE_AUTH=true
-export FNDR_MCP_ALLOW_LOOPBACK_AUTH_BYPASS=false
-cloudflared tunnel --url http://127.0.0.1:58596
-```
+Key environment variables:
 
-Then set:
+- `FNDR_MCP_MODE`
+- `FNDR_MCP_REQUIRE_AUTH`
+- `FNDR_MCP_ALLOW_LOOPBACK_AUTH_BYPASS`
+- `FNDR_MCP_ENABLE_TLS`
+- `FNDR_MCP_ALLOWED_ORIGINS`
+- `FNDR_MCP_PUBLIC_BASE_URL`
 
-```bash
-export FNDR_MCP_PUBLIC_BASE_URL=https://your-subdomain.trycloudflare.com
-```
+---
 
-The MCP control panel and `~/.fndr/mcp.json` discovery file will surface both local and public endpoints. Keep the bearer token secret; in tunnel/public mode, requests without a valid `Authorization: Bearer <token>` header are rejected.
+## 9. Configuration
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Runtime configuration is persisted via `src-tauri/src/config.rs` and user config files (TOML). `.env.example` documents optional integration and deployment variables.
 
-## Local Models
+Notable defaults in current code:
 
-FNDR runs fully local with two models in this setup:
+- `retention_days = 7`
+- `screenshot_retention_days = 30`
+- `embedding.dimension = 384`
+- `use_vlm = true`
 
-| Model | Size | RAM | Role |
-| --- | --- | --- | --- |
-| `Qwen3-VL-2B` GGUF | ~1.5 GB | ~3.5 GB | Multimodal memory creation, OCR-grounded extraction |
-| `all-MiniLM-L6-v2.onnx` + `tokenizer.json` | ~90 MB | ~0.5 GB | Semantic memory search embeddings (384-d) |
-| `bge-large-en-v1.5-quantized.onnx` + `tokenizer.json` | ~300 MB+ | loaded only during explicit reindex | Staged v5 parent-memory target embeddings (1024-d) |
+---
 
-`all-MiniLM-L6-v2` is required for search and can be installed with:
+## 10. Development and Verification
 
-```bash
-./scripts/bootstrap/download-minilm.sh
-```
-
-Models are stored under `~/Library/Application Support/com.fndr.app/models/`.
-
-Validate the local embedding and LanceDB path with:
-
-```bash
-make diagnostic
-```
-
-The current live search and capture path remains v4 MiniLM 384-d in `memories_v4_minilm_384`. The staged BGE contract writes only to `memories_v5_bge_1024` through the explicit `reindex_memories_v5` maintenance IPC command. FNDR does not silently fall back across dimensions: 384-d MiniLM vectors are refused by the v5 schema path, and 1024-d BGE vectors are kept in the v5 table.
-
-If an older prototype database was created with a different vector dimension, back it up and let FNDR recreate the current 384-d MiniLM schema with:
-
-```bash
-make reset-lancedb
-```
-
-The v5 BGE path is additive. It does not delete or reset v4 rows, and missing BGE assets produce a clear maintenance-command error instead of breaking startup.
-
-Generated Rust/Tauri artifacts can become large during repeated local builds. Clear only
-build outputs with:
-
-```bash
-make clean-dev-cache
-```
-
-For a full local reset of generated build outputs, runtime memory data, backups, and
-downloaded model blobs:
-
-```bash
-make clean-all-generated
-```
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Privacy Controls
-
-The controls below are implemented in source and exposed through Tauri commands or configuration. Optional environment variables can enable external services, so review `.env.example` before enabling experimental workflows.
-
-| Control | Source-backed behavior |
-| --- | --- |
-| Pause and resume | `pause_capture` and `resume_capture` toggle capture state in `src-tauri/src/ipc/commands/` |
-| App blocklist | `get_blocklist` and `set_blocklist` read/write blocked app names in runtime config |
-| Default blocked apps | `1Password`, `Keychain Access`, `System Preferences`, and `System Settings` are seeded in `Config::default` |
-| Sensitive-context alerts | `Blocklist::is_sensitive_context` detects selected banking and finance keywords for proactive alerts |
-| Add site to blocklist | `add_to_blocklist` adds a site and attempts retroactive deletion for matching stored memories |
-| Delete one memory | `delete_memory` deletes the memory record and its screenshot artifact when present |
-| Delete older memories | `delete_older_than` removes memory records older than the requested day count |
-| Delete all data | `delete_all_data` clears memory records, graph data, frames, screenshots, and meetings under the app data store |
-| Retention | `retention_days` defaults to `7`; `screenshot_retention_days` defaults to `30` |
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Known Limitations
-
-- Image-to-image visual similarity is live for screen captures and imported photos (CLIP `image_embedding` column). Cross-modal text->image retrieval is not yet supported and is gated on an explicit privacy design (see ADR-004).
-- Meeting diarization is experimental.
-- Search quality depends on OCR and embedding quality.
-- Old LanceDB schemas may need migration after embedding dimension changes.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Development
-
-Run the full local test target from the repository root:
+### Full default verification
 
 ```bash
 make test
 ```
 
-The target runs TypeScript typechecking, Vitest, and Rust tests:
+Runs:
 
-| Phase | Underlying command |
-| --- | --- |
-| TypeScript | `npm run typecheck` |
-| Frontend tests | `npm test` |
-| Rust tests | `cd src-tauri && cargo test` |
+- `npm run typecheck`
+- `npm test`
+- `cd src-tauri && cargo test`
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### Useful maintenance commands
 
-## Links
+```bash
+make diagnostic
+make reset-lancedb
+make clean-dev-cache
+make clean-all-generated
+```
 
-| Host | Remote |
-| --- | --- |
-| GitLab | `git@capstone.cs.utah.edu:fndr/fndr.git` |
-| GitHub | `git@github.com:anurupkumar18/FNDR.git` |
+---
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+## 11. Known Limitations / Experimental Surfaces
 
-[version-shield]: https://img.shields.io/badge/version-0.2.11-0f766e?style=for-the-badge
-[tauri-shield]: https://img.shields.io/badge/Tauri-2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white
-[react-shield]: https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=111111
-[rust-shield]: https://img.shields.io/badge/Rust-2021-000000?style=for-the-badge&logo=rust&logoColor=white
-[macos-shield]: https://img.shields.io/badge/macOS-13%2B-111111?style=for-the-badge&logo=apple&logoColor=white
-[license-shield]: https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge
-[github-url]: https://github.com/anurupkumar18/FNDR
-[tauri-url]: https://tauri.app/
-[react-url]: https://react.dev/
-[rust-url]: https://www.rust-lang.org/
-[tauri-config]: src-tauri/tauri.conf.json
-[cargo-manifest]: src-tauri/Cargo.toml
+- Quality still depends on OCR fidelity and capture signal quality.
+- Some graph-oriented retrieval interfaces are still partial (for example bounded subgraph descriptor paths).
+- Manual photo import and some multimodal paths are still evolving and should be treated as experimental.
+- Meeting diarization and adjacent speech workflows are not fully hardened.
+
+---
+
+## 12. Repository Map
+
+```text
+fndr/
+├── src/                  # React + TypeScript UI
+├── src-tauri/            # Rust backend, Tauri commands, MCP, storage, capture
+├── docs/                 # Architecture, decisions, agent/MCP docs
+├── scripts/              # Bootstrap + diagnostics + maintenance scripts
+├── AGENTS.md             # Agent defaults and engineering constraints
+└── README.md
+```
+
+### Additional docs
+
+- `docs/CONTEXT.md`
+- `docs/architecture/ARCHITECTURE.md`
+- `docs/architecture/graph-schema.md`
+- `docs/decisions/`
+- `docs/mcp.md`
+
