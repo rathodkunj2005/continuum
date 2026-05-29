@@ -25,11 +25,7 @@ pub fn companion_card_from_memory_card(card: crate::search::MemoryCard) -> Compa
         source_count: card.source_count,
         confidence: card.confidence,
         project: card.project,
-        topic: card
-            .topic_categories
-            .first()
-            .cloned()
-            .unwrap_or_default(),
+        topic: card.topic_categories.first().cloned().unwrap_or_default(),
         activity_type: card.activity_type,
         files_touched: card.files_touched,
         raw_snippets: card.raw_snippets,

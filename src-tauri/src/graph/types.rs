@@ -158,6 +158,10 @@ impl Default for GraphEdge {
 
 impl Default for Anchor3D {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, z: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
     }
 }

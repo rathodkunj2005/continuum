@@ -128,6 +128,11 @@ fn normalize_record_for_index_repairs_vector_dimensions() {
         .snippet_embedding
         .iter()
         .all(|value| *value == 0.0));
+    assert!(normalized
+        .support_embedding
+        .iter()
+        .all(|value| *value == 0.0));
+    assert!(normalized.image_embedding.iter().all(|value| *value == 0.0));
 }
 
 #[test]
@@ -188,10 +193,12 @@ fn memory_schema_dimensions_keep_v4_and_v5_separate() {
     assert_eq!(schema_vector_dim(&v4, "embedding"), Some(384));
     assert_eq!(schema_vector_dim(&v4, "snippet_embedding"), Some(384));
     assert_eq!(schema_vector_dim(&v4, "support_embedding"), Some(384));
+    assert_eq!(schema_vector_dim(&v4, "image_embedding"), Some(512));
 
     assert_eq!(schema_vector_dim(&v5, "embedding"), Some(1024));
     assert_eq!(schema_vector_dim(&v5, "snippet_embedding"), Some(1024));
     assert_eq!(schema_vector_dim(&v5, "support_embedding"), Some(1024));
+    assert_eq!(schema_vector_dim(&v5, "image_embedding"), Some(512));
 
     assert_eq!(schema_vector_dim(&chunks, "embedding"), Some(1024));
     assert!(chunks.field_with_name("memory_id").is_ok());
@@ -299,6 +306,63 @@ async fn store_opens_v4_and_creates_v5_parent_table_without_resetting_v4() {
     assert_eq!(
         schema_vector_dim(&chunk_table.schema().await.unwrap(), "embedding"),
         Some(1024)
+    );
+}
+
+#[tokio::test]
+async fn store_migrates_legacy_memories_table_into_active_v4_without_dimension_fallback() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("lancedb");
+    std::fs::create_dir_all(&db_path).expect("db dir");
+    let conn = lancedb::connect(db_path.to_string_lossy().as_ref())
+        .execute()
+        .await
+        .expect("connect");
+    let mut legacy = record(
+        Some("https://example.com/legacy"),
+        "Legacy 256-d memory",
+        "Legacy memory should move to the active v4 table.",
+    );
+    legacy.id = "legacy-256".to_string();
+    legacy.embedding = vec![0.7; 256];
+    legacy.snippet_embedding = vec![0.7; 256];
+    legacy.support_embedding = vec![0.7; 256];
+    legacy.embedding_dim = 256;
+    let batch = records_to_batch_with_text_dim(&[legacy], 256).expect("legacy batch");
+    conn.create_table("memories", batch)
+        .execute()
+        .await
+        .expect("legacy table");
+
+    let path = dir.path().to_path_buf();
+    let store = tokio::task::spawn_blocking(move || Store::new(&path).expect("store"))
+        .await
+        .expect("store task");
+    let migrated = store
+        .get_memory_by_id("legacy-256")
+        .await
+        .expect("read migrated")
+        .expect("migrated row");
+
+    assert_eq!(migrated.embedding.len(), DEFAULT_TEXT_EMBEDDING_DIM);
+    assert_eq!(migrated.snippet_embedding.len(), DEFAULT_TEXT_EMBEDDING_DIM);
+    assert_eq!(migrated.support_embedding.len(), DEFAULT_TEXT_EMBEDDING_DIM);
+    assert_eq!(migrated.image_embedding.len(), DEFAULT_IMAGE_EMBEDDING_DIM);
+    assert!(migrated.embedding.iter().all(|value| *value == 0.0));
+    assert_eq!(migrated.embedding_dim, DEFAULT_TEXT_EMBEDDING_DIM as u32);
+    assert_eq!(
+        migrated.embedding_model,
+        crate::config::DEFAULT_EMBEDDING_MODEL_NAME
+    );
+
+    let conn = lancedb::connect(db_path.to_string_lossy().as_ref())
+        .execute()
+        .await
+        .expect("reconnect");
+    let legacy_table = conn.open_table("memories").execute().await.expect("legacy");
+    assert_eq!(
+        legacy_table.count_rows(None).await.expect("legacy count"),
+        1
     );
 }
 
@@ -463,6 +527,75 @@ fn normalize_record_for_index_strips_low_confidence_markers() {
     assert!(!normalized.clean_text.contains("[LOW_CONF]"));
     assert!(!normalized.embedding_text.contains("[LOW_CONF]"));
     assert!(!normalized.display_summary.contains("[LOW_CONF]"));
+}
+
+#[test]
+fn normalize_record_for_index_preserves_existing_embedding_text_and_flags_mismatch() {
+    let mut source = record(
+        Some("https://docs.example.com/fndr/search"),
+        "Search quality",
+        "Improved search quality for memory cards",
+    );
+    source.embedding_text = "intent: existing vector source text".to_string();
+    source.memory_context =
+        "Canonical context changed after the vector was already computed.".to_string();
+    source.user_intent = "Align embedding provenance".to_string();
+    source.project = "Memory search".to_string();
+    source.topic = "embedding contract".to_string();
+    source.raw_evidence = r#"{"source_kind":"test"}"#.to_string();
+
+    let normalized = normalize_record_for_index(&source);
+
+    assert_eq!(
+        normalized.embedding_text, "intent: existing vector source text",
+        "normalization must not silently rewrite source text for an existing vector"
+    );
+    let manifest =
+        crate::memory_embedding_document::read_embedding_manifest(&normalized.raw_evidence)
+            .expect("embedding manifest");
+    assert!(manifest.statuses.iter().any(|status| {
+        status.role == crate::memory_embedding_document::EmbeddingRole::Primary
+            && status.status == crate::memory_embedding_document::EmbeddingStatus::StaleSourceText
+    }));
+}
+
+#[test]
+fn batch_to_search_results_exposes_safe_embedding_provenance() {
+    let mut source = record(
+        Some("https://docs.example.com/fndr/search"),
+        "Search quality",
+        "Improved search quality for memory cards",
+    );
+    source.memory_context =
+        "Canonical context for the memory embedding document and search provenance.".to_string();
+    let document =
+        crate::memory_embedding_document::compose_memory_embedding_document(&source, None);
+    let manifest = crate::memory_embedding_document::build_embedding_manifest(
+        &document,
+        crate::memory_embedding_document::EmbeddingStatus::StaleSourceText,
+        crate::memory_embedding_document::EmbeddingStatus::ZeroVectorFallback,
+        crate::memory_embedding_document::VisualSemanticSource::TextCapture,
+    );
+    source.raw_evidence =
+        crate::memory_embedding_document::upsert_embedding_manifest("{}", &manifest);
+
+    let batch = records_to_batch(&[source]).expect("record batch");
+    let results = batch_to_search_results(&batch);
+
+    let provenance = results[0]
+        .embedding_provenance
+        .as_ref()
+        .expect("embedding provenance");
+    let primary = provenance
+        .role(crate::memory_embedding_document::EmbeddingRole::Primary)
+        .expect("primary provenance");
+    assert_eq!(
+        primary.status,
+        crate::memory_embedding_document::EmbeddingStatus::StaleSourceText
+    );
+    assert!(provenance
+        .status_labels
+        .contains(&"embedding:primary:stale_source_text".to_string()));
 }
 
 #[test]

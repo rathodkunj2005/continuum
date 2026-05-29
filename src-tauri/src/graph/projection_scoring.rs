@@ -1,4 +1,4 @@
-use crate::graph::types::{GraphNode, GraphData};
+use crate::graph::types::{GraphData, GraphNode};
 
 pub fn compute_importance_score(node: &GraphNode) -> f32 {
     if let Some(score) = node.importance_score {
@@ -24,10 +24,7 @@ pub fn compute_confidence_score(node: &GraphNode) -> f32 {
     }
 }
 
-pub fn compute_relevance_score(
-    node: &GraphNode,
-    query: &str,
-) -> f32 {
+pub fn compute_relevance_score(node: &GraphNode, query: &str) -> f32 {
     if query.is_empty() {
         return 0.5; // Default when no query
     }

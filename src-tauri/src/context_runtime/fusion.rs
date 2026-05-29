@@ -29,6 +29,13 @@ pub fn fuse(plan: &QueryPlan, hits: Vec<RouteHits>, weights: &FusionWeights) -> 
                     }
                 }
             }
+            if let Some(result) = hit.signals.search_result.as_ref() {
+                for label in &result.embedding_reason_labels {
+                    if !entry.embedding_reason_labels.contains(label) {
+                        entry.embedding_reason_labels.push(label.clone());
+                    }
+                }
+            }
             entry.coverage = entry.coverage.max(coverage_from_hit(hit));
         }
     }
@@ -44,6 +51,7 @@ pub fn fuse(plan: &QueryPlan, hits: Vec<RouteHits>, weights: &FusionWeights) -> 
                 &entry.graph_path,
                 anchor_terms.clone(),
                 recency_boost,
+                &entry.embedding_reason_labels,
             );
             FusedHit {
                 memory_id,
@@ -80,6 +88,7 @@ struct Agg {
     coverage: f32,
     graph_path: Option<Vec<PathStep>>,
     contributing_routes: Vec<Route>,
+    embedding_reason_labels: Vec<String>,
 }
 
 impl Agg {
@@ -140,11 +149,17 @@ fn build_surfacing_reason(
     graph_path: &Option<Vec<PathStep>>,
     anchor_terms_hit: Vec<String>,
     recency_boost: f32,
+    embedding_reason_labels: &[String],
 ) -> SurfacingReason {
-    let route_strings: Vec<String> = contributing_routes
+    let mut route_strings: Vec<String> = contributing_routes
         .iter()
         .map(|route| route_label(*route, graph_path))
         .collect();
+    for label in embedding_reason_labels {
+        if !route_strings.contains(label) {
+            route_strings.push(label.clone());
+        }
+    }
 
     let headline = if let Some(path) = graph_path.as_ref().filter(|p| !p.is_empty()) {
         let last = path.last().unwrap();
@@ -211,6 +226,30 @@ mod tests {
         }
     }
 
+    fn hit_with_embedding_reason(
+        memory_id: &str,
+        score: f32,
+        branch: RouteBranch,
+        label: &str,
+    ) -> RouteHit {
+        let mut search_result = crate::storage::SearchResult {
+            id: memory_id.to_string(),
+            score,
+            ..Default::default()
+        };
+        search_result.embedding_reason_labels = vec![label.to_string()];
+        RouteHit {
+            memory_id: memory_id.to_string(),
+            score,
+            signals: RouteSignals {
+                branch,
+                confidence: score,
+                search_result: Some(search_result),
+            },
+            graph_path: None,
+        }
+    }
+
     fn dummy_plan() -> QueryPlan {
         QueryPlan {
             raw: "test".to_string(),
@@ -268,6 +307,29 @@ mod tests {
         let plan = dummy_plan();
         let fused = fuse(&plan, Vec::new(), &FusionWeights::default());
         assert!(fused.is_empty());
+    }
+
+    #[test]
+    fn fuse_carries_embedding_provenance_labels_into_surfacing_reason() {
+        let plan = dummy_plan();
+        let weights = FusionWeights::default();
+        let hits = vec![RouteHits {
+            route: Route::Vector,
+            hits: vec![hit_with_embedding_reason(
+                "stale",
+                0.9,
+                RouteBranch::Semantic,
+                "embedding:primary:stale_source_text",
+            )],
+            elapsed_ms: 1,
+        }];
+
+        let fused = fuse(&plan, hits, &weights);
+
+        assert!(fused[0]
+            .surfacing_reason
+            .routes
+            .contains(&"embedding:primary:stale_source_text".to_string()));
     }
 
     #[test]

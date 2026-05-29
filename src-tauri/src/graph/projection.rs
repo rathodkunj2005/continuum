@@ -1,4 +1,4 @@
-use crate::graph::types::{GraphNode, GraphCommunity, Anchor3D, NodeType};
+use crate::graph::types::{Anchor3D, GraphCommunity, GraphNode, NodeType};
 use std::collections::HashMap;
 
 pub fn derive_communities(nodes: &[GraphNode]) -> Vec<GraphCommunity> {
@@ -40,7 +40,10 @@ pub fn derive_communities(nodes: &[GraphNode]) -> Vec<GraphCommunity> {
     let mut community_ids: Vec<String> = community_map.keys().cloned().collect();
     community_ids.sort_by_key(|id| {
         // Primary sort: canonical rank (if in canonical_order, position; else last)
-        let canonical_rank = canonical_order.iter().position(|&label| label == id).unwrap_or(usize::MAX);
+        let canonical_rank = canonical_order
+            .iter()
+            .position(|&label| label == id)
+            .unwrap_or(usize::MAX);
         // Secondary sort: alphabetical by label (for determinism with non-canonical communities)
         (canonical_rank, id.clone())
     });
@@ -48,7 +51,8 @@ pub fn derive_communities(nodes: &[GraphNode]) -> Vec<GraphCommunity> {
     let mut communities = Vec::new();
     for (idx, community_id) in community_ids.iter().enumerate() {
         let stats = &community_map[community_id];
-        let canonical_label = canonical_order.iter()
+        let canonical_label = canonical_order
+            .iter()
             .find(|&&label| label == community_id)
             .copied()
             .unwrap_or(community_id.as_str());
@@ -101,18 +105,18 @@ fn compute_stable_anchor(_label: &str, index: usize) -> Anchor3D {
     let radius = 150.0;
 
     let positions = vec![
-        (45.0, 0.0),      // Work/Code: top-left-front
-        (45.0, 60.0),     // Research
-        (45.0, 120.0),    // Design
-        (45.0, 180.0),    // Meetings: top-right-front
-        (45.0, 240.0),    // Errors
-        (45.0, 300.0),    // People
-        (-45.0, 0.0),     // Files: bottom-left-back
-        (-45.0, 60.0),    // Decisions
-        (-45.0, 120.0),   // Todos
-        (-45.0, 180.0),   // Concepts: bottom-right-back
-        (-45.0, 240.0),   // Past Searches
-        (-45.0, 300.0),   // Agent Context
+        (45.0, 0.0),    // Work/Code: top-left-front
+        (45.0, 60.0),   // Research
+        (45.0, 120.0),  // Design
+        (45.0, 180.0),  // Meetings: top-right-front
+        (45.0, 240.0),  // Errors
+        (45.0, 300.0),  // People
+        (-45.0, 0.0),   // Files: bottom-left-back
+        (-45.0, 60.0),  // Decisions
+        (-45.0, 120.0), // Todos
+        (-45.0, 180.0), // Concepts: bottom-right-back
+        (-45.0, 240.0), // Past Searches
+        (-45.0, 300.0), // Agent Context
     ];
 
     let (lat, lon) = positions.get(index).copied().unwrap_or((0.0_f64, 0.0_f64));
@@ -142,7 +146,8 @@ fn compute_community_color(label: &str) -> String {
         "Past Searches" => "token-teal",
         "Agent Context" => "token-amber",
         _ => "token-gray",
-    }.to_string()
+    }
+    .to_string()
 }
 
 struct CommunityStats {

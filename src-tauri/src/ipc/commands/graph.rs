@@ -11,6 +11,9 @@ use crate::graph::graph_store::GraphStore;
 use crate::graph::pathfinding::find_path;
 use crate::graph::schema::{GraphNode, GraphSubgraph};
 use crate::graph::traversal::god_nodes;
+use crate::memory_embedding_document::{
+    annotate_graph_node_embedding, compose_graph_node_embedding_text, EmbeddingStatus,
+};
 use crate::telemetry::runtime_metrics;
 use crate::AppState;
 
@@ -149,6 +152,7 @@ async fn commit_graph_updates_internal(
     }
     let t0 = std::time::Instant::now();
     let gs = GraphStore::new(state.store.clone());
+    let graph_embedder = super::common::shared_embedder().ok();
     let mut merged_nodes = 0usize;
     let mut merged_edges = 0usize;
     let mut conflicts = 0usize;
@@ -157,8 +161,49 @@ async fn commit_graph_updates_internal(
 
     for batch in pending.iter().chain(low_confidence.iter()) {
         let is_low_confidence = batch.overall_confidence < 0.5;
-        for n in &batch.nodes {
+        let source_memory = state
+            .store
+            .get_memory_by_id(&batch.memory_id)
+            .await
+            .ok()
+            .flatten();
+        let node_texts = batch
+            .nodes
+            .iter()
+            .map(|node| compose_graph_node_embedding_text(node, source_memory.as_ref()))
+            .collect::<Vec<_>>();
+        let node_vectors = graph_embedder.and_then(|embedder| {
+            let contexts = node_texts
+                .iter()
+                .map(|text| {
+                    (
+                        "Insight graph".to_string(),
+                        batch.memory_id.clone(),
+                        text.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            embedder.embed_batch_with_context(&contexts).ok()
+        });
+        for (index, n) in batch.nodes.iter().enumerate() {
             let mut node = n.clone();
+            let source_text = node_texts.get(index).cloned().unwrap_or_default();
+            if let Some(vector) = node_vectors.as_ref().and_then(|vectors| vectors.get(index)) {
+                node.embedding = Some(vector.clone());
+                annotate_graph_node_embedding(
+                    &mut node,
+                    EmbeddingStatus::Ready,
+                    &source_text,
+                    None,
+                );
+            } else {
+                annotate_graph_node_embedding(
+                    &mut node,
+                    EmbeddingStatus::Unavailable,
+                    &source_text,
+                    Some("text embedder unavailable during graph idle commit".to_string()),
+                );
+            }
             if is_low_confidence {
                 low_conf_nodes += 1;
                 if let Some(obj) = node.metadata.as_object_mut() {

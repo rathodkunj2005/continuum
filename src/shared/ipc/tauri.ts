@@ -21,6 +21,8 @@ export interface SearchResult {
     matched_routes?: string[];
     matched_chunk_ids?: string[];
     chunk_evidence?: MatchedChunkEvidence[];
+    embedding_provenance?: SearchEmbeddingProvenance;
+    embedding_reason_labels?: string[];
     /** Post-capture review lifecycle:
      *  "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed". */
     enrichment_status?: string;
@@ -97,6 +99,8 @@ export interface MemoryCard {
     matched_routes?: string[];
     matched_chunk_ids?: string[];
     chunk_evidence?: MatchedChunkEvidence[];
+    embedding_provenance?: SearchEmbeddingProvenance;
+    embedding_reason_labels?: string[];
     /** Phase 3 — deterministic "Why this surfaced" attached by the
      *  agentic-graph-rag composer. Absent on legacy code paths. */
     surfacing_reason?: SurfacingReason;
@@ -110,6 +114,57 @@ export interface MemoryCard {
     /** Coarse persisted gate outcome — "enriched_memory_card",
      *  "visual_semantics_failed", "metadata_only", etc. */
     storage_outcome?: string;
+}
+
+export type EmbeddingRole =
+    | "primary"
+    | "snippet"
+    | "support"
+    | "chunk"
+    | "image"
+    | "graph_node";
+
+export type EmbeddingStatus =
+    | "ready"
+    | "zero_vector_fallback"
+    | "unavailable"
+    | "stale_source_text"
+    | "dimension_mismatch"
+    | "legacy_unverified";
+
+export type EmbeddingVectorSpace =
+    | "text_mini_lm384"
+    | "text_bge1024"
+    | "clip_image512"
+    | "graph_node_text384";
+
+export type VisualSemanticSource =
+    | "none"
+    | "text_capture"
+    | "pixel_vlm_or_ocr_grounded"
+    | "clip_metadata_fallback"
+    | "clip_image_embedding"
+    | "visual_semantics_failed"
+    | "llm_ocr_grounded"
+    | "ocr_only"
+    | "unknown";
+
+export interface SearchEmbeddingRoleProvenance {
+    role: EmbeddingRole;
+    status: EmbeddingStatus;
+    vector_space?: EmbeddingVectorSpace;
+    model_id?: string;
+    dimension?: number;
+    source_hash?: string;
+    source_char_count: number;
+    reason?: string;
+}
+
+export interface SearchEmbeddingProvenance {
+    document_version: number;
+    roles: SearchEmbeddingRoleProvenance[];
+    visual_semantic_source: VisualSemanticSource;
+    status_labels: string[];
 }
 
 // ── Phase 4 agentic-graph-rag types ───────────────────────────────────────
@@ -159,6 +214,7 @@ export interface ComposedAnswer {
     cards: MemoryCard[];
     verify_outcome: VerifyOutcome;
     surfacing_reasons: SurfacingReason[];
+    debug_trace?: unknown;
 }
 
 export interface FndrSearchResponse {

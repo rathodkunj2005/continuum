@@ -893,6 +893,12 @@ fn surfacing_reason_from_result(
     if result.matched_routes.is_empty() {
         return None;
     }
+    let mut routes = result.matched_routes.clone();
+    for label in &result.embedding_reason_labels {
+        if !routes.contains(label) {
+            routes.push(label.clone());
+        }
+    }
     let headline = if result
         .matched_routes
         .iter()
@@ -904,7 +910,7 @@ fn surfacing_reason_from_result(
     };
     Some(crate::context_runtime::context_pack::SurfacingReason {
         headline,
-        routes: result.matched_routes.clone(),
+        routes,
         graph_path: None,
         anchor_terms_hit: Vec::new(),
         recency_boost: 0.0,

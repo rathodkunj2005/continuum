@@ -33,7 +33,9 @@ const PERM_FEEDBACK: &str = "feedback";
 pub fn extract_bearer(header_value: Option<&str>) -> Option<String> {
     let raw = header_value?;
     let raw = raw.trim();
-    let token = raw.strip_prefix("Bearer ").or_else(|| raw.strip_prefix("bearer "))?;
+    let token = raw
+        .strip_prefix("Bearer ")
+        .or_else(|| raw.strip_prefix("bearer "))?;
     let token = token.trim();
     if token.is_empty() {
         None
@@ -94,7 +96,9 @@ fn required_permission(method: &str, path: &str) -> Option<&'static str> {
 }
 
 /// Pull the authenticated device out of request extensions inside a handler.
-pub fn device_from_extensions(req_extensions: &axum::http::Extensions) -> Option<Arc<MobileDevice>> {
+pub fn device_from_extensions(
+    req_extensions: &axum::http::Extensions,
+) -> Option<Arc<MobileDevice>> {
     req_extensions.get::<Arc<MobileDevice>>().cloned()
 }
 
@@ -139,7 +143,10 @@ mod tests {
             required_permission("POST", "/v1/memories/search"),
             Some(PERM_SEARCH)
         );
-        assert_eq!(required_permission("GET", "/v1/memories/abc"), Some(PERM_SEARCH));
+        assert_eq!(
+            required_permission("GET", "/v1/memories/abc"),
+            Some(PERM_SEARCH)
+        );
         assert_eq!(required_permission("GET", "/v1/status"), Some(PERM_STATUS));
         assert_eq!(
             required_permission("POST", "/v1/capture/control"),
@@ -158,11 +165,7 @@ mod tests {
 
     async fn handler_ok(req: Request<Body>) -> Response {
         let device = device_from_extensions(req.extensions()).expect("device in extensions");
-        (
-            StatusCode::OK,
-            format!("device:{}", device.device_id),
-        )
-            .into_response()
+        (StatusCode::OK, format!("device:{}", device.device_id)).into_response()
     }
 
     fn build_router(reg: Arc<DeviceRegistry>) -> Router {

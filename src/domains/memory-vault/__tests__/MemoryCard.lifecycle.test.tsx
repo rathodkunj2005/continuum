@@ -14,6 +14,7 @@ import {
     deriveLifecycleStatus,
     isMetaOcrNarration,
 } from "../MemoryCard";
+import { MemoryProvenanceStrip } from "../MemoryProvenanceStrip";
 
 afterEach(() => {
     cleanup();
@@ -132,6 +133,23 @@ describe("MemoryCard — lifecycle chip rendering (expanded variant)", () => {
         render(<MemoryCard variant="expanded" card={makeCard()} />);
         const stamp = screen.getByLabelText("memory status: RAW");
         expect(stamp).toBeTruthy();
+    });
+});
+
+describe("MemoryProvenanceStrip", () => {
+    it("does not treat synthesis_branch alone as DEVELOPED", () => {
+        render(
+            <MemoryProvenanceStrip
+                card={makeCard({
+                    synthesis_branch: "llm_ocr_grounded_visual_fallback",
+                    enrichment_status: "pending_visual_semantics",
+                    storage_outcome: "low_quality_evidence",
+                })}
+            />,
+        );
+
+        expect(screen.getByText("PENDING")).toBeTruthy();
+        expect(screen.queryByText("DEVELOPED")).toBeNull();
     });
 });
 

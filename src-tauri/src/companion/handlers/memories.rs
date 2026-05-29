@@ -6,7 +6,9 @@
 //! via the caller-supplied `client_event_id`.
 
 use crate::companion::auth::device_from_extensions;
-use crate::companion::dto::{DeviceType, ManualMemoryRequest, ManualMemoryResponse, MemoryDetailResponse};
+use crate::companion::dto::{
+    DeviceType, ManualMemoryRequest, ManualMemoryResponse, MemoryDetailResponse,
+};
 use crate::companion::errors::{CompanionError, CompanionResult};
 use crate::context_runtime::retrieval_routes::memory_record_to_search_result;
 use crate::search::MemoryCardSynthesizer;
@@ -24,8 +26,8 @@ pub async fn create_manual(
     State(app_state): State<Arc<AppState>>,
     request: Request,
 ) -> CompanionResult<Json<ManualMemoryResponse>> {
-    let device = device_from_extensions(request.extensions())
-        .ok_or(CompanionError::Unauthenticated)?;
+    let device =
+        device_from_extensions(request.extensions()).ok_or(CompanionError::Unauthenticated)?;
 
     let (_parts, body) = request.into_parts();
     let bytes = axum::body::to_bytes(body, 32 * 1024)
@@ -44,7 +46,9 @@ pub async fn create_manual(
         )));
     }
     if payload.client_event_id.trim().is_empty() {
-        return Err(CompanionError::BadRequest("client_event_id is empty".into()));
+        return Err(CompanionError::BadRequest(
+            "client_event_id is empty".into(),
+        ));
     }
 
     let memory_id = deterministic_memory_id(&device.device_id, &payload.client_event_id);
@@ -102,7 +106,9 @@ pub async fn get_memory(
     let card = MemoryCardSynthesizer::deterministic_from_results("", &[search_row], 1)
         .into_iter()
         .next()
-        .ok_or_else(|| CompanionError::Internal("failed to synthesize memory detail card".into()))?;
+        .ok_or_else(|| {
+            CompanionError::Internal("failed to synthesize memory detail card".into())
+        })?;
 
     Ok(Json(MemoryDetailResponse {
         card: crate::companion::handlers::companion_card_from_memory_card(card),

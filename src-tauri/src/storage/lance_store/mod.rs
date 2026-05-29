@@ -121,6 +121,7 @@ const SEARCH_RESULT_COLUMNS: &[&str] = &[
     "reviewed_at_ms",
     "reviewer_generation",
     "storage_outcome",
+    "raw_evidence",
 ];
 const TEXT_EMBED_DIM: i32 = DEFAULT_TEXT_EMBEDDING_DIM as i32;
 const IMAGE_EMBED_DIM: i32 = DEFAULT_IMAGE_EMBEDDING_DIM as i32;

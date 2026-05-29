@@ -1,7 +1,5 @@
-use crate::graph::{
-    types::*,
-};
 use crate::graph::projection_privacy::PrivacyFilter;
+use crate::graph::types::*;
 
 #[tauri::command]
 pub async fn get_memory_graph_atlas() -> Result<GraphData, String> {

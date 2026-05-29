@@ -1,9 +1,7 @@
 //! Tauri commands that expose the Companion API to the desktop React UI:
 //! pairing, device listing, revocation, and server status.
 
-use crate::companion::dto::{
-    CompanionEndpoint, DeviceListEntry, PairStartResponse,
-};
+use crate::companion::dto::{CompanionEndpoint, DeviceListEntry, PairStartResponse};
 use crate::AppState;
 use serde::Serialize;
 use std::sync::Arc;
@@ -92,11 +90,7 @@ pub async fn companion_start_pairing() -> Result<PairStartResponse, String> {
 pub async fn companion_list_devices() -> Result<Vec<DeviceListEntry>, String> {
     let reg = crate::companion::device_registry()
         .ok_or_else(|| "Companion API is not running".to_string())?;
-    Ok(reg
-        .list()
-        .iter()
-        .map(DeviceListEntry::from)
-        .collect())
+    Ok(reg.list().iter().map(DeviceListEntry::from).collect())
 }
 
 #[tauri::command]
@@ -104,6 +98,5 @@ pub async fn companion_revoke_device(device_id: String) -> Result<bool, String> 
     let reg = crate::companion::device_registry()
         .ok_or_else(|| "Companion API is not running".to_string())?;
     let now_ms = chrono::Utc::now().timestamp_millis();
-    reg.revoke(&device_id, now_ms)
-        .map_err(|e| format!("{e:?}"))
+    reg.revoke(&device_id, now_ms).map_err(|e| format!("{e:?}"))
 }

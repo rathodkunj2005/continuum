@@ -10,16 +10,16 @@ use crate::inference::vlm_router::{
     should_run_vlm, vlm_capability_label, vlm_runtime_status_label, VlmRouteDecision, VlmRouteInput,
 };
 use crate::inference::{
-    build_import_raw_evidence, compose_failed_visual_semantics_import_metadata,
-    compose_import_memory_context, extract_image_semantics, insight_from_ocr_only,
+    build_import_raw_evidence, compose_import_memory_context,
+    compose_visual_metadata_fallback_import, extract_image_semantics, insight_from_ocr_only,
     insight_from_structured, should_include_import_ocr, synthesize_vision_insight,
     visual_semantics_is_grounded, ImageImportSource, ImageSemanticInsight, ImportOcrStats,
 };
-use crate::memory_compaction::{
-    build_lexical_shadow, compact_summary_embedding_text, mean_pool_embeddings,
-    support_embedding_texts_with_config,
+use crate::memory_compaction::{build_lexical_shadow, mean_pool_embeddings};
+use crate::memory_embedding_document::{
+    build_embedding_manifest, compose_memory_embedding_document, image_embedding_status,
+    text_embedding_status, upsert_embedding_manifest, VisualSemanticSource,
 };
-use crate::memory_quality::{cap_visual_semantics_failed_scores, VISUAL_SEMANTICS_FAILED_OUTCOME};
 use crate::models;
 use crate::ocr::OcrEngine;
 use crate::storage::MemoryRecord;
@@ -255,7 +255,7 @@ pub async fn import_meta_glasses_photo(
         fallback_reason(&vlm_route),
     );
     if !visual_semantics_grounded {
-        extraction_issues.push(VISUAL_SEMANTICS_FAILED_OUTCOME.to_string());
+        extraction_issues.push("visual_metadata_fallback".to_string());
     }
 
     // Knowledge-rich synthesis: after a successful pixel-VLM run, pass the scene
@@ -282,7 +282,7 @@ pub async fn import_meta_glasses_photo(
             ImageImportSource::MetaGlasses,
         )
     } else {
-        compose_failed_visual_semantics_import_metadata(
+        compose_visual_metadata_fallback_import(
             &filename,
             ImageImportSource::MetaGlasses,
             fallback_reason(&vlm_route).or(extraction_failure_reason.as_deref()),
@@ -303,7 +303,7 @@ pub async fn import_meta_glasses_photo(
 
     let clean_text = composed.memory_context.clone();
     let snippet = if !visual_semantics_grounded {
-        format!("Imported image pending visual semantics: {filename}")
+        format!("Imported image stored with visual metadata: {filename}")
     } else if !insight.summary_short.trim().is_empty() {
         insight
             .summary_short
@@ -316,32 +316,45 @@ pub async fn import_meta_glasses_photo(
     };
 
     let lexical_shadow = build_lexical_shadow(APP_LABEL, &snippet, &clean_text, None);
-    let compact_summary_text =
-        compact_summary_embedding_text("import", &snippet, &clean_text, &lexical_shadow);
     let chunking_config = state.config.read().chunking.clone();
-    let support_texts = support_embedding_texts_with_config(
-        APP_LABEL,
-        &filename,
-        &clean_text,
-        &lexical_shadow,
-        Some(&chunking_config),
-    );
+    let mut embedding_seed = MemoryRecord {
+        app_name: APP_LABEL.to_string(),
+        window_title: filename.clone(),
+        clean_text: clean_text.clone(),
+        snippet: snippet.clone(),
+        display_summary: snippet.clone(),
+        summary_source: if extraction_issues.is_empty() {
+            "vision_mtmd".to_string()
+        } else {
+            "vision_fallback".to_string()
+        },
+        lexical_shadow: lexical_shadow.clone(),
+        source_type: ImageImportSource::MetaGlasses.api_label().to_string(),
+        topic: composed.topic.clone(),
+        workflow: "import".to_string(),
+        user_intent: composed.user_intent.clone(),
+        memory_context: composed.memory_context.clone(),
+        search_aliases: composed.search_aliases.clone(),
+        activity_type: composed.activity_type.clone(),
+        entities: insight.entities.clone(),
+        tags: insight.topics.clone(),
+        extraction_confidence: insight.confidence,
+        insight_what_happened: composed.insight_what_happened.clone(),
+        insight_why_mattered: composed.insight_why_mattered.clone(),
+        insight_card_confidence: insight.confidence,
+        errors: extraction_issues.clone(),
+        ..Default::default()
+    };
+    crate::memory_insight::derive_insight_for_record(&mut embedding_seed);
+    let embedding_document =
+        compose_memory_embedding_document(&embedding_seed, Some(&chunking_config));
 
     let embedder = shared_embedder()?;
-    let mut contexts = vec![
-        (APP_LABEL.to_string(), filename.clone(), clean_text.clone()),
-        (
-            APP_LABEL.to_string(),
-            filename.clone(),
-            compact_summary_text,
-        ),
-    ];
-    contexts.extend(
-        support_texts
-            .iter()
-            .cloned()
-            .map(|value| (APP_LABEL.to_string(), filename.clone(), value)),
-    );
+    let contexts = embedding_document
+        .text_embedding_inputs()
+        .into_iter()
+        .map(|value| (APP_LABEL.to_string(), filename.clone(), value))
+        .collect::<Vec<_>>();
     let vectors = embedder
         .embed_batch_with_context(&contexts)
         .map_err(|e| format!("embed: {e}"))?;
@@ -393,10 +406,19 @@ pub async fn import_meta_glasses_photo(
     raw_evidence_json["pressure_reason"] = json!(skip_reason);
     raw_evidence_json["extraction_issues"] = json!(&extraction_issues);
     raw_evidence_json["visual_semantics_grounded"] = json!(visual_semantics_grounded);
+    raw_evidence_json["visual_understanding"] = json!({
+        "status": if visual_semantics_grounded {
+            "pixel_vlm_or_ocr_grounded"
+        } else {
+            "clip_metadata_fallback"
+        },
+        "image_embedding_dim": DEFAULT_IMAGE_EMBEDDING_DIM,
+        "raw_pixels_persisted": false,
+    });
     raw_evidence_json["storage_outcome"] = json!(if visual_semantics_grounded {
         "candidate_memory_card"
     } else {
-        VISUAL_SEMANTICS_FAILED_OUTCOME
+        "low_quality_evidence"
     });
     raw_evidence_json["clip_embedding_status"] =
         json!(if image_embedding.iter().all(|v| *v == 0.0) {
@@ -404,7 +426,18 @@ pub async fn import_meta_glasses_photo(
         } else {
             "ok"
         });
-    let raw_evidence = raw_evidence_json.to_string();
+    let visual_source = if visual_semantics_grounded {
+        VisualSemanticSource::PixelVlmOrOcrGrounded
+    } else {
+        VisualSemanticSource::ClipMetadataFallback
+    };
+    let manifest = build_embedding_manifest(
+        &embedding_document,
+        text_embedding_status(&embedding),
+        image_embedding_status(&image_embedding),
+        visual_source,
+    );
+    let raw_evidence = upsert_embedding_manifest(&raw_evidence_json.to_string(), &manifest);
 
     let internal_context = json!({
         "import_pipeline": "visual_semantics_mtmd",
@@ -419,6 +452,11 @@ pub async fn import_meta_glasses_photo(
         "host_supports_vlm": host_supports_qwen_vlm,
         "pressure_reason": skip_reason,
         "visual_semantics_grounded": visual_semantics_grounded,
+        "visual_understanding_status": if visual_semantics_grounded {
+            "pixel_vlm_or_ocr_grounded"
+        } else {
+            "clip_metadata_fallback"
+        },
     })
     .to_string();
 
@@ -462,11 +500,7 @@ pub async fn import_meta_glasses_photo(
         support_embedding,
         decay_score: 1.0,
         last_accessed_at: now.timestamp_millis(),
-        source_type: if visual_semantics_grounded {
-            "import".to_string()
-        } else {
-            ImageImportSource::MetaGlasses.api_label().to_string()
-        },
+        source_type: ImageImportSource::MetaGlasses.api_label().to_string(),
         topic: composed.topic.clone(),
         workflow: "import".to_string(),
         user_intent: composed.user_intent.clone(),
@@ -476,40 +510,40 @@ pub async fn import_meta_glasses_photo(
         activity_type: composed.activity_type.clone(),
         entities: insight.entities.clone(),
         tags: insight.topics.clone(),
-        embedding_text: composed.embedding_text.clone(),
+        embedding_text: embedding_document.primary_text.clone(),
         extraction_confidence: insight.confidence,
-        insight_what_happened: composed.insight_what_happened.clone(),
-        insight_why_mattered: composed.insight_why_mattered.clone(),
+        insight_what_happened: embedding_seed.insight_what_happened.clone(),
+        insight_why_mattered: embedding_seed.insight_why_mattered.clone(),
+        insight_what_changed: embedding_seed.insight_what_changed.clone(),
+        insight_context_thread: embedding_seed.insight_context_thread.clone(),
+        insight_spans_json: embedding_seed.insight_spans_json.clone(),
         insight_card_confidence: insight.confidence,
         errors: extraction_issues.clone(),
         ..Default::default()
     };
 
     if !visual_semantics_grounded {
-        record.storage_outcome = VISUAL_SEMANTICS_FAILED_OUTCOME.to_string();
-        record.enrichment_status = "pending_visual_semantics".to_string();
-        record.summary_source = "visual_semantics_failed".to_string();
-        record.synthesis_branch = "visual_semantics_failed".to_string();
+        record.storage_outcome = "low_quality_evidence".to_string();
+        record.enrichment_status = "visual_metadata_fallback".to_string();
+        record.summary_source = "vision_fallback".to_string();
+        record.synthesis_branch = "visual_metadata_fallback".to_string();
         record.fallback_reason = fallback_reason(&vlm_route)
             .or(extraction_failure_reason.as_deref())
             .map(str::to_string);
-        record.evidence_confidence = 0.05;
-        record.extraction_confidence = 0.0;
-        record.specificity_score = 0.10;
-        record.intent_score = 0.0;
-        record.entity_score = 0.0;
-        record.agent_usefulness_score = 0.10;
-        record.graph_readiness_score = 0.05;
-        record.retrieval_value_score = 0.10;
-        record.confidence_score = 0.05;
-        record.importance_score = 0.05;
-        record.insight_card_confidence = 0.0;
-        record.quality_gate_reason = "hard_gate=visual_semantics_failed".to_string();
-        record.search_aliases.clear();
-        record.entities.clear();
-        record.tags.clear();
-        record.topic_categories.clear();
-        cap_visual_semantics_failed_scores(&mut record);
+        let has_image_vector = record.image_embedding.iter().any(|value| *value != 0.0);
+        record.evidence_confidence = if has_image_vector { 0.45 } else { 0.30 };
+        record.extraction_confidence = record.evidence_confidence;
+        record.specificity_score = 0.35;
+        record.intent_score = 0.35;
+        record.entity_score = 0.10;
+        record.agent_usefulness_score = 0.45;
+        record.graph_readiness_score = 0.25;
+        record.retrieval_value_score = 0.45;
+        record.confidence_score = record.evidence_confidence;
+        record.importance_score = 0.35;
+        record.insight_card_confidence = record.evidence_confidence;
+        record.quality_gate_reason =
+            "visual_metadata_fallback=clip_vector_without_pixel_vlm_semantics".to_string();
     } else if !extraction_issues.is_empty() {
         record.outcome = "vision_semantic_extraction_failed".to_string();
     }

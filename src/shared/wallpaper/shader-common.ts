@@ -26,6 +26,12 @@ vec2 ripples(vec2 uv){
   }
   return off;
 }
+vec3 cinematicBase(vec2 uv){
+  float sweep = smoothstep(0., 1., uv.x * .58 + uv.y * .42);
+  float glow = exp(-length((uv - vec2(.72, .55)) * vec2(1.05, .86)) * 2.35);
+  vec3 col = mix(uBg, uMid, .16 + sweep * .12);
+  return mix(col, uAcc, .035 + glow * .075);
+}
 `;
 
 export const GLSL_UNIFORMS = `

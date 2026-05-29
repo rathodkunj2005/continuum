@@ -53,41 +53,77 @@ mod tests {
 
         // Step 1: Derive communities
         graph.communities = projection::derive_communities(&graph.nodes);
-        assert!(!graph.communities.is_empty(), "Communities should be derived");
-        assert!(graph.communities.iter().any(|c| c.label.contains("FNDR")), "FNDR community should exist");
+        assert!(
+            !graph.communities.is_empty(),
+            "Communities should be derived"
+        );
+        assert!(
+            graph.communities.iter().any(|c| c.label.contains("FNDR")),
+            "FNDR community should exist"
+        );
 
         // Verify stable anchors
-        let fndr_community = graph.communities.iter().find(|c| c.label.contains("FNDR")).unwrap();
+        let fndr_community = graph
+            .communities
+            .iter()
+            .find(|c| c.label.contains("FNDR"))
+            .unwrap();
         let anchor1 = fndr_community.anchor.clone();
 
         // Re-derive and verify same anchor (determinism)
         let communities2 = projection::derive_communities(&nodes);
-        let fndr_community2 = communities2.iter().find(|c| c.label.contains("FNDR")).unwrap();
+        let fndr_community2 = communities2
+            .iter()
+            .find(|c| c.label.contains("FNDR"))
+            .unwrap();
         let anchor2 = fndr_community2.anchor.clone();
 
-        assert!((anchor1.x - anchor2.x).abs() < 0.001, "X anchor should be stable");
-        assert!((anchor1.y - anchor2.y).abs() < 0.001, "Y anchor should be stable");
-        assert!((anchor1.z - anchor2.z).abs() < 0.001, "Z anchor should be stable");
+        assert!(
+            (anchor1.x - anchor2.x).abs() < 0.001,
+            "X anchor should be stable"
+        );
+        assert!(
+            (anchor1.y - anchor2.y).abs() < 0.001,
+            "Y anchor should be stable"
+        );
+        assert!(
+            (anchor1.z - anchor2.z).abs() < 0.001,
+            "Z anchor should be stable"
+        );
 
         // Step 2: Normalize scores (ensure all are in valid range)
         projection_scoring::normalize_scores(&mut graph);
         for node in &graph.nodes {
             if let Some(score) = node.importance_score {
-                assert!(score >= 0.0 && score <= 1.0, "Importance score should be normalized");
+                assert!(
+                    score >= 0.0 && score <= 1.0,
+                    "Importance score should be normalized"
+                );
             }
             if let Some(score) = node.confidence_score {
-                assert!(score >= 0.0 && score <= 1.0, "Confidence score should be normalized");
+                assert!(
+                    score >= 0.0 && score <= 1.0,
+                    "Confidence score should be normalized"
+                );
             }
         }
 
         // Step 3: Apply privacy filtering
         let filter = projection_privacy::PrivacyFilter::default();
         projection_privacy::apply_privacy_filter(&mut graph, &filter);
-        assert!(!graph.nodes.iter().any(|n| n.node_type == types::NodeType::Evidence),
-                "Evidence nodes should be filtered");
+        assert!(
+            !graph
+                .nodes
+                .iter()
+                .any(|n| n.node_type == types::NodeType::Evidence),
+            "Evidence nodes should be filtered"
+        );
 
         // Step 4: Verify graph structure is valid
-        assert!(graph.nodes.len() == 3, "All non-evidence nodes should remain");
+        assert!(
+            graph.nodes.len() == 3,
+            "All non-evidence nodes should remain"
+        );
         assert!(!graph.communities.is_empty(), "Communities should exist");
 
         // Step 5: Compute relevance scores for a query
@@ -96,13 +132,18 @@ mod tests {
             node.relevance_score = Some(projection_scoring::compute_relevance_score(node, "FNDR"));
         }
 
-        let fndr_nodes: Vec<_> = graph_context.nodes.iter()
+        let fndr_nodes: Vec<_> = graph_context
+            .nodes
+            .iter()
             .filter(|n| n.project == Some("FNDR".to_string()))
             .collect();
 
         for node in fndr_nodes {
             let relevance = node.relevance_score.unwrap_or(0.0);
-            assert!(relevance > 0.0, "FNDR nodes should have positive relevance for 'FNDR' query");
+            assert!(
+                relevance > 0.0,
+                "FNDR nodes should have positive relevance for 'FNDR' query"
+            );
         }
     }
 
@@ -126,8 +167,10 @@ mod tests {
         ];
 
         let communities = projection::derive_communities(&nodes);
-        assert!(communities.iter().any(|c| c.label == "Custom Community"),
-                "Explicit community ID should be respected");
+        assert!(
+            communities.iter().any(|c| c.label == "Custom Community"),
+            "Explicit community ID should be respected"
+        );
     }
 
     #[test]
@@ -171,16 +214,14 @@ mod tests {
                     ..Default::default()
                 },
             ],
-            edges: vec![
-                types::GraphEdge {
-                    id: "e1".to_string(),
-                    source: "mem1".to_string(),
-                    target: "ev1".to_string(),
-                    edge_type: types::EdgeType::SameProject,
-                    weight: 0.5,
-                    ..Default::default()
-                },
-            ],
+            edges: vec![types::GraphEdge {
+                id: "e1".to_string(),
+                source: "mem1".to_string(),
+                target: "ev1".to_string(),
+                edge_type: types::EdgeType::SameProject,
+                weight: 0.5,
+                ..Default::default()
+            }],
             communities: vec![],
             active_focus: None,
         };
@@ -193,16 +234,25 @@ mod tests {
         projection_privacy::apply_privacy_filter(&mut graph, &filter);
 
         // Evidence node should be removed
-        assert!(!graph.nodes.iter().any(|n| n.id == "ev1"), "Evidence node should be filtered");
+        assert!(
+            !graph.nodes.iter().any(|n| n.id == "ev1"),
+            "Evidence node should be filtered"
+        );
         assert_eq!(graph.nodes.len(), 2, "Only 2 memory nodes should remain");
 
         // Window titles should be masked
         for node in &graph.nodes {
-            assert!(node.window_title.is_none() || !node.window_title.as_ref().unwrap().contains("Gmail"),
-                    "Sensitive window titles should be masked");
+            assert!(
+                node.window_title.is_none()
+                    || !node.window_title.as_ref().unwrap().contains("Gmail"),
+                "Sensitive window titles should be masked"
+            );
         }
 
         // Edges to removed nodes should be removed
-        assert!(!graph.edges.iter().any(|e| e.target == "ev1"), "Edges to removed nodes should be filtered");
+        assert!(
+            !graph.edges.iter().any(|e| e.target == "ev1"),
+            "Edges to removed nodes should be filtered"
+        );
     }
 }

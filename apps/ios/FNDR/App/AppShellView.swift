@@ -10,6 +10,21 @@ struct AppShellView: View {
                     Label("Status", systemImage: "waveform.path.ecg")
                 }
 
+            AskView()
+                .tabItem {
+                    Label("Ask", systemImage: "text.bubble")
+                }
+
+            MemoriesView()
+                .tabItem {
+                    Label("Memories", systemImage: "tray.full")
+                }
+
+            CaptureView()
+                .tabItem {
+                    Label("Capture", systemImage: "square.and.pencil")
+                }
+
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")

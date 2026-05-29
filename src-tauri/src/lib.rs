@@ -21,6 +21,7 @@ pub mod mcp;
 pub mod meeting;
 pub mod memory;
 pub mod memory_compaction;
+pub mod memory_embedding_document;
 pub mod memory_insight;
 pub mod memory_quality;
 pub mod memory_review;
@@ -444,7 +445,15 @@ impl AppState {
     /// has already written the row with `enrichment_status = "pending"`; this
     /// just notifies the worker. Deduplicates by `memory_id`.
     pub fn enqueue_memory_review_from_flushed_memory(&self, record: &storage::MemoryRecord) {
-        if record.id.trim().is_empty() {
+        if !memory_review::should_enqueue_review(record) {
+            if let Some(reason) = memory_review::review_skip_reason(record) {
+                tracing::debug!(
+                    target: "fndr::memory_review",
+                    memory_id = %record.id,
+                    reason,
+                    "memory_review not queued"
+                );
+            }
             return;
         }
         let job = memory_review::MemoryReviewJob {

@@ -39,7 +39,10 @@ pub const DEFAULT_SEARCH_SEMANTIC_TIMEOUT_MS: u64 = 950;
 pub const DEFAULT_SEARCH_SNIPPET_TIMEOUT_MS: u64 = 760;
 pub const DEFAULT_SEARCH_KEYWORD_TIMEOUT_MS: u64 = 900;
 pub const DEFAULT_SEARCH_KEYWORD_VARIANT_TIMEOUT_MS: u64 = 320;
-pub const DEFAULT_SEARCH_USE_CHUNK_FIRST_RETRIEVAL: bool = true;
+// The 1024-d BGE parent/child index is additive and must not be mixed with the
+// live 384-d MiniLM capture path. Keep it opt-in until a user has explicitly
+// built the v5/chunk tables and enabled the route.
+pub const DEFAULT_SEARCH_USE_CHUNK_FIRST_RETRIEVAL: bool = false;
 
 pub const DEFAULT_CAPTURE_FLUSH_INTERVAL_SECS: u64 = 30;
 pub const DEFAULT_CAPTURE_MAX_BATCH_SIZE: usize = 100;
@@ -50,13 +53,12 @@ pub const DEFAULT_CAPTURE_DEEP_IDLE_SECONDS: f64 = 300.0;
 pub const DEFAULT_CAPTURE_IDLE_BLEND_SECONDS: f64 = 30.0;
 pub const DEFAULT_FOCUS_DRIFT_SIMILARITY_THRESHOLD: f32 = 0.30;
 pub const DEFAULT_FOCUS_DRIFT_CAPTURE_COUNT: u32 = 3;
-// Adaptive visual-novelty admission for low-OCR frames. Defaults chosen so
-// the first admit per session needs at least 30% CLIP novelty, the second
-// 35%, and so on up to a hard cap of 85%. This produces a small number of
-// scene-transition cards instead of a flood of near-duplicates.
-pub const DEFAULT_VISUAL_NOVELTY_BASE: f32 = 0.30;
-pub const DEFAULT_VISUAL_NOVELTY_ALPHA: f32 = 0.05;
-pub const DEFAULT_VISUAL_NOVELTY_CEILING: f32 = 0.85;
+// Adaptive visual-novelty admission for low-OCR frames. These values are
+// intentionally permissive: admit visual evidence unless it is a near-duplicate
+// of the current scene, then let semantic/hash dedupe prevent flooding.
+pub const DEFAULT_VISUAL_NOVELTY_BASE: f32 = 0.12;
+pub const DEFAULT_VISUAL_NOVELTY_ALPHA: f32 = 0.02;
+pub const DEFAULT_VISUAL_NOVELTY_CEILING: f32 = 0.45;
 pub const DEFAULT_VISUAL_NOVELTY_RING_CAPACITY: usize = 16;
 pub const DEFAULT_VISUAL_ADMISSION_MIN_IMAGE_DIM: u32 = 256;
 
@@ -1179,6 +1181,20 @@ mod tests {
     fn memory_card_defaults_enable_llm_group_synthesis() {
         let config = Config::default().normalized();
         assert!(config.memory_cards.max_llm_groups > 0);
+    }
+
+    #[test]
+    fn default_search_keeps_bge_chunk_route_opt_in() {
+        let config = Config::default().normalized();
+        assert!(!config.search.use_chunk_first_retrieval);
+    }
+
+    #[test]
+    fn default_visual_novelty_is_permissive_but_bounded() {
+        let config = Config::default().normalized();
+        assert_eq!(config.capture_pipeline.visual_novelty_base, 0.12);
+        assert_eq!(config.capture_pipeline.visual_novelty_alpha, 0.02);
+        assert_eq!(config.capture_pipeline.visual_novelty_ceiling, 0.45);
     }
 
     #[test]

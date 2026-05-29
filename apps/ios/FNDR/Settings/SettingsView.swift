@@ -23,8 +23,8 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Roadmap") {
-                    Text("Slice 2 ships pairing + status connectivity. Ask, memory search, manual capture queueing, watch relay, and hardening remain in later slices.")
+                Section("Device build") {
+                    Text("Phone pairing, status, Ask, memory search, manual capture, offline queueing, and watch relay are enabled in this build.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

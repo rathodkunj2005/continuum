@@ -7,22 +7,30 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07C6E6008FC9FF5E0E1FC83A /* PhoneWatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A4BD35BCD0B1FF5820C9BAB /* PhoneWatchBridge.swift */; };
 		0A627FA16BA4C34FE1CEAF04 /* WatchStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 319A46DE57A73A799CDDF49F /* WatchStatusView.swift */; };
 		13A0A099ACBF9EC772231292 /* FNDR Watch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = D19C3314249D4B0360112497 /* FNDR Watch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1C813CD818A6F8AD48AE120C /* WatchAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38315C72C8C3DB608F0A69AB /* WatchAskView.swift */; };
+		24ABC484555E9D1F6BF45689 /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D85C179C6BBAE03AEF86E9A /* CaptureView.swift */; };
 		29AEC1E08DD641FDB20F5CE1 /* FNDRKit in Frameworks */ = {isa = PBXBuildFile; productRef = CBFD1E851748956C8D5E79F8 /* FNDRKit */; };
 		2E29506E8DD09EDF80B359FC /* FNDRKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7F747B9EDDEF9C365D63A9B9 /* FNDRKit */; };
 		3BF548388016487807660E0E /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F9A73C5FECFF5E83604FCF /* StatusView.swift */; };
 		3E789D99A3C924C5AEC8B778 /* StatusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A11A0C50AF2671D83AED68F /* StatusViewModel.swift */; };
+		4866EC10436163D1440F03C7 /* MemoriesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C8C84D27303F2F3DFE8EE /* MemoriesViewModel.swift */; };
 		593D1E1BEA04753786E19279 /* PairingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D76DDD8F00A216D630ADB0 /* PairingViewModel.swift */; };
 		5BE8CEF235EE6035DCC913DC /* FNDRWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E5630717FEE83549F961952 /* FNDRWatchApp.swift */; };
+		77775EF0AA6D4C0EA56E2048 /* CaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07742BD82890985AE4227AD1 /* CaptureViewModel.swift */; };
+		7BC1855934AD459CDEC5DA8F /* AskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17BA24AAF3A6E5EFD31B9D4 /* AskView.swift */; };
 		83ADD601ED052205097E5C69 /* FNDRDraftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40590AA62E2503CA555108DB /* FNDRDraftApp.swift */; };
 		873976FE0BD39BEF16FE3ED2 /* WatchRecentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48998A858261AD4FDA005945 /* WatchRecentView.swift */; };
 		88528DAB0333BC3456AD402A /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = CCC222736B34A7B769594448 /* README.md */; };
 		8A5AFC770DDBBEDC938327C5 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE89F84A3A919D6F75266CFE /* SettingsView.swift */; };
 		8D94677D4F9F78A505775B41 /* CompanionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99AAC8DA084162CB1A1A1942 /* CompanionSession.swift */; };
+		8F9F1B2CFB827C89EFBF8190 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6A5510A24F5C6C455F4833 /* QRScannerView.swift */; };
 		B17347A1742A4435F7ABE829 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604661C35A8A9A8E532064D9 /* AppShellView.swift */; };
+		BD5FD8D3746C3DA185B5146E /* AskViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CBC25463771BD6D8AF7E0DE /* AskViewModel.swift */; };
 		CBBD53B4A234F26D33F7279A /* WatchBridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B95CEBC40AAECEDC4504ED86 /* WatchBridgeClient.swift */; };
+		E0289FC74EDADD23812F715A /* MemoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A77DE3DE81F3AA6AD3EB0D2 /* MemoriesView.swift */; };
 		E7A4061DA388C18480A6A391 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE7BC9E2D0A39C0DA9A6A9A /* PairingView.swift */; };
 		EE50D28E66CDB8C30A9F3244 /* WatchRememberView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A22E9A65A995EF8AF86A80FD /* WatchRememberView.swift */; };
 /* End PBXBuildFile section */
@@ -53,23 +61,31 @@
 
 /* Begin PBXFileReference section */
 		04F9A73C5FECFF5E83604FCF /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
+		07742BD82890985AE4227AD1 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
 		1A11A0C50AF2671D83AED68F /* StatusViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusViewModel.swift; sourceTree = "<group>"; };
+		2A77DE3DE81F3AA6AD3EB0D2 /* MemoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoriesView.swift; sourceTree = "<group>"; };
 		319A46DE57A73A799CDDF49F /* WatchStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStatusView.swift; sourceTree = "<group>"; };
 		38315C72C8C3DB608F0A69AB /* WatchAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAskView.swift; sourceTree = "<group>"; };
+		404C8C84D27303F2F3DFE8EE /* MemoriesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoriesViewModel.swift; sourceTree = "<group>"; };
 		40590AA62E2503CA555108DB /* FNDRDraftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FNDRDraftApp.swift; sourceTree = "<group>"; };
 		48998A858261AD4FDA005945 /* WatchRecentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRecentView.swift; sourceTree = "<group>"; };
+		4CBC25463771BD6D8AF7E0DE /* AskViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskViewModel.swift; sourceTree = "<group>"; };
 		53CB094EA3DA63372B0302C2 /* FNDRKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FNDRKit; path = FNDRKit; sourceTree = SOURCE_ROOT; };
 		604661C35A8A9A8E532064D9 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		7D584C9B2046BD542643DC0E /* FNDR.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FNDR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E5630717FEE83549F961952 /* FNDRWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FNDRWatchApp.swift; sourceTree = "<group>"; };
+		8A4BD35BCD0B1FF5820C9BAB /* PhoneWatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneWatchBridge.swift; sourceTree = "<group>"; };
+		8D85C179C6BBAE03AEF86E9A /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		99AAC8DA084162CB1A1A1942 /* CompanionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSession.swift; sourceTree = "<group>"; };
 		A22E9A65A995EF8AF86A80FD /* WatchRememberView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRememberView.swift; sourceTree = "<group>"; };
+		B17BA24AAF3A6E5EFD31B9D4 /* AskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskView.swift; sourceTree = "<group>"; };
 		B95CEBC40AAECEDC4504ED86 /* WatchBridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridgeClient.swift; sourceTree = "<group>"; };
 		CCC222736B34A7B769594448 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		CFE7BC9E2D0A39C0DA9A6A9A /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		D19C3314249D4B0360112497 /* FNDR Watch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "FNDR Watch.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1D76DDD8F00A216D630ADB0 /* PairingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingViewModel.swift; sourceTree = "<group>"; };
 		DE89F84A3A919D6F75266CFE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DF6A5510A24F5C6C455F4833 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,9 +121,13 @@
 			children = (
 				CCC222736B34A7B769594448 /* README.md */,
 				99A037BF9FC242BB10C2B29D /* App */,
+				6A6B2AEA7FD7181DCDE8E3AC /* Ask */,
+				E00678C74CDA0CAA24CD2873 /* Capture */,
+				630E084408382655155CDF91 /* Memories */,
 				D4182C8D12E0CE6641569032 /* Pairing */,
 				5A477B8783482BBC138F7C37 /* Settings */,
 				1DB32A623DE033F51E9458A1 /* Status */,
+				1F03A286A22742D91B6C26C0 /* WatchBridge */,
 			);
 			path = FNDR;
 			sourceTree = "<group>";
@@ -138,6 +158,14 @@
 			path = Status;
 			sourceTree = "<group>";
 		};
+		1F03A286A22742D91B6C26C0 /* WatchBridge */ = {
+			isa = PBXGroup;
+			children = (
+				8A4BD35BCD0B1FF5820C9BAB /* PhoneWatchBridge.swift */,
+			);
+			path = WatchBridge;
+			sourceTree = "<group>";
+		};
 		5925BF5181FC7295F7717F35 /* FNDR Watch */ = {
 			isa = PBXGroup;
 			children = (
@@ -164,6 +192,24 @@
 				A22E9A65A995EF8AF86A80FD /* WatchRememberView.swift */,
 			);
 			path = Remember;
+			sourceTree = "<group>";
+		};
+		630E084408382655155CDF91 /* Memories */ = {
+			isa = PBXGroup;
+			children = (
+				2A77DE3DE81F3AA6AD3EB0D2 /* MemoriesView.swift */,
+				404C8C84D27303F2F3DFE8EE /* MemoriesViewModel.swift */,
+			);
+			path = Memories;
+			sourceTree = "<group>";
+		};
+		6A6B2AEA7FD7181DCDE8E3AC /* Ask */ = {
+			isa = PBXGroup;
+			children = (
+				B17BA24AAF3A6E5EFD31B9D4 /* AskView.swift */,
+				4CBC25463771BD6D8AF7E0DE /* AskViewModel.swift */,
+			);
+			path = Ask;
 			sourceTree = "<group>";
 		};
 		791645880ABA0A2D14D1B45C = {
@@ -199,8 +245,18 @@
 			children = (
 				CFE7BC9E2D0A39C0DA9A6A9A /* PairingView.swift */,
 				D1D76DDD8F00A216D630ADB0 /* PairingViewModel.swift */,
+				DF6A5510A24F5C6C455F4833 /* QRScannerView.swift */,
 			);
 			path = Pairing;
+			sourceTree = "<group>";
+		};
+		E00678C74CDA0CAA24CD2873 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				8D85C179C6BBAE03AEF86E9A /* CaptureView.swift */,
+				07742BD82890985AE4227AD1 /* CaptureViewModel.swift */,
+			);
+			path = Capture;
 			sourceTree = "<group>";
 		};
 		F0868CB335756577A58D0758 /* App */ = {
@@ -274,11 +330,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					935942E5BC453861DE30BA91 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = "$(FNDR_DEVELOPMENT_TEAM)";
 						ProvisioningStyle = Automatic;
 					};
 					DBC137B0FDAABF784EBD12CF = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = "$(FNDR_DEVELOPMENT_TEAM)";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -323,10 +379,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				B17347A1742A4435F7ABE829 /* AppShellView.swift in Sources */,
+				7BC1855934AD459CDEC5DA8F /* AskView.swift in Sources */,
+				BD5FD8D3746C3DA185B5146E /* AskViewModel.swift in Sources */,
+				24ABC484555E9D1F6BF45689 /* CaptureView.swift in Sources */,
+				77775EF0AA6D4C0EA56E2048 /* CaptureViewModel.swift in Sources */,
 				8D94677D4F9F78A505775B41 /* CompanionSession.swift in Sources */,
 				83ADD601ED052205097E5C69 /* FNDRDraftApp.swift in Sources */,
+				E0289FC74EDADD23812F715A /* MemoriesView.swift in Sources */,
+				4866EC10436163D1440F03C7 /* MemoriesViewModel.swift in Sources */,
 				E7A4061DA388C18480A6A391 /* PairingView.swift in Sources */,
 				593D1E1BEA04753786E19279 /* PairingViewModel.swift in Sources */,
+				07C6E6008FC9FF5E0E1FC83A /* PhoneWatchBridge.swift in Sources */,
+				8F9F1B2CFB827C89EFBF8190 /* QRScannerView.swift in Sources */,
 				8A5AFC770DDBBEDC938327C5 /* SettingsView.swift in Sources */,
 				3BF548388016487807660E0E /* StatusView.swift in Sources */,
 				3E789D99A3C924C5AEC8B778 /* StatusViewModel.swift in Sources */,
@@ -362,12 +426,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "$(FNDR_DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "FNDR Watch";
 				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.fndr.ios;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fndr.ios.watchkitapp;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(FNDR_BUNDLE_PREFIX)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FNDR_BUNDLE_PREFIX).watchkitapp";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
@@ -412,6 +476,8 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				FNDR_BUNDLE_PREFIX = com.fndr.ios;
+				FNDR_DEVELOPMENT_TEAM = "";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -430,7 +496,6 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fndr.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -475,6 +540,8 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				FNDR_BUNDLE_PREFIX = com.fndr.ios;
+				FNDR_DEVELOPMENT_TEAM = "";
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -486,7 +553,6 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fndr.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -500,9 +566,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "$(FNDR_DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FNDR;
+				INFOPLIST_KEY_NSCameraUsageDescription = "FNDR uses the camera to scan the Mac pairing QR code.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FNDR needs local network access to connect to your Mac companion runtime.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -512,8 +579,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FNDR_BUNDLE_PREFIX)";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -523,9 +591,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "$(FNDR_DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FNDR;
+				INFOPLIST_KEY_NSCameraUsageDescription = "FNDR uses the camera to scan the Mac pairing QR code.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FNDR needs local network access to connect to your Mac companion runtime.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -535,8 +604,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FNDR_BUNDLE_PREFIX)";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -545,12 +615,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "$(FNDR_DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "FNDR Watch";
 				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.fndr.ios;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fndr.ios.watchkitapp;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(FNDR_BUNDLE_PREFIX)";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FNDR_BUNDLE_PREFIX).watchkitapp";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;

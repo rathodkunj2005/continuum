@@ -1,4 +1,5 @@
 import SwiftUI
+import FNDRKit
 
 struct MemoriesView: View {
     @EnvironmentObject private var session: CompanionSession

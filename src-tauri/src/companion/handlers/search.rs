@@ -34,8 +34,8 @@ pub async fn search_memories(
 
     let started = Instant::now();
 
-    let embedder =
-        Embedder::new().map_err(|e| CompanionError::Internal(format!("embedder init failed: {e}")))?;
+    let embedder = Embedder::new()
+        .map_err(|e| CompanionError::Internal(format!("embedder init failed: {e}")))?;
     let search_config = app_state.config.read().search.clone().normalized();
 
     let mut results = HybridSearcher::search_hybrid_memories(

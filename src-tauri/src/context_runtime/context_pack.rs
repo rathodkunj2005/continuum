@@ -189,4 +189,6 @@ pub struct ComposedAnswer {
     pub cards: Vec<MemoryCard>,
     pub verify_outcome: VerifyOutcome,
     pub surfacing_reasons: Vec<SurfacingReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debug_trace: Option<serde_json::Value>,
 }

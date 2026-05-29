@@ -53,6 +53,7 @@ use std::sync::atomic::Ordering;
 
 /// Lifecycle status strings. Persisted in `MemoryRecord::enrichment_status`.
 pub const STATUS_PENDING: &str = "pending";
+pub const STATUS_PENDING_VISUAL_SEMANTICS: &str = "pending_visual_semantics";
 pub const STATUS_REVIEWED_LOCAL: &str = "reviewed_local";
 pub const STATUS_REVIEWED_DAILY: &str = "reviewed_daily";
 pub const STATUS_REVIEW_FAILED: &str = "review_failed";
@@ -83,4 +84,27 @@ pub fn allows_memory_review_worker(state: &AppState) -> bool {
         return false;
     }
     crate::system_resources::allows_graph_idle_commit(state)
+}
+
+/// Return why a record should not enter the LLM review queue.
+///
+/// Visual fallback rows with only a CLIP image vector and no OCR/VLM
+/// narration are still useful evidence, but they are not reviewable by the
+/// text reviewer. Sending them through the reviewer turns an expected
+/// low-evidence condition into a scary `review_failed` lifecycle state.
+pub fn review_skip_reason(record: &crate::storage::MemoryRecord) -> Option<&'static str> {
+    if crate::memory_quality::is_visual_semantics_failed_record(record) {
+        return Some("visual_semantics_failed");
+    }
+    if crate::memory_quality::is_visual_metadata_fallback_record(record) {
+        return Some("visual_metadata_fallback");
+    }
+    if crate::memory_quality::is_low_evidence_visual_fallback_record(record) {
+        return Some("low_evidence_visual_fallback");
+    }
+    None
+}
+
+pub fn should_enqueue_review(record: &crate::storage::MemoryRecord) -> bool {
+    !record.id.trim().is_empty() && review_skip_reason(record).is_none()
 }

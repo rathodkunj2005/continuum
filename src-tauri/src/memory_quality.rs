@@ -9,6 +9,8 @@ use crate::storage::MemoryRecord;
 use serde_json::Value;
 
 pub const VISUAL_SEMANTICS_FAILED_OUTCOME: &str = "visual_semantics_failed";
+pub const LOW_EVIDENCE_VISUAL_FALLBACK_REASON: &str =
+    "low_evidence_visual_fallback=clip_vector_without_text_or_pixel_vlm_semantics";
 
 pub fn default_memory_quality_config() -> MemoryQualityConfig {
     MemoryQualityConfig {
@@ -33,6 +35,10 @@ pub fn classify_storage_outcome(record: &MemoryRecord, config: &MemoryQualityCon
     }
     if hard_gate_fluff_insight(record) {
         return "quarantine_fluff_insight".to_string();
+    }
+    if is_visual_metadata_fallback_record(record) || is_low_evidence_visual_fallback_record(record)
+    {
+        return "low_quality_evidence".to_string();
     }
 
     let primary = record.specificity_score >= config.primary_memory_specificity_min
@@ -71,6 +77,12 @@ pub fn quality_gate_reason(record: &MemoryRecord) -> String {
     }
     if hard_gate_fluff_insight(record) {
         return "hard_gate=fluff_or_template_insight".to_string();
+    }
+    if is_visual_metadata_fallback_record(record) {
+        return "visual_metadata_fallback=clip_vector_without_pixel_vlm_semantics".to_string();
+    }
+    if is_low_evidence_visual_fallback_record(record) {
+        return LOW_EVIDENCE_VISUAL_FALLBACK_REASON.to_string();
     }
 
     format!(
@@ -132,6 +144,87 @@ pub fn cap_visual_semantics_failed_scores(record: &mut MemoryRecord) {
     record.extraction_confidence = record.extraction_confidence.clamp(0.0, 0.15);
     record.insight_card_confidence = record.insight_card_confidence.clamp(0.0, 0.15);
     record.intent_analysis.confidence = record.intent_analysis.confidence.clamp(0.0, 0.10);
+}
+
+pub fn is_visual_metadata_fallback_record(record: &MemoryRecord) -> bool {
+    if record
+        .enrichment_status
+        .trim()
+        .eq_ignore_ascii_case("visual_metadata_fallback")
+        || record
+            .synthesis_branch
+            .trim()
+            .eq_ignore_ascii_case("visual_metadata_fallback")
+    {
+        return true;
+    }
+    serde_json::from_str::<Value>(&record.raw_evidence)
+        .ok()
+        .map(|json| {
+            let visual_status = json
+                .get("visual_understanding")
+                .and_then(|value| value.get("status"))
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            let has_issue = json
+                .get("extraction_issues")
+                .and_then(|value| value.as_array())
+                .map(|issues| {
+                    issues.iter().any(|issue| {
+                        issue
+                            .as_str()
+                            .map(|s| s.eq_ignore_ascii_case("visual_metadata_fallback"))
+                            .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+            visual_status.eq_ignore_ascii_case("clip_metadata_fallback") || has_issue
+        })
+        .unwrap_or(false)
+}
+
+pub fn is_low_evidence_visual_fallback_record(record: &MemoryRecord) -> bool {
+    let branch = record.synthesis_branch.trim();
+    let mut branch_is_low_evidence_visual =
+        branch.eq_ignore_ascii_case("llm_ocr_grounded_visual_fallback");
+    let mut pixel_vlm_absent = false;
+    let mut has_clip_image_embedding = false;
+
+    if let Ok(json) = serde_json::from_str::<Value>(&record.raw_evidence) {
+        if let Some(raw_branch) = json
+            .get("synthesis_branch")
+            .and_then(|value| value.as_str())
+        {
+            branch_is_low_evidence_visual |=
+                raw_branch.eq_ignore_ascii_case("llm_ocr_grounded_visual_fallback");
+        }
+        let vlm_route = json
+            .get("vlm_route")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let runtime_status = json
+            .get("vlm_runtime_status")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        let capability = json
+            .get("vlm_capability")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        pixel_vlm_absent = vlm_route.eq_ignore_ascii_case("fallback_ocr_only")
+            || runtime_status.starts_with("deferred")
+            || capability.eq_ignore_ascii_case("model_missing");
+
+        let visual_status = json
+            .get("visual_understanding")
+            .and_then(|value| value.get("status"))
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        has_clip_image_embedding = visual_status.eq_ignore_ascii_case("clip_image_embedding");
+    }
+
+    let no_ocr_signal = record.ocr_block_count == 0 || record.ocr_confidence <= 0.01;
+
+    branch_is_low_evidence_visual && no_ocr_signal && (pixel_vlm_absent || has_clip_image_embedding)
 }
 
 pub fn deterministic_dedup_fingerprint(
@@ -432,6 +525,68 @@ mod tests {
             quality_gate_reason(&record),
             "hard_gate=visual_semantics_failed"
         );
+    }
+
+    #[test]
+    fn storage_outcome_keeps_visual_metadata_fallback_as_low_quality_evidence() {
+        let cfg = default_memory_quality_config();
+        let record = MemoryRecord {
+            raw_evidence: r#"{"visual_understanding":{"status":"clip_metadata_fallback"},"extraction_issues":["visual_metadata_fallback"]}"#.to_string(),
+            enrichment_status: "visual_metadata_fallback".to_string(),
+            agent_usefulness_score: 1.0,
+            intent_score: 1.0,
+            specificity_score: 1.0,
+            evidence_confidence: 1.0,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            classify_storage_outcome(&record, &cfg),
+            "low_quality_evidence"
+        );
+        assert_eq!(
+            quality_gate_reason(&record),
+            "visual_metadata_fallback=clip_vector_without_pixel_vlm_semantics"
+        );
+    }
+
+    #[test]
+    fn storage_outcome_keeps_empty_ocr_visual_fallback_as_low_quality_evidence() {
+        let cfg = default_memory_quality_config();
+        let record = MemoryRecord {
+            synthesis_branch: "llm_ocr_grounded_visual_fallback".to_string(),
+            raw_evidence: r#"{"source_kind":"visual_capture","synthesis_branch":"llm_ocr_grounded_visual_fallback","visual_understanding":{"status":"clip_image_embedding","raw_pixels_persisted":false},"vlm_route":"fallback_ocr_only","vlm_runtime_status":"deferred_low_ram","vlm_capability":"model_missing"}"#.to_string(),
+            ocr_confidence: 0.0,
+            ocr_block_count: 0,
+            agent_usefulness_score: 1.0,
+            intent_score: 1.0,
+            specificity_score: 1.0,
+            evidence_confidence: 1.0,
+            ..Default::default()
+        };
+
+        assert!(is_low_evidence_visual_fallback_record(&record));
+        assert_eq!(
+            classify_storage_outcome(&record, &cfg),
+            "low_quality_evidence"
+        );
+        assert_eq!(
+            quality_gate_reason(&record),
+            LOW_EVIDENCE_VISUAL_FALLBACK_REASON
+        );
+    }
+
+    #[test]
+    fn storage_outcome_allows_ocr_grounded_visual_fallback_with_text_signal() {
+        let record = MemoryRecord {
+            synthesis_branch: "llm_ocr_grounded_visual_fallback".to_string(),
+            raw_evidence: r#"{"synthesis_branch":"llm_ocr_grounded_visual_fallback","visual_understanding":{"status":"clip_image_embedding"},"vlm_route":"fallback_ocr_only"}"#.to_string(),
+            ocr_confidence: 0.72,
+            ocr_block_count: 4,
+            ..Default::default()
+        };
+
+        assert!(!is_low_evidence_visual_fallback_record(&record));
     }
 
     #[test]

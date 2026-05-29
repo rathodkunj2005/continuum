@@ -369,7 +369,8 @@ pub fn compose_import_memory_context_with_title(
     let search_aliases: Vec<String> = alias_set.into_iter().take(24).collect();
 
     let embedding_text = format!(
-        "source: Meta glasses import\nfile: {filename}\nscene: {}\nactivity: {}\npeople_roles: {}\nobjects: {}\ntopics: {}\nsummary: {}\naliases: {}",
+        "source: {}\nfile: {filename}\nscene: {}\nactivity: {}\npeople_roles: {}\nobjects: {}\ntopics: {}\nsummary: {}\naliases: {}",
+        source.api_label(),
         insight.scene_type,
         activity,
         insight.people_roles.join(", "),
@@ -443,7 +444,7 @@ pub fn visual_semantics_is_grounded(
     !(is_ocr_only && !has_visual_semantics)
 }
 
-pub fn compose_failed_visual_semantics_import_metadata(
+pub fn compose_visual_metadata_fallback_import(
     filename: &str,
     source: ImageImportSource,
     reason: Option<&str>,
@@ -453,23 +454,27 @@ pub fn compose_failed_visual_semantics_import_metadata(
         .filter(|value| !value.is_empty())
         .unwrap_or("visual_semantics_unavailable");
     let memory_context = format!(
-        "Visual semantics failed for imported image: {filename}. Metadata only; not semantically enriched."
+        "{}: {filename}. FNDR stored a CLIP visual fingerprint and available metadata; pixel-level VLM semantics were unavailable ({reason}). No raw image pixels were persisted.",
+        source.header_label()
     );
     ImportMemoryText {
         memory_context: memory_context.clone(),
         embedding_text: format!(
-            "VISUAL_SEMANTICS_FAILED source:{} file:{} reason:{}",
+            "source: {}\nfile: {}\nvisual_status: clip_metadata_fallback\nreason: {}\nsummary: {}",
             source.api_label(),
             filename,
-            reason
+            reason,
+            memory_context
         ),
         search_aliases: Vec::new(),
-        topic: "visual_semantics_failed".to_string(),
-        activity_type: "unknown".to_string(),
-        user_intent: "unknown".to_string(),
-        insight_what_happened: String::new(),
-        insight_why_mattered: String::new(),
-        topic_categories: Vec::new(),
+        topic: "visual metadata fallback".to_string(),
+        activity_type: "photo_import".to_string(),
+        user_intent: "documenting imported visual context".to_string(),
+        insight_what_happened: format!(
+            "Imported image stored with a CLIP visual fingerprint: {filename}."
+        ),
+        insight_why_mattered: "The memory remains searchable by file/context and can participate in visual similarity without persisting raw pixels.".to_string(),
+        topic_categories: vec!["visual metadata".to_string()],
     }
 }
 
@@ -1717,20 +1722,24 @@ mod tests {
     }
 
     #[test]
-    fn failed_visual_semantics_metadata_has_failure_marker_without_fake_aliases() {
-        let composed = compose_failed_visual_semantics_import_metadata(
+    fn visual_metadata_fallback_has_honest_metadata_without_fake_aliases() {
+        let composed = compose_visual_metadata_fallback_import(
             "github-profile.jpeg",
             ImageImportSource::MetaGlasses,
             Some("vlm_blocked_low_ram"),
         );
 
         assert_eq!(composed.search_aliases.len(), 0);
-        assert_eq!(composed.activity_type, "unknown");
-        assert!(composed.embedding_text.contains("VISUAL_SEMANTICS_FAILED"));
+        assert_eq!(composed.activity_type, "photo_import");
+        assert!(composed.embedding_text.contains("clip_metadata_fallback"));
+        assert!(!composed.embedding_text.contains("VISUAL_SEMANTICS_FAILED"));
         assert!(!composed
             .memory_context
             .contains("No supporting text was visible on screen"));
         assert!(!composed.memory_context.contains("The OCR text indicates"));
+        assert!(composed
+            .memory_context
+            .contains("No raw image pixels were persisted"));
     }
 
     #[test]

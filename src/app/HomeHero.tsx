@@ -208,10 +208,6 @@ interface HomeHeroProps {
     greeting?: string;
     /** Called when the user submits a query from the hero search pill. */
     onHeroSearch: (query: string) => void;
-    /** Called when the user clicks "Enter the reel". */
-    onEnterReel: () => void;
-    /** Called when the user clicks "Open work mode". */
-    onEnterWorkMode: () => void;
 }
 
 export function HomeHero({
@@ -219,8 +215,6 @@ export function HomeHero({
     now,
     greeting,
     onHeroSearch,
-    onEnterReel,
-    onEnterWorkMode,
 }: HomeHeroProps) {
     const { reduced } = useReducedMotionSafe();
 
@@ -277,8 +271,6 @@ export function HomeHero({
     const subtitleY = useTransform(sy, [-1, 1], reduced ? [0, 0] : [-16.5, 16.5]);
     const searchX = useTransform(sx, [-1, 1], reduced ? [0, 0] : [-10.5, 10.5]);
     const searchY = useTransform(sy, [-1, 1], reduced ? [0, 0] : [-10.5, 10.5]);
-    const ctaX = useTransform(sx, [-1, 1], reduced ? [0, 0] : [-6, 6]);
-    const ctaY = useTransform(sy, [-1, 1], reduced ? [0, 0] : [-6, 6]);
     const scrollX = useTransform(sx, [-1, 1], reduced ? [0, 0] : [-3.9, 3.9]);
     const scrollY = useTransform(sy, [-1, 1], reduced ? [0, 0] : [-3.9, 3.9]);
 
@@ -428,27 +420,6 @@ export function HomeHero({
                         {voice.voiceStatus}
                     </p>
                 )}
-            </motion.div>
-
-            {/* CTAs */}
-            <motion.div
-                className="home-hero__ctas"
-                style={{ x: ctaX, y: ctaY }}
-            >
-                <button
-                    type="button"
-                    className="ui-action-btn home-hero__cta-reel"
-                    onClick={onEnterReel}
-                >
-                    Enter the reel
-                </button>
-                <button
-                    type="button"
-                    className="ui-action-btn home-hero__cta-work"
-                    onClick={onEnterWorkMode}
-                >
-                    Open work mode
-                </button>
             </motion.div>
 
             {/* Scroll indicator */}

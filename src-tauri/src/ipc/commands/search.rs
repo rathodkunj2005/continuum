@@ -288,6 +288,9 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
     };
     let continuation_of = crate::search::parse_continuation_of(&anchor_memory_context);
     let reopen_target = crate::search::parse_reopen_target(&anchor_memory_context, &result);
+    let storage_outcome = card_storage_outcome(&result);
+    let enrichment_status = card_enrichment_status(&result, &storage_outcome);
+
     MemoryCard {
         id: memory_id.clone(),
         title,
@@ -309,7 +312,7 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         continuity: has_continuity_signal(&result),
         raw_snippets: vec![fallback_snippet],
         evidence_ids: vec![memory_id],
-        confidence: score.clamp(0.0, 1.0),
+        confidence: card_confidence(&result),
         anchor_coverage_score: result.anchor_coverage_score.clamp(0.0, 1.0),
         activity_type: result.activity_type.clone(),
         files_touched: result.files_touched.clone(),
@@ -333,6 +336,12 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         surfacing_reason: if result.matched_routes.is_empty() {
             None
         } else {
+            let mut routes = result.matched_routes.clone();
+            for label in &result.embedding_reason_labels {
+                if !routes.contains(label) {
+                    routes.push(label.clone());
+                }
+            }
             Some(crate::context_runtime::context_pack::SurfacingReason {
                 headline: if result
                     .matched_routes
@@ -343,7 +352,7 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
                 } else {
                     format!("Matched in {} routes", result.matched_routes.len())
                 },
-                routes: result.matched_routes.clone(),
+                routes,
                 graph_path: None,
                 anchor_terms_hit: Vec::new(),
                 recency_boost: 0.0,
@@ -352,11 +361,61 @@ pub(super) fn memory_card_from_result(result: SearchResult) -> MemoryCard {
         matched_routes: result.matched_routes.clone(),
         matched_chunk_ids: result.matched_chunk_ids.clone(),
         chunk_evidence: result.chunk_evidence.clone(),
-        enrichment_status: result.enrichment_status.clone(),
+        enrichment_status,
         reviewed_at_ms: result.reviewed_at_ms,
         reviewer_generation: result.reviewer_generation,
-        storage_outcome: result.storage_outcome.clone(),
+        storage_outcome,
     }
+}
+
+fn card_confidence(result: &SearchResult) -> f32 {
+    let stored_quality = result
+        .confidence_score
+        .max(result.insight_card_confidence)
+        .max(result.evidence_confidence)
+        .max(result.extraction_confidence)
+        .clamp(0.0, 1.0);
+    if is_low_evidence_visual_fallback_result(result) {
+        return stored_quality.min(0.45);
+    }
+    if stored_quality > 0.0 {
+        stored_quality
+    } else {
+        result.score.clamp(0.0, 1.0)
+    }
+}
+
+fn card_storage_outcome(result: &SearchResult) -> String {
+    if is_low_evidence_visual_fallback_result(result)
+        && matches!(
+            result.storage_outcome.as_str(),
+            "" | "primary_memory_card" | "enriched_memory_card"
+        )
+    {
+        return "low_quality_evidence".to_string();
+    }
+    result.storage_outcome.clone()
+}
+
+fn card_enrichment_status(result: &SearchResult, storage_outcome: &str) -> String {
+    if storage_outcome == "low_quality_evidence"
+        && is_low_evidence_visual_fallback_result(result)
+        && matches!(
+            result.enrichment_status.as_str(),
+            "" | "pending" | "review_failed"
+        )
+    {
+        return "pending_visual_semantics".to_string();
+    }
+    result.enrichment_status.clone()
+}
+
+fn is_low_evidence_visual_fallback_result(result: &SearchResult) -> bool {
+    result
+        .synthesis_branch
+        .eq_ignore_ascii_case("llm_ocr_grounded_visual_fallback")
+        && result.ocr_block_count == 0
+        && result.ocr_confidence <= 0.01
 }
 
 pub(super) fn refine_memory_card_title(card: &mut MemoryCard) {

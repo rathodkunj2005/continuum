@@ -28,9 +28,9 @@ use futures::future::BoxFuture;
 
 use super::queue::MemoryReviewJob;
 use super::{
-    MAX_RELATED_MEMORY_IDS, MAX_SAME_DAY_CANDIDATES, STATUS_PENDING, STATUS_REVIEWED_DAILY,
-    STATUS_REVIEWED_LOCAL, STATUS_REVIEW_FAILED, SYNTHESIS_BRANCH_REVIEWED_DAILY,
-    SYNTHESIS_BRANCH_REVIEWED_LOCAL,
+    review_skip_reason, MAX_RELATED_MEMORY_IDS, MAX_SAME_DAY_CANDIDATES, STATUS_PENDING,
+    STATUS_PENDING_VISUAL_SEMANTICS, STATUS_REVIEWED_DAILY, STATUS_REVIEWED_LOCAL,
+    STATUS_REVIEW_FAILED, SYNTHESIS_BRANCH_REVIEWED_DAILY, SYNTHESIS_BRANCH_REVIEWED_LOCAL,
 };
 
 const MAX_CLEAN_TEXT_CHARS: usize = 4000;
@@ -232,6 +232,19 @@ pub async fn review_one_memory_with_mode(
         });
     };
 
+    if let Some(reason) = review_skip_reason(&record) {
+        if mode.persists() && repair_skipped_visual_fallback(&mut record, reason) {
+            store
+                .replace_memory_preserving_chunks(&record)
+                .await
+                .map_err(|err| err.to_string())?;
+        }
+        return Ok(MemoryReviewOutcome::Skipped {
+            memory_id: job.memory_id.clone(),
+            reason: reason.to_string(),
+        });
+    }
+
     let candidates = same_day_candidates(store, &record).await;
     let input = ReviewInput::from_record(&record, candidates);
 
@@ -398,6 +411,32 @@ async fn persist_failure(store: &Store, record: &MemoryRecord) -> Result<(), Str
         .map_err(|err| err.to_string())
 }
 
+fn repair_skipped_visual_fallback(record: &mut MemoryRecord, reason: &str) -> bool {
+    let mut changed = false;
+    if matches!(
+        reason,
+        "low_evidence_visual_fallback" | "visual_metadata_fallback"
+    ) {
+        if record.storage_outcome != "low_quality_evidence" {
+            record.storage_outcome = "low_quality_evidence".to_string();
+            changed = true;
+        }
+        let gate_reason = crate::memory_quality::quality_gate_reason(record);
+        if record.quality_gate_reason != gate_reason {
+            record.quality_gate_reason = gate_reason;
+            changed = true;
+        }
+    }
+    if matches!(
+        record.enrichment_status.as_str(),
+        "" | STATUS_PENDING | STATUS_REVIEW_FAILED
+    ) {
+        record.enrichment_status = STATUS_PENDING_VISUAL_SEMANTICS.to_string();
+        changed = true;
+    }
+    changed
+}
+
 fn validate_review(
     reviewed: &ReviewedMemory,
     input: &ReviewInput,
@@ -561,6 +600,18 @@ mod tests {
         ) -> BoxFuture<'a, Result<ReviewedMemory, String>> {
             let r = self.result.clone();
             async move { r }.boxed()
+        }
+    }
+
+    struct PanicProvider;
+
+    impl ReviewProvider for PanicProvider {
+        fn review<'a>(
+            &'a self,
+            _input: &'a ReviewInput,
+        ) -> BoxFuture<'a, Result<ReviewedMemory, String>> {
+            async move { panic!("low-evidence visual fallback should not reach review provider") }
+                .boxed()
         }
     }
 
@@ -900,5 +951,71 @@ mod tests {
             .expect("record persists");
         assert_eq!(written.enrichment_status, STATUS_REVIEW_FAILED);
         assert_eq!(written.memory_context, "Original memory context");
+    }
+
+    #[tokio::test]
+    async fn review_one_memory_skips_empty_ocr_visual_fallback_without_marking_failed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let store = Arc::new(
+            tokio::task::spawn_blocking(move || Store::new(&path).unwrap())
+                .await
+                .unwrap(),
+        );
+
+        let mut record = MemoryRecord::default();
+        record.id = "mem-visual-fallback".to_string();
+        record.timestamp = 1_700_000_000_000;
+        record.app_name = "Codex".to_string();
+        record.window_title = "Codex".to_string();
+        record.clean_text = "Screen capture (visual): Codex_1700000000000.png. Codex".to_string();
+        record.memory_context = record.clean_text.clone();
+        record.display_summary = record.clean_text.clone();
+        record.synthesis_branch = "llm_ocr_grounded_visual_fallback".to_string();
+        record.raw_evidence = r#"{"source_kind":"visual_capture","synthesis_branch":"llm_ocr_grounded_visual_fallback","visual_understanding":{"status":"clip_image_embedding","raw_pixels_persisted":false},"vlm_route":"fallback_ocr_only","vlm_runtime_status":"deferred_low_ram","vlm_capability":"model_missing"}"#.to_string();
+        record.ocr_confidence = 0.0;
+        record.ocr_block_count = 0;
+        record.enrichment_status = STATUS_REVIEW_FAILED.to_string();
+        record.storage_outcome = "enriched_memory_card".to_string();
+        record.embedding = vec![0.0; 384];
+        record.image_embedding = vec![0.0; 768];
+        record.snippet_embedding = vec![0.0; 384];
+        record.support_embedding = vec![0.0; 384];
+
+        store
+            .add_batch_preserving_ids(&[record.clone()])
+            .await
+            .unwrap();
+
+        let outcome = review_one_memory(
+            &store,
+            &PanicProvider,
+            None,
+            &MemoryReviewJob {
+                memory_id: "mem-visual-fallback".to_string(),
+                day_bucket: record.day_bucket.clone(),
+                enqueued_at_ms: 1_700_000_001_000,
+            },
+            1_700_000_002_000,
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            outcome,
+            MemoryReviewOutcome::Skipped {
+                ref memory_id,
+                ref reason
+            } if memory_id == "mem-visual-fallback" && reason == "low_evidence_visual_fallback"
+        ));
+
+        let written = store
+            .get_memory_by_id("mem-visual-fallback")
+            .await
+            .unwrap()
+            .expect("record persists");
+        assert_eq!(written.enrichment_status, STATUS_PENDING_VISUAL_SEMANTICS);
+        assert_eq!(written.storage_outcome, "low_quality_evidence");
+        assert_eq!(written.reviewer_generation, 0);
     }
 }

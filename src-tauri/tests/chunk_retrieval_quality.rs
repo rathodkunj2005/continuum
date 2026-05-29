@@ -21,9 +21,7 @@
 use fndr_lib::config::{ChunkingConfig, DEFAULT_IMAGE_EMBEDDING_DIM};
 use fndr_lib::embedding::TextChunker;
 use fndr_lib::inference::model_config::BGE_V5_DIMENSIONS;
-use fndr_lib::storage::{
-    MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, Store,
-};
+use fndr_lib::storage::{MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, Store};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -71,11 +69,9 @@ fn chunking_fixtures_match_expected_count_and_content() {
     let chunker = TextChunker::from_config(&ChunkingConfig::default());
     for name in FIXTURE_NAMES {
         let fx = load_fixture(name);
-        let chunks =
-            chunker.chunk_screen_text(&fx.app_name, &fx.window_title, &fx.raw_text);
+        let chunks = chunker.chunk_screen_text(&fx.app_name, &fx.window_title, &fx.raw_text);
         assert!(
-            chunks.len() >= fx.expected_min_chunks
-                && chunks.len() <= fx.expected_max_chunks,
+            chunks.len() >= fx.expected_min_chunks && chunks.len() <= fx.expected_max_chunks,
             "[{}] expected {}..={} chunks, got {} ({:?})",
             fx.name,
             fx.expected_min_chunks,
@@ -112,8 +108,7 @@ fn chunking_fixture_noisy_ocr_uses_cleaned_text_not_garbage() {
     // lines and keep the real content as a single coherent chunk.
     let chunker = TextChunker::from_config(&ChunkingConfig::default());
     let fx = load_fixture("noisy_ocr_garbage");
-    let chunks =
-        chunker.chunk_screen_text(&fx.app_name, &fx.window_title, &fx.raw_text);
+    let chunks = chunker.chunk_screen_text(&fx.app_name, &fx.window_title, &fx.raw_text);
     let joined = chunks.join("\n");
 
     let garbage_chars = ['§', '_', '—'];
@@ -139,8 +134,7 @@ fn chunking_fixture_url_lines_anchor_url_kind_chunks() {
     use fndr_lib::embedding::LineKind;
     let chunker = TextChunker::from_config(&ChunkingConfig::default());
     let fx = load_fixture("long_page_with_urls");
-    let chunks =
-        chunker.chunk_ocr_text_with_metadata(&fx.app_name, &fx.window_title, &fx.raw_text);
+    let chunks = chunker.chunk_ocr_text_with_metadata(&fx.app_name, &fx.window_title, &fx.raw_text);
     assert!(
         chunks
             .iter()
@@ -303,9 +297,7 @@ fn synthetic_chunk(
 /// distance asc. The test crate cannot call the `pub(crate)` helper directly,
 /// so we replicate the contract and any drift between this and production will
 /// cause the test to disagree with the route — which is desirable.
-fn group_top_chunk_per_memory(
-    hits: Vec<MemoryChunkSearchResult>,
-) -> Vec<MemoryChunkSearchResult> {
+fn group_top_chunk_per_memory(hits: Vec<MemoryChunkSearchResult>) -> Vec<MemoryChunkSearchResult> {
     let mut best: HashMap<String, MemoryChunkSearchResult> = HashMap::new();
     for hit in hits {
         if hit.chunk.memory_id.trim().is_empty() {
@@ -340,10 +332,19 @@ fn group_top_chunk_per_memory(
 async fn seed_eval_corpus(store: &Store) {
     let parents = vec![
         synthetic_parent("mem-rag", "Parent/child chunk RAG architecture notes"),
-        synthetic_parent("mem-graph", "Knowledge graph schema and traversal heuristics"),
+        synthetic_parent(
+            "mem-graph",
+            "Knowledge graph schema and traversal heuristics",
+        ),
         synthetic_parent("mem-onnx", "ONNX runtime tokenizer dimension contract"),
-        synthetic_parent("mem-vault", "Memory vault scroll layout container query refactor"),
-        synthetic_parent("mem-meetings", "Live meetings transcript and segment routing"),
+        synthetic_parent(
+            "mem-vault",
+            "Memory vault scroll layout container query refactor",
+        ),
+        synthetic_parent(
+            "mem-meetings",
+            "Live meetings transcript and segment routing",
+        ),
     ];
     let chunks = vec![
         synthetic_chunk(
@@ -604,11 +605,7 @@ async fn chunk_first_retrieval_skips_orphan_chunks_when_parent_missing() {
     // the missing parent. This mirrors the chunk_route check that drops orphan
     // results before exposing them in the SearchResult stream.
     let v5_results = store
-        .get_v5_search_results_by_ids(
-            &[ranked[0].chunk.memory_id.clone()],
-            None,
-            None,
-        )
+        .get_v5_search_results_by_ids(&[ranked[0].chunk.memory_id.clone()], None, None)
         .await
         .expect("v5 parent fetch");
     assert!(

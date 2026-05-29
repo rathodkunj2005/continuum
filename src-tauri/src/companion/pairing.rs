@@ -146,7 +146,11 @@ impl PairingService {
             return Err(CompanionError::PairingCodeInvalid);
         }
 
-        let device_id = format!("dev_{}_{}", device_type_short(request.device_type), short_id());
+        let device_id = format!(
+            "dev_{}_{}",
+            device_type_short(request.device_type),
+            short_id()
+        );
         let access_token = generate_access_token();
 
         let device = MobileDevice {

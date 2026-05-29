@@ -231,10 +231,9 @@ mod tests {
     #[tokio::test]
     async fn rejects_inverted_range() {
         let (state, store) = build_state_with_store().await;
-        let err =
-            backfill_memory_review_in_range(&state, &store, 1_000, 500, 1_000, false)
-                .await
-                .unwrap_err();
+        let err = backfill_memory_review_in_range(&state, &store, 1_000, 500, 1_000, false)
+            .await
+            .unwrap_err();
         assert!(err.contains("before start_ms"));
     }
 

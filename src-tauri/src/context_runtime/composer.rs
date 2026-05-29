@@ -49,6 +49,7 @@ pub async fn compose_answer(
             cards,
             verify_outcome: verify,
             surfacing_reasons,
+            debug_trace: None,
         };
     }
 
@@ -74,6 +75,7 @@ pub async fn compose_answer(
         cards,
         verify_outcome: verify,
         surfacing_reasons,
+        debug_trace: None,
     }
 }
 

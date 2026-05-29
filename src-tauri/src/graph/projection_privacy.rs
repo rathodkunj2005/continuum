@@ -1,4 +1,4 @@
-use crate::graph::types::{GraphNode, GraphData, NodeType};
+use crate::graph::types::{GraphData, GraphNode, NodeType};
 
 pub struct PrivacyFilter {
     pub hide_sensitive_metadata: bool,
@@ -26,8 +26,11 @@ pub fn apply_privacy_filter(graph: &mut GraphData, filter: &PrivacyFilter) {
     }
 
     // Remove edges referencing removed nodes
-    let valid_ids: std::collections::HashSet<_> = graph.nodes.iter().map(|n| n.id.clone()).collect();
-    graph.edges.retain(|e| valid_ids.contains(&e.source) && valid_ids.contains(&e.target));
+    let valid_ids: std::collections::HashSet<_> =
+        graph.nodes.iter().map(|n| n.id.clone()).collect();
+    graph
+        .edges
+        .retain(|e| valid_ids.contains(&e.source) && valid_ids.contains(&e.target));
 }
 
 fn apply_node_privacy(node: &mut GraphNode, filter: &PrivacyFilter) {
@@ -52,13 +55,7 @@ fn apply_node_privacy(node: &mut GraphNode, filter: &PrivacyFilter) {
 
 fn is_sensitive_app(app: &str) -> bool {
     // List of apps where window titles are often sensitive
-    let sensitive_apps = vec![
-        "vault",
-        "password",
-        "credentials",
-        "banking",
-        "email",
-    ];
+    let sensitive_apps = vec!["vault", "password", "credentials", "banking", "email"];
 
     let app_lower = app.to_lowercase();
     sensitive_apps.iter().any(|&s| app_lower.contains(s))
@@ -98,7 +95,10 @@ mod tests {
         apply_privacy_filter(&mut graph, &filter);
 
         assert_eq!(graph.nodes.len(), 1);
-        assert!(!graph.nodes.iter().any(|n| n.node_type == NodeType::Evidence));
+        assert!(!graph
+            .nodes
+            .iter()
+            .any(|n| n.node_type == NodeType::Evidence));
     }
 
     #[test]

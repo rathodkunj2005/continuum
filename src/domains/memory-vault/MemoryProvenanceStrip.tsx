@@ -8,7 +8,7 @@ interface Props {
 /** Tabular provenance strip — mono caps. Used in expanded variant. */
 export function MemoryProvenanceStrip({ card }: Props) {
     const d = new Date(card.timestamp);
-    const stamp = card.synthesis_branch ? "DEVELOPED" : "RAW";
+    const stamp = provenanceStatusLabel(card);
     return (
         <dl className="fndr-mc-provenance">
             <div>
@@ -57,6 +57,22 @@ export function MemoryProvenanceStrip({ card }: Props) {
             </div>
         </dl>
     );
+}
+
+function provenanceStatusLabel(card: MemoryCardData): string {
+    if (card.storage_outcome === "visual_semantics_failed") return "VISUAL FAILED";
+    switch (card.enrichment_status) {
+        case "reviewed_local":
+        case "reviewed_daily":
+            return "DEVELOPED";
+        case "review_failed":
+            return "REVIEW FAILED";
+        case "pending":
+        case "pending_visual_semantics":
+            return "PENDING";
+        default:
+            return "RAW";
+    }
 }
 
 export default MemoryProvenanceStrip;

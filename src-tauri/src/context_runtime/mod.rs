@@ -3061,7 +3061,8 @@ pub async fn run_query(
     }
 
     let route_hits = retrieval_routes::RouteRunner::dispatch(&plan, &ctx).await;
-    let fused = fusion::fuse(&plan, route_hits, &weights);
+    let fused = fusion::fuse(&plan, route_hits.clone(), &weights);
+    let debug_trace = search_debug_trace(&plan, &route_hits, &fused, &weights);
     let evidence = evidence_pack::collect_evidence(&fused, &state.store).await;
     let outcome = verifier::verify(&plan, &fused, &evidence);
 
@@ -3075,10 +3076,11 @@ pub async fn run_query(
                 cards,
                 verify_outcome: outcome,
                 surfacing_reasons: fused.iter().map(|h| h.surfacing_reason.clone()).collect(),
+                debug_trace: Some(debug_trace),
             }
         }
         ComposeMode::Answer => {
-            composer::compose_answer(
+            let mut answer = composer::compose_answer(
                 &plan,
                 &fused,
                 &evidence,
@@ -3086,11 +3088,73 @@ pub async fn run_query(
                 inference.as_deref(),
                 &state.store,
             )
-            .await
+            .await;
+            answer.debug_trace = Some(debug_trace);
+            answer
         }
     };
 
     Ok(answer)
+}
+
+fn search_debug_trace(
+    plan: &query_plan::QueryPlan,
+    route_hits: &[retrieval_routes::RouteHits],
+    fused: &[context_pack::FusedHit],
+    weights: &context_pack::FusionWeights,
+) -> serde_json::Value {
+    serde_json::json!({
+        "plan": {
+            "intent": plan.intent,
+            "retrieval_routes": plan.retrieval_routes,
+            "target_project": plan.target_project,
+            "target_topics_count": plan.target_topics.len(),
+            "target_entities_count": plan.target_entities.len(),
+            "time_window": plan.time_window,
+        },
+        "weights": weights,
+        "routes": route_hits.iter().map(route_trace).collect::<Vec<_>>(),
+        "fused_count": fused.len(),
+        "fused": fused.iter().take(12).map(fused_trace).collect::<Vec<_>>(),
+    })
+}
+
+fn route_trace(route_hits: &retrieval_routes::RouteHits) -> serde_json::Value {
+    serde_json::json!({
+        "route": route_hits.route,
+        "candidate_count": route_hits.hits.len(),
+        "elapsed_ms": route_hits.elapsed_ms,
+        "top_candidates": route_hits.hits.iter().take(5).map(|hit| {
+            let embedding_reason_labels = hit.signals.search_result.as_ref()
+                .map(|result| result.embedding_reason_labels.clone())
+                .unwrap_or_default();
+            serde_json::json!({
+                "memory_id": hit.memory_id,
+                "score": hit.score,
+                "branch": hit.signals.branch,
+                "embedding_reason_labels": embedding_reason_labels,
+                "has_graph_path": hit.graph_path.as_ref().map(|path| !path.is_empty()).unwrap_or(false),
+            })
+        }).collect::<Vec<_>>(),
+    })
+}
+
+fn fused_trace(hit: &context_pack::FusedHit) -> serde_json::Value {
+    let embedding_reason_labels = hit
+        .surfacing_reason
+        .routes
+        .iter()
+        .filter(|route| route.starts_with("embedding:"))
+        .cloned()
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "memory_id": hit.memory_id,
+        "score": hit.score,
+        "contributing_routes": hit.contributing_routes,
+        "signals": hit.signals,
+        "embedding_reason_labels": embedding_reason_labels,
+        "included_with_embedding_warnings": !embedding_reason_labels.is_empty(),
+    })
 }
 
 #[cfg(test)]
@@ -3216,5 +3280,65 @@ mod tests {
         memory.internal_context = String::new();
         memory.memory_context = String::new();
         assert_eq!(infer_activity_type(&memory), "testing_workflow");
+    }
+
+    #[test]
+    fn search_debug_trace_reports_embedding_warnings_without_source_text() {
+        let mut plan = query_plan::plan("debug embeddings", &query_plan::PlanHints::default());
+        plan.retrieval_routes = vec![query_plan::Route::Vector];
+        let mut result = crate::storage::SearchResult {
+            id: "memory-1".to_string(),
+            score: 0.74,
+            ..Default::default()
+        };
+        result.embedding_reason_labels = vec!["embedding:primary:stale_source_text".to_string()];
+        let route_hits = vec![retrieval_routes::RouteHits {
+            route: query_plan::Route::Vector,
+            hits: vec![retrieval_routes::RouteHit {
+                memory_id: "memory-1".to_string(),
+                score: 0.74,
+                signals: retrieval_routes::RouteSignals {
+                    branch: retrieval_routes::RouteBranch::Semantic,
+                    confidence: 0.74,
+                    search_result: Some(result),
+                },
+                graph_path: None,
+            }],
+            elapsed_ms: 3,
+        }];
+        let fused = vec![context_pack::FusedHit {
+            memory_id: "memory-1".to_string(),
+            score: 0.333,
+            signals: context_pack::FusionSignals {
+                vector: 0.74,
+                ..Default::default()
+            },
+            surfacing_reason: context_pack::SurfacingReason {
+                headline: "Matched in 1 routes".to_string(),
+                routes: vec![
+                    "vector".to_string(),
+                    "embedding:primary:stale_source_text".to_string(),
+                ],
+                graph_path: None,
+                anchor_terms_hit: Vec::new(),
+                recency_boost: 0.0,
+            },
+            contributing_routes: vec![query_plan::Route::Vector],
+        }];
+
+        let trace = search_debug_trace(
+            &plan,
+            &route_hits,
+            &fused,
+            &context_pack::FusionWeights::default(),
+        );
+
+        assert_eq!(trace["routes"][0]["candidate_count"], 1);
+        assert_eq!(
+            trace["routes"][0]["top_candidates"][0]["embedding_reason_labels"][0],
+            "embedding:primary:stale_source_text"
+        );
+        assert_eq!(trace["fused"][0]["included_with_embedding_warnings"], true);
+        assert!(!trace.to_string().contains("RAW_OCR"));
     }
 }

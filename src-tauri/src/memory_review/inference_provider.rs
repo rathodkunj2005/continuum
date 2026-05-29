@@ -51,7 +51,9 @@ impl ReviewProvider for InferenceReviewProvider {
                     related_memory_ids: parsed.related_memory_ids,
                     confidence: parsed.confidence,
                 }),
-                None => Err("inference: review_memory_record returned no parseable JSON".to_string()),
+                None => {
+                    Err("inference: review_memory_record returned no parseable JSON".to_string())
+                }
             }
         }
         .boxed()

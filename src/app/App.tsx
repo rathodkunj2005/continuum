@@ -608,28 +608,28 @@ function App() {
                                 setQueryDraft(q);
                                 void handleSearchSubmit(q);
                             }}
-                            onEnterReel={() => { /* handled by search submit in focus mode */ }}
-                            onEnterWorkMode={() => setActivePanel("focusMode")}
                         />
-                        <section className={`search-shell ${query.trim() ? "is-active" : ""}`}>
-                            <SearchBar
-                                value={queryDraft}
-                                submittedValue={query}
-                                onChange={setQueryDraft}
-                                onSubmit={(v) => void handleSearchSubmit(v)}
-                                timeFilter={timeFilter}
-                                onTimeFilterChange={setTimeFilter}
-                                appFilter={appFilter}
-                                onAppFilterChange={setAppFilter}
-                                onSetMeetingPanelOpen={(open) => setActivePanel(open ? "meeting" : null)}
-                                onSetMemoryCardsPanelOpen={(open) => setActivePanel(open ? "memoryCards" : null)}
-                                onSetKnowledgeGraphPanelOpen={(open) => setActivePanel(open ? "knowledgeGraph" : null)}
-                                appNames={appNames}
-                                resultCount={visibleResults.length}
-                                searchResults={visibleResults}
-                                disabled={!searchAllowed}
-                            />
-                        </section>
+                        {query.trim() && (
+                            <section className="search-shell is-active">
+                                <SearchBar
+                                    value={queryDraft}
+                                    submittedValue={query}
+                                    onChange={setQueryDraft}
+                                    onSubmit={(v) => void handleSearchSubmit(v)}
+                                    timeFilter={timeFilter}
+                                    onTimeFilterChange={setTimeFilter}
+                                    appFilter={appFilter}
+                                    onAppFilterChange={setAppFilter}
+                                    onSetMeetingPanelOpen={(open) => setActivePanel(open ? "meeting" : null)}
+                                    onSetMemoryCardsPanelOpen={(open) => setActivePanel(open ? "memoryCards" : null)}
+                                    onSetKnowledgeGraphPanelOpen={(open) => setActivePanel(open ? "knowledgeGraph" : null)}
+                                    appNames={appNames}
+                                    resultCount={visibleResults.length}
+                                    searchResults={visibleResults}
+                                    disabled={!searchAllowed}
+                                />
+                            </section>
+                        )}
                     </div>
                 ) : (
                     <section className={`search-shell ${query.trim() ? "is-active" : ""}`}>

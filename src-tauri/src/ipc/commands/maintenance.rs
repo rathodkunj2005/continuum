@@ -9,8 +9,12 @@ use crate::embedding::prefixes::prefix_document_for_index;
 use crate::embedding::{select_salient_memory_chunks, Embedder, EmbeddingBackend};
 use crate::inference::model_config::{embedding_v5_contract, FNDR_MODEL_PROFILE};
 use crate::memory_compaction::{
-    best_embedding_text, best_snippet_embedding_text, best_support_embedding_texts_with_config,
     compact_memory_record_payload, is_low_signal_embedding, mean_pool_embeddings,
+};
+use crate::memory_embedding_document::{
+    bge_v5_contract_for, build_embedding_manifest, clip_image_contract,
+    compose_memory_embedding_document, image_embedding_status, infer_visual_semantic_source,
+    upsert_embedding_manifest, EmbeddingRole, EmbeddingStatus,
 };
 use crate::storage::{MemoryChunkRecord, MemoryRecord, MEMORIES_TABLE, MEMORIES_V5_PARENT_TABLE};
 use crate::AppState;
@@ -299,11 +303,8 @@ fn build_v5_memory_chunks(
     embedder: &Embedder,
     chunking: &crate::config::ChunkingConfig,
 ) -> Result<Vec<MemoryChunkRecord>, String> {
-    let clean_text = if source.clean_text.trim().is_empty() {
-        source.text.as_str()
-    } else {
-        source.clean_text.as_str()
-    };
+    let document = compose_memory_embedding_document(source, Some(chunking));
+    let clean_text = document.chunk_source_text.as_str();
     if clean_text.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -381,7 +382,8 @@ fn build_v5_reindexed_record(
     embedder: &Embedder,
     chunking: &crate::config::ChunkingConfig,
 ) -> Result<Option<MemoryRecord>, String> {
-    let primary_text = best_embedding_text(source);
+    let document = compose_memory_embedding_document(source, Some(chunking));
+    let primary_text = document.primary_text.clone();
     if primary_text.trim().is_empty() {
         return Ok(None);
     }
@@ -396,7 +398,7 @@ fn build_v5_reindexed_record(
                 .ok_or_else(|| "BGE v5 primary embedding returned no vector".to_string())
         })?;
 
-    let snippet_text = best_snippet_embedding_text(source);
+    let snippet_text = document.snippet_text.clone();
     record.snippet_embedding = if snippet_text.trim().is_empty() {
         record.embedding.clone()
     } else {
@@ -409,7 +411,7 @@ fn build_v5_reindexed_record(
             })?
     };
 
-    let support_inputs = best_support_embedding_texts_with_config(source, Some(chunking));
+    let support_inputs = document.support_texts.clone();
     record.support_embedding = if support_inputs.is_empty() {
         record.embedding.clone()
     } else {
@@ -433,6 +435,20 @@ fn build_v5_reindexed_record(
             source.id
         ));
     }
+
+    let mut manifest = build_embedding_manifest(
+        &document,
+        EmbeddingStatus::Ready,
+        image_embedding_status(&record.image_embedding),
+        infer_visual_semantic_source(&record),
+    );
+    manifest.contracts = vec![
+        bge_v5_contract_for(EmbeddingRole::Primary),
+        bge_v5_contract_for(EmbeddingRole::Snippet),
+        bge_v5_contract_for(EmbeddingRole::Support),
+        clip_image_contract(),
+    ];
+    record.raw_evidence = upsert_embedding_manifest(&record.raw_evidence, &manifest);
 
     Ok(Some(record))
 }
@@ -845,8 +861,10 @@ async fn run_memory_repair_backfill_for_state(
     }
 
     for memory in &mut merged_memories {
+        let chunking_config = state.config.read().chunking.clone();
+        let document = compose_memory_embedding_document(memory, Some(&chunking_config));
         if is_low_signal_embedding(&memory.embedding) {
-            let text_input = best_embedding_text(memory);
+            let text_input = document.primary_text.clone();
             if !text_input.is_empty() {
                 if let Ok(mut vectors) = embedder.embed_batch_with_context(&[(
                     memory.app_name.clone(),
@@ -862,7 +880,7 @@ async fn run_memory_repair_backfill_for_state(
         }
 
         if is_low_signal_embedding(&memory.snippet_embedding) {
-            let snippet_input = best_snippet_embedding_text(memory);
+            let snippet_input = document.snippet_text.clone();
             if !snippet_input.is_empty() {
                 if let Ok(mut vectors) = embedder.embed_batch_with_context(&[(
                     memory.app_name.clone(),
@@ -878,9 +896,7 @@ async fn run_memory_repair_backfill_for_state(
         }
 
         if is_low_signal_embedding(&memory.support_embedding) {
-            let chunking_config = state.config.read().chunking.clone();
-            let support_inputs =
-                best_support_embedding_texts_with_config(memory, Some(&chunking_config));
+            let support_inputs = document.support_texts.clone();
             if !support_inputs.is_empty() {
                 let contexts = support_inputs
                     .into_iter()
@@ -1224,7 +1240,7 @@ fn memory_payload_bytes(state: &AppState) -> u64 {
             .store
             .data_dir()
             .join("lancedb")
-            .join("memories.lance"),
+            .join(format!("{MEMORIES_TABLE}.lance")),
     )
     .saturating_add(recursive_size(&state.store.frames_dir()))
 }
@@ -1499,6 +1515,8 @@ async fn reclaim_memory_storage_for_state(
             .saturating_add(memory.text.chars().count() + memory.clean_text.chars().count());
 
         let compacted = compact_memory_record_payload(&memory);
+        let chunking_config = state.config.read().chunking.clone();
+        let document = compose_memory_embedding_document(&compacted, Some(&chunking_config));
         let mut changed = compacted.text != memory.text
             || compacted.clean_text != memory.clean_text
             || compacted.screenshot_path != memory.screenshot_path;
@@ -1513,7 +1531,7 @@ async fn reclaim_memory_storage_for_state(
         }
 
         if is_low_signal_embedding(&compacted.embedding) {
-            let embedding_text = best_embedding_text(&memory);
+            let embedding_text = document.primary_text.clone();
             if !embedding_text.is_empty() {
                 text_embedding_jobs.push((
                     rewritten_memories.len(),
@@ -1526,7 +1544,7 @@ async fn reclaim_memory_storage_for_state(
             }
         }
 
-        let snippet_input = best_snippet_embedding_text(&compacted);
+        let snippet_input = document.snippet_text.clone();
         if !snippet_input.is_empty() {
             snippet_embedding_jobs.push((
                 rewritten_memories.len(),
@@ -1539,9 +1557,7 @@ async fn reclaim_memory_storage_for_state(
         }
 
         if is_low_signal_embedding(&compacted.support_embedding) {
-            let chunking_config = state.config.read().chunking.clone();
-            let support_inputs =
-                best_support_embedding_texts_with_config(&compacted, Some(&chunking_config));
+            let support_inputs = document.support_texts.clone();
             if !support_inputs.is_empty() {
                 support_embedding_jobs.push((
                     rewritten_memories.len(),

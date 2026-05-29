@@ -4,6 +4,10 @@ use crate::context_runtime::retrieval_routes::{
     RouteHit, RouteHits, RouteSignals,
 };
 use crate::graph::schema::GraphNode;
+use crate::memory_embedding_document::{
+    embedding_retrieval_adjustment, search_embedding_provenance_from_metadata, EmbeddingRole,
+};
+use crate::storage::SearchResult;
 use futures::future::BoxFuture;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -59,18 +63,23 @@ impl RetrievalRoute for GraphRoute {
                         if graph_path.is_empty() {
                             continue;
                         }
+                        let graph_adjustment = graph_node_retrieval_adjustment(neighbor_node);
 
                         for memory_id in &neighbor_node.source_memory_ids {
                             if memory_id.trim().is_empty() || memory_id == &seed_memory_id {
                                 continue;
                             }
 
-                            let score =
-                                (seed_score * 0.58 + neighbor.confidence * 0.42).clamp(0.0, 1.0);
+                            let score = ((seed_score * 0.58 + neighbor.confidence * 0.42)
+                                .clamp(0.0, 1.0)
+                                * graph_adjustment.score_multiplier)
+                                .clamp(0.0, 1.0);
                             let search_result = match ctx.store.get_memory_by_id(memory_id).await {
-                                Ok(Some(record)) => {
-                                    Some(memory_record_to_search_result(&record, score))
-                                }
+                                Ok(Some(record)) => Some(graph_search_result(
+                                    &record,
+                                    score,
+                                    &graph_adjustment.reason_labels,
+                                )),
                                 Ok(None) => None,
                                 Err(err) => {
                                     tracing::warn!(err = %err, memory_id = %memory_id, "retrieval_route:graph_memory_fetch_failed");
@@ -84,7 +93,7 @@ impl RetrievalRoute for GraphRoute {
                                     score,
                                     signals: RouteSignals {
                                         branch: RouteBranch::Graph,
-                                        confidence: neighbor.confidence,
+                                        confidence: score,
                                         search_result,
                                     },
                                     graph_path: Some(graph_path.clone()),
@@ -118,6 +127,31 @@ fn memory_to_nodes(nodes: &[GraphNode]) -> HashMap<String, Vec<Uuid>> {
         }
     }
     out
+}
+
+fn graph_node_retrieval_adjustment(
+    node: &GraphNode,
+) -> crate::memory_embedding_document::EmbeddingRetrievalAdjustment {
+    let provenance = search_embedding_provenance_from_metadata(&node.metadata);
+    embedding_retrieval_adjustment(
+        provenance
+            .as_ref()
+            .and_then(|provenance| provenance.role(EmbeddingRole::GraphNode)),
+        EmbeddingRole::GraphNode,
+    )
+}
+
+fn graph_search_result(
+    record: &crate::storage::MemoryRecord,
+    score: f32,
+    reason_labels: &[String],
+) -> SearchResult {
+    let mut result = memory_record_to_search_result(record, score);
+    push_unique(&mut result.matched_routes, "Graph".to_string());
+    for label in reason_labels {
+        push_unique(&mut result.embedding_reason_labels, label.clone());
+    }
+    result
 }
 
 fn seed_memory_ids(ctx: &RouteCtx<'_>) -> Vec<(String, f32)> {
@@ -177,6 +211,12 @@ fn insert_best(by_id: &mut HashMap<String, RouteHit>, hit: RouteHit) {
         .or_insert(hit);
 }
 
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !value.trim().is_empty() && !values.iter().any(|existing| existing == &value) {
+        values.push(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +224,8 @@ mod tests {
     use crate::context_runtime::retrieval_routes::{RouteHits, RouteSignals};
     use crate::graph::graph_index::GraphIndex;
     use crate::graph::schema::{GraphEdge, GraphEdgeType, GraphNode, GraphNodeType};
+    use crate::memory_embedding_document::{annotate_graph_node_embedding, EmbeddingStatus};
+    use crate::storage::MemoryRecord;
     use crate::storage::Store;
     use chrono::Utc;
 
@@ -199,6 +241,20 @@ mod tests {
             updated_at: Utc::now(),
             stale: false,
             metadata: serde_json::json!({}),
+        }
+    }
+
+    fn memory(id: &str) -> MemoryRecord {
+        MemoryRecord {
+            id: id.to_string(),
+            text: "Graph route memory".to_string(),
+            memory_context: "Graph route memory".to_string(),
+            embedding: vec![0.1; crate::config::DEFAULT_TEXT_EMBEDDING_DIM],
+            snippet_embedding: vec![0.1; crate::config::DEFAULT_TEXT_EMBEDDING_DIM],
+            support_embedding: vec![0.1; crate::config::DEFAULT_TEXT_EMBEDDING_DIM],
+            image_embedding: vec![0.0; crate::config::DEFAULT_IMAGE_EMBEDDING_DIM],
+            embedding_dim: crate::config::DEFAULT_TEXT_EMBEDDING_DIM as u32,
+            ..Default::default()
         }
     }
 
@@ -257,6 +313,68 @@ mod tests {
         assert_eq!(hits.route, Route::Graph);
         assert_eq!(hits.hits[0].memory_id, "graph-memory");
         assert!(!hits.hits[0].graph_path.as_ref().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn graph_route_penalizes_stale_graph_node_embedding_and_explains_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().to_path_buf();
+        let store = tokio::task::spawn_blocking(move || Store::new(&path).expect("store"))
+            .await
+            .expect("store task");
+        store
+            .add_batch_preserving_ids(&[memory("graph-memory")])
+            .await
+            .expect("insert graph memory");
+        let config = SearchConfig::default().normalized();
+        let seed = node(1, "seed", "seed-memory");
+        let mut neighbor = node(2, "neighbor", "graph-memory");
+        annotate_graph_node_embedding(
+            &mut neighbor,
+            EmbeddingStatus::StaleSourceText,
+            "node_type: concept\nlabel: neighbor",
+            Some("graph node text hash no longer matches".to_string()),
+        );
+        let nodes = vec![seed, neighbor];
+        let edges = vec![edge(1, 2)];
+        let index = GraphIndex::build(&nodes, &edges);
+        let mut plan = crate::context_runtime::query_plan::plan(
+            "related graph",
+            &crate::context_runtime::query_plan::PlanHints::default(),
+        );
+        plan.graph_expansion.max_hops = 1;
+        plan.graph_expansion.allowed_edges = vec![GraphEdgeType::SameTaskAs];
+        let prior = vec![RouteHits {
+            route: Route::Vector,
+            hits: vec![RouteHit {
+                memory_id: "seed-memory".to_string(),
+                score: 0.9,
+                signals: RouteSignals {
+                    branch: RouteBranch::Semantic,
+                    confidence: 0.9,
+                    search_result: None,
+                },
+                graph_path: None,
+            }],
+            elapsed_ms: 1,
+        }];
+        let ctx = RouteCtx::new(&store, &config)
+            .with_graph(&index, &nodes, &edges)
+            .with_prior_route_hits(prior);
+
+        let hits = GraphRoute.run(&plan, &ctx).await;
+
+        assert_eq!(hits.hits[0].memory_id, "graph-memory");
+        assert!(hits.hits[0].score < 0.68);
+        let result = hits.hits[0]
+            .signals
+            .search_result
+            .as_ref()
+            .expect("search result");
+        assert!(result.matched_routes.contains(&"Graph".to_string()));
+        assert!(result
+            .embedding_reason_labels
+            .contains(&"embedding:graph_node:stale_source_text".to_string()));
     }
 
     #[tokio::test]

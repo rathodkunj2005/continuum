@@ -2,6 +2,7 @@
 
 use crate::config::{DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_TEXT_EMBEDDING_DIM};
 use crate::memory::reopen::{ReopenKind, ReopenValidationStatus};
+use crate::memory_embedding_document::SearchEmbeddingProvenance;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -750,6 +751,13 @@ pub struct SearchResult {
     /// Short textual evidence from the winning child chunk(s).
     #[serde(default)]
     pub chunk_evidence: Vec<MatchedChunkEvidence>,
+    /// Safe embedding provenance parsed from `raw_evidence.embedding_manifest`.
+    /// This intentionally exposes hashes/statuses/contracts, not raw OCR.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_provenance: Option<SearchEmbeddingProvenance>,
+    /// Route-local retrieval notes such as stale-vector penalties.
+    #[serde(default)]
+    pub embedding_reason_labels: Vec<String>,
 
     /// Post-capture review lifecycle (mirrors `MemoryRecord.enrichment_status`).
     /// "" / "pending" / "reviewed_local" / "reviewed_daily" / "review_failed".
@@ -840,6 +848,8 @@ impl Default for SearchResult {
             matched_routes: Vec::new(),
             matched_chunk_ids: Vec::new(),
             chunk_evidence: Vec::new(),
+            embedding_provenance: None,
+            embedding_reason_labels: Vec::new(),
             enrichment_status: String::new(),
             reviewed_at_ms: 0,
             reviewer_generation: 0,

@@ -72,11 +72,9 @@ pub async fn backfill_memory_review(
 fn build_provider(
     state: &Arc<AppState>,
 ) -> Result<Box<dyn crate::memory_review::ReviewProvider>, String> {
-    let inference = state
-        .inference
-        .read()
-        .clone()
-        .ok_or_else(|| "Inference engine is not loaded; daily review requires a local model".to_string())?;
+    let inference = state.inference.read().clone().ok_or_else(|| {
+        "Inference engine is not loaded; daily review requires a local model".to_string()
+    })?;
     Ok(Box::new(InferenceReviewProvider::new(inference)))
 }
 

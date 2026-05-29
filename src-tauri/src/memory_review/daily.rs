@@ -72,15 +72,9 @@ pub enum DailyReviewOutcome {
     Changed { memory_id: String },
     /// The reviewer ran but its output was rejected by validation — the
     /// original record was preserved.
-    InvalidPatch {
-        memory_id: String,
-        reason: String,
-    },
+    InvalidPatch { memory_id: String, reason: String },
     /// The reviewer call itself failed (e.g. LLM unavailable mid-batch).
-    ProviderFailure {
-        memory_id: String,
-        reason: String,
-    },
+    ProviderFailure { memory_id: String, reason: String },
     /// The record had already been reviewed at or after the batch's window —
     /// skipped to avoid wasting an LLM call.
     AlreadyReviewed { memory_id: String },
@@ -183,8 +177,8 @@ pub async fn run_daily_memory_review(
                     .saturating_sub(summary.changed + summary.would_change + summary.failed),
                 "daily review deferred: pressure gate closed mid-batch"
             );
-            summary.skipped_pressure = scanned
-                .saturating_sub(summary.changed + summary.would_change + summary.failed);
+            summary.skipped_pressure =
+                scanned.saturating_sub(summary.changed + summary.would_change + summary.failed);
             return Ok(summary);
         }
 
@@ -257,10 +251,9 @@ fn push_outcome(out: &mut Vec<DailyReviewOutcome>, outcome: DailyReviewOutcome) 
 
 fn daily_outcome_from_failure(memory_id: String, reason: ReviewError) -> DailyReviewOutcome {
     match reason {
-        ReviewError::ProviderError(reason) => DailyReviewOutcome::ProviderFailure {
-            memory_id,
-            reason,
-        },
+        ReviewError::ProviderError(reason) => {
+            DailyReviewOutcome::ProviderFailure { memory_id, reason }
+        }
         other => DailyReviewOutcome::InvalidPatch {
             memory_id,
             reason: other.label().to_string(),
@@ -389,9 +382,7 @@ pub fn spawn_daily_scheduler(state: Arc<AppState>) {
     });
 }
 
-fn build_inference_provider(
-    state: &AppState,
-) -> Option<Box<dyn super::pipeline::ReviewProvider>> {
+fn build_inference_provider(state: &AppState) -> Option<Box<dyn super::pipeline::ReviewProvider>> {
     let inference = state.inference.read().clone()?;
     Some(Box::new(
         super::inference_provider::InferenceReviewProvider::new(inference),
@@ -516,7 +507,10 @@ mod tests {
 
         // No row mutated by a dry run.
         let written = store.get_memory_by_id("mem-dry-1").await.unwrap().unwrap();
-        assert_eq!(written.memory_context, "Original memory context for mem-dry-1");
+        assert_eq!(
+            written.memory_context,
+            "Original memory context for mem-dry-1"
+        );
         assert_eq!(written.display_summary, "Original summary for mem-dry-1");
         assert_eq!(written.enrichment_status, super::super::STATUS_PENDING);
         assert_eq!(written.reviewer_generation, 0);
@@ -528,10 +522,7 @@ mod tests {
 
         let day_start = parse_day_range_local("2026-05-20").unwrap().0;
         let r1 = record("mem-real-1", day_start + 60_000);
-        store
-            .add_batch_preserving_ids(&[r1.clone()])
-            .await
-            .unwrap();
+        store.add_batch_preserving_ids(&[r1.clone()]).await.unwrap();
 
         let provider = StubProvider {
             result: Ok(ReviewedMemory {
@@ -561,11 +552,7 @@ mod tests {
         assert_eq!(summary.changed, 1);
         assert_eq!(summary.would_change, 0);
 
-        let written = store
-            .get_memory_by_id("mem-real-1")
-            .await
-            .unwrap()
-            .unwrap();
+        let written = store.get_memory_by_id("mem-real-1").await.unwrap().unwrap();
         assert_eq!(written.enrichment_status, STATUS_REVIEWED_DAILY);
         assert_eq!(written.reviewer_generation, 1);
         assert_eq!(
@@ -657,17 +644,16 @@ mod tests {
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.changed, 0);
 
-        let written = store
-            .get_memory_by_id("mem-bad-1")
-            .await
-            .unwrap()
-            .unwrap();
+        let written = store.get_memory_by_id("mem-bad-1").await.unwrap().unwrap();
         // mark_failed sets review_failed; original content stays intact.
         assert_eq!(
             written.enrichment_status,
             super::super::STATUS_REVIEW_FAILED
         );
-        assert_eq!(written.memory_context, "Original memory context for mem-bad-1");
+        assert_eq!(
+            written.memory_context,
+            "Original memory context for mem-bad-1"
+        );
         assert_eq!(written.display_summary, "Original summary for mem-bad-1");
         assert_eq!(written.reviewer_generation, 0);
 

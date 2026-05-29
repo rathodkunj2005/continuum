@@ -1180,6 +1180,15 @@ fn merge_additive_retrieval_fields(target: &mut SearchResult, source: &SearchRes
             target.chunk_evidence.push(evidence.clone());
         }
     }
+    for label in &source.embedding_reason_labels {
+        if !target
+            .embedding_reason_labels
+            .iter()
+            .any(|existing| existing == label)
+        {
+            target.embedding_reason_labels.push(label.clone());
+        }
+    }
 }
 
 fn replace_preserving_retrieval_fields(target: &mut SearchResult, replacement: &SearchResult) {

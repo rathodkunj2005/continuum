@@ -2,7 +2,10 @@
 
 use super::common::truncate_chars;
 use crate::context_runtime;
-use crate::memory_quality::classify_storage_outcome;
+use crate::memory_quality::{
+    classify_storage_outcome, is_low_evidence_visual_fallback_record,
+    quality_gate_reason as shared_quality_gate_reason,
+};
 use crate::search::QueryContext;
 use crate::storage::{MemoryRecord, SearchResult};
 use crate::AppState;
@@ -652,6 +655,17 @@ pub async fn get_memory_debug_inspector(
     let extraction_issues = derive_extraction_issues(evidence.as_ref());
     let ocr_quality_stats = derive_ocr_quality_stats(&memory, evidence.as_ref());
     let embedding_diagnostics = derive_embedding_diagnostics(&memory);
+    let mut inspected_storage_outcome = memory.storage_outcome.clone();
+    let mut inspected_quality_gate_reason = memory.quality_gate_reason.clone();
+    if is_low_evidence_visual_fallback_record(&memory)
+        && matches!(
+            inspected_storage_outcome.as_str(),
+            "" | "primary_memory_card" | "enriched_memory_card"
+        )
+    {
+        inspected_storage_outcome = "low_quality_evidence".to_string();
+        inspected_quality_gate_reason = shared_quality_gate_reason(&memory);
+    }
 
     Ok(MemoryDebugInspector {
         memory_id: memory.id.clone(),
@@ -680,8 +694,8 @@ pub async fn get_memory_debug_inspector(
         visual_semantics: serde_json::from_str::<serde_json::Value>(&memory.raw_evidence)
             .unwrap_or_else(|_| serde_json::json!({})),
         graph,
-        storage_outcome: memory.storage_outcome.clone(),
-        quality_gate_reason: memory.quality_gate_reason.clone(),
+        storage_outcome: inspected_storage_outcome,
+        quality_gate_reason: inspected_quality_gate_reason,
         query_match_reasons: query
             .as_deref()
             .map(|q| build_query_match_reasons(&memory, q))

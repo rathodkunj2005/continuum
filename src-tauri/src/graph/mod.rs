@@ -15,16 +15,16 @@ mod legacy;
 pub use legacy::{compress_node_label, GraphStore, MemoryCard, MemoryReconstruction};
 
 // Graph projection layer for 3D visualization
-pub mod types;
 pub mod projection;
-pub mod projection_scoring;
-pub mod projection_privacy;
 pub mod projection_commands;
+pub mod projection_privacy;
+pub mod projection_scoring;
+pub mod types;
 
 #[cfg(test)]
 mod integration_test;
 
 pub use types::{
-    NodeType, EdgeType, GraphNode, GraphEdge, GraphCommunity, Anchor3D,
-    FocusType, ActiveFocus, GraphData
+    ActiveFocus, Anchor3D, EdgeType, FocusType, GraphCommunity, GraphData, GraphEdge, GraphNode,
+    NodeType,
 };

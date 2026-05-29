@@ -219,7 +219,12 @@ mod tests {
             .add_batch(&[record("keyword-1", "route runner keyword planning")])
             .await
             .expect("add");
-        let config = SearchConfig::default().normalized();
+        let config = SearchConfig {
+            keyword_timeout_ms: 5_000,
+            keyword_variant_timeout_ms: 2_000,
+            ..SearchConfig::default()
+        }
+        .normalized();
         let plan = crate::context_runtime::query_plan::plan(
             "keyword planning",
             &crate::context_runtime::query_plan::PlanHints::default(),

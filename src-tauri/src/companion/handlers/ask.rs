@@ -36,7 +36,9 @@ pub async fn ask(
 
     let verify_outcome = match composed.verify_outcome {
         crate::context_runtime::context_pack::VerifyOutcome::Grounded { .. } => "grounded",
-        crate::context_runtime::context_pack::VerifyOutcome::PartialAnswer { .. } => "partial_answer",
+        crate::context_runtime::context_pack::VerifyOutcome::PartialAnswer { .. } => {
+            "partial_answer"
+        }
         crate::context_runtime::context_pack::VerifyOutcome::NotEnoughEvidence { .. } => {
             "not_enough_evidence"
         }

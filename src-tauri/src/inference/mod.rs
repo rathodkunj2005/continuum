@@ -61,8 +61,8 @@ pub fn get_or_init_backend() -> Result<Arc<LlamaBackend>, Box<dyn std::error::Er
     Ok(backend)
 }
 pub use image_semantics::{
-    build_import_raw_evidence, compose_failed_visual_semantics_import_metadata,
-    compose_import_memory_context, compose_import_memory_context_with_title,
+    build_import_raw_evidence, compose_import_memory_context,
+    compose_import_memory_context_with_title, compose_visual_metadata_fallback_import,
     extract_image_semantics, insight_from_ocr_only, insight_from_structured,
     should_include_import_ocr, synthesize_vision_insight, visual_semantics_is_grounded,
     ImageImportSource, ImageSemanticInsight, ImportMemoryText, ImportOcrStats,

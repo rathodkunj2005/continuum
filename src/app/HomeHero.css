@@ -4,7 +4,6 @@
 
    Tokens used: --cp-* (palette), --film-font-*, --film-track-stamp,
    --film-ease-iris, v2 spacing --s-*, --radius-full.
-   No major design-system churn: existing .ui-action-btn is reused for CTAs.
    ============================================================= */
 
 /* ─── Root container ──────────────────────────────────────────────────────── */
@@ -75,7 +74,7 @@
 .home-hero__search-wrap {
     width: 100%;
     max-width: 620px;
-    margin-bottom: var(--s-6);
+    margin-bottom: var(--s-8);
     animation: heroIn 0.55s var(--film-ease-iris) 0.2s both;
 }
 
@@ -264,23 +263,6 @@
     animation: heroIn 0.3s ease both;
 }
 
-/* ─── CTAs ────────────────────────────────────────────────────────────────── */
-
-.home-hero__ctas {
-    display: flex;
-    gap: var(--s-3);
-    margin-bottom: var(--s-8);
-    animation: heroIn 0.55s var(--film-ease-iris) 0.25s both;
-}
-
-.home-hero__cta-reel {
-    min-width: 140px;
-}
-
-.home-hero__cta-work {
-    min-width: 140px;
-}
-
 /* ─── Scroll indicator ────────────────────────────────────────────────────── */
 
 .home-hero__scroll-indicator {
@@ -349,13 +331,6 @@
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 
-@media (max-width: 900px) {
-    .home-hero__ctas {
-        flex-direction: column;
-        align-items: center;
-    }
-}
-
 /* ─── Reduced motion ──────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -363,7 +338,6 @@
     .home-hero__title,
     .home-hero__subtitle,
     .home-hero__search-wrap,
-    .home-hero__ctas,
     .home-hero__scroll-indicator {
         animation: none;
         opacity: 1;

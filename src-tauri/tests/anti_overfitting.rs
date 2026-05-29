@@ -13,6 +13,10 @@ fn production_query_and_intent_logic_avoids_fixture_specific_alias_rules() {
             "src/context_runtime/mod.rs",
             vec!["contains(\"fndr\")", "Some(\"FNDR\".to_string())"],
         ),
+        (
+            "src/memory_embedding_document.rs",
+            vec!["\"ipl\"", "\"cricket\"", "\"soccer\"", "\"football\""],
+        ),
     ];
 
     for (relative_path, banned_terms) in checks {

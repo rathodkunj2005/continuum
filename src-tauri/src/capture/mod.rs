@@ -42,8 +42,11 @@ use crate::inference::{
 };
 use crate::memory::reopen::build_reopen_target;
 use crate::memory_compaction::{
-    build_lexical_shadow, build_lexical_shadow_with_aliases, compact_summary_embedding_text,
-    mean_pool_embeddings, support_embedding_texts_with_config,
+    build_lexical_shadow, build_lexical_shadow_with_aliases, mean_pool_embeddings,
+};
+use crate::memory_embedding_document::{
+    build_embedding_manifest, compose_memory_embedding_document, image_embedding_status,
+    text_embedding_status, upsert_embedding_manifest, VisualSemanticSource,
 };
 use crate::memory_quality::{deterministic_dedup_fingerprint, is_supported_dedup_fingerprint};
 use crate::models;
@@ -187,8 +190,6 @@ enum VisualAdmissionOutcome {
     Failed(String),
 }
 
-const VISUAL_UNGROUNDED_LOW_RAM_REASON: &str = "visual_capture_ungrounded_low_ram";
-
 fn capture_pixel_vlm_route(
     config: &crate::config::Config,
     app_data_dir: &std::path::Path,
@@ -217,21 +218,6 @@ fn capture_pixel_vlm_route(
         vlm_timeout_secs: config.vlm_timeout_secs,
         _phantom: std::marker::PhantomData,
     })
-}
-
-fn should_skip_ungrounded_low_ram_visual_capture(
-    vlm_route: &VlmRouteDecision,
-    observed_text_len: usize,
-    observed_confidence: f32,
-    observed_block_count: usize,
-    min_text_length: usize,
-) -> bool {
-    // Only drop truly ungrounded visual-only frames on low-RAM hosts. Thin OCR
-    // (below the main pipeline gate) can still ground an LLM/fusion fallback —
-    // `source_low_signal` must not force a hard skip when chars are present.
-    vlm_route.fallback_reason() == Some("vlm_blocked_low_ram")
-        && (observed_text_len < min_text_length
-            || (observed_block_count == 0 && observed_confidence <= 0.05))
 }
 
 /// First half of the visual-narrative path: decode the screen PNG once,
@@ -410,6 +396,12 @@ async fn compose_visual_capture_record(
         ImageImportSource::ScreenCapture,
         Some(window_title),
     );
+    let synthesis_branch = match insight.model_id.as_str() {
+        "llm_ocr_grounded" => "llm_ocr_grounded_visual_fallback",
+        "ocr_only" | "" => "visual_metadata_fallback",
+        _ if vlm_route.runs_pixel_vlm() => "vlm",
+        _ => "visual_metadata_fallback",
+    };
 
     let session_key = build_session_key(app_name, window_title, url);
     let session_id = build_session_id(&now, app_name, bundle_id, &session_key);
@@ -426,6 +418,16 @@ async fn compose_visual_capture_record(
             .chars()
             .take(160)
             .collect::<String>()
+    };
+    let topic = if !composed.topic.trim().is_empty() {
+        composed.topic.clone()
+    } else {
+        "unknown".to_string()
+    };
+    let user_intent = if !composed.user_intent.trim().is_empty() {
+        composed.user_intent.clone()
+    } else {
+        composed.activity_type.clone()
     };
 
     // Fold synthesis-derived concept terms (search_aliases + topic_categories)
@@ -446,23 +448,43 @@ async fn compose_visual_capture_record(
         url,
         &shadow_extras,
     );
-    let compact_summary = compact_summary_embedding_text(
-        "visual_capture",
-        &display_summary,
-        &composed.memory_context,
-        &lexical_shadow,
-    );
     let chunking_config = state.config.read().chunking.clone();
-    let support_texts = support_embedding_texts_with_config(
-        app_name,
-        window_title,
-        &composed.memory_context,
-        &lexical_shadow,
-        Some(&chunking_config),
-    );
+    let source_type = if url.is_some() {
+        "browser_visual".to_string()
+    } else {
+        "screen_visual".to_string()
+    };
+    let mut embedding_seed = MemoryRecord {
+        app_name: app_name.to_string(),
+        window_title: window_title.to_string(),
+        clean_text: composed.memory_context.clone(),
+        snippet: display_summary.clone(),
+        display_summary: display_summary.clone(),
+        summary_source: "visual_capture".to_string(),
+        lexical_shadow: lexical_shadow.clone(),
+        url: url.map(str::to_string),
+        source_type: source_type.clone(),
+        topic: topic.clone(),
+        workflow: "unknown".to_string(),
+        user_intent: user_intent.clone(),
+        memory_context: composed.memory_context.clone(),
+        search_aliases: composed.search_aliases.clone(),
+        activity_type: composed.activity_type.clone(),
+        entities: insight.entities.clone(),
+        tags: insight.topics.clone(),
+        extraction_confidence: insight.confidence,
+        synthesis_branch: synthesis_branch.to_string(),
+        topic_categories: composed.topic_categories.clone(),
+        insight_what_happened: composed.insight_what_happened.clone(),
+        insight_why_mattered: composed.insight_why_mattered.clone(),
+        insight_card_confidence: insight.confidence,
+        ..Default::default()
+    };
+    crate::memory_insight::derive_insight_for_record(&mut embedding_seed);
+    let embedding_document =
+        compose_memory_embedding_document(&embedding_seed, Some(&chunking_config));
 
-    let mut embedding_inputs = vec![composed.embedding_text.clone(), compact_summary.clone()];
-    embedding_inputs.extend(support_texts.iter().cloned());
+    let embedding_inputs = embedding_document.text_embedding_inputs();
     let vectors = embed_text_inputs_with_memo(
         text_embedder,
         embedding_memo,
@@ -486,10 +508,33 @@ async fn compose_visual_capture_record(
     let text_embedding =
         weighted_primary_embedding(&primary, &snippet_embedding, &support_embedding);
 
-    let raw_evidence = json!({
+    let visual_source = match synthesis_branch {
+        "llm_ocr_grounded_visual_fallback" => VisualSemanticSource::LlmOcrGrounded,
+        "visual_metadata_fallback" => VisualSemanticSource::ClipMetadataFallback,
+        "vlm" => VisualSemanticSource::PixelVlmOrOcrGrounded,
+        _ => VisualSemanticSource::Unknown,
+    };
+    let manifest = build_embedding_manifest(
+        &embedding_document,
+        text_embedding_status(&text_embedding),
+        image_embedding_status(&image_vec),
+        visual_source,
+    );
+    let raw_evidence = upsert_embedding_manifest(&json!({
         "source_kind": "visual_capture",
         "vision_model_id": insight.model_id,
         "semantic_confidence": insight.confidence,
+        "synthesis_branch": synthesis_branch,
+        "text_embedding_dim": EMBEDDING_DIM,
+        "image_embedding_dim": DEFAULT_IMAGE_EMBEDDING_DIM,
+        "visual_understanding": {
+            "status": if image_vec.iter().any(|value| *value != 0.0) {
+                "clip_image_embedding"
+            } else {
+                "zero_vector_fallback"
+            },
+            "raw_pixels_persisted": false,
+        },
         "visual_admission_novelty": novelty,
         "vlm_route": vlm_route.label(),
         "vlm_capability": vlm_capability_label(config.use_vlm, host_supports_qwen_vlm, models::pixel_vlm_available(models::configured_vlm_model_id(&config).as_deref(), Some(state.app_data_dir.as_path()))),
@@ -503,18 +548,7 @@ async fn compose_visual_capture_record(
         "synthetic_filename": synthetic_filename,
         "timestamp_ms": now.timestamp_millis(),
     })
-    .to_string();
-
-    let topic = if !composed.topic.trim().is_empty() {
-        composed.topic.clone()
-    } else {
-        "unknown".to_string()
-    };
-    let user_intent = if !composed.user_intent.trim().is_empty() {
-        composed.user_intent.clone()
-    } else {
-        composed.activity_type.clone()
-    };
+    .to_string(), &manifest);
 
     let mut record = MemoryRecord {
         id: uuid::Uuid::new_v4().to_string(),
@@ -545,11 +579,7 @@ async fn compose_visual_capture_record(
         last_accessed_at: 0,
         timestamp_start: now.timestamp_millis(),
         timestamp_end: now.timestamp_millis(),
-        source_type: if url.is_some() {
-            "browser_visual".to_string()
-        } else {
-            "screen_visual".to_string()
-        },
+        source_type,
         topic,
         workflow: "unknown".to_string(),
         user_intent,
@@ -559,15 +589,18 @@ async fn compose_visual_capture_record(
         activity_type: composed.activity_type.clone(),
         entities: insight.entities.clone(),
         tags: insight.topics.clone(),
-        embedding_text: composed.embedding_text.clone(),
+        embedding_text: embedding_document.primary_text.clone(),
         embedding_model: "all-MiniLM-L6-v2".to_string(),
         embedding_dim: EMBEDDING_DIM as u32,
         evidence_confidence: insight.confidence,
         extraction_confidence: insight.confidence,
-        synthesis_branch: "vlm".to_string(),
+        synthesis_branch: synthesis_branch.to_string(),
         topic_categories: composed.topic_categories.clone(),
-        insight_what_happened: composed.insight_what_happened.clone(),
-        insight_why_mattered: composed.insight_why_mattered.clone(),
+        insight_what_happened: embedding_seed.insight_what_happened.clone(),
+        insight_why_mattered: embedding_seed.insight_why_mattered.clone(),
+        insight_what_changed: embedding_seed.insight_what_changed.clone(),
+        insight_context_thread: embedding_seed.insight_context_thread.clone(),
+        insight_spans_json: embedding_seed.insight_spans_json.clone(),
         insight_card_confidence: insight.confidence,
         schema_version: 2,
         enrichment_status: String::new(), // Lifecycle: pending review
@@ -2286,13 +2319,11 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             observed_block_count
         );
 
-        // Skip if the text source is too weak/noisy to drive the OCR-narrative
-        // pipeline. Before continuing, attempt the visual-narrative path: a
-        // frame with thin OCR can still be visually informative (video,
-        // image-heavy pages, design tools). The visual-admission gate is
-        // adaptive — its threshold rises with each prior visual-only admit
-        // in the current session — so the vault never gets flooded with
-        // near-duplicate frames from the same scene.
+        // If the text source is too weak/noisy to drive the OCR-narrative
+        // pipeline, attempt the visual-narrative path. The visual-admission
+        // gate now rejects only tiny frames and near-duplicates; low-RAM or
+        // missing VLM falls back to OCR/window metadata instead of forcing a
+        // hard skip.
         if source_low_signal || text.len() < config.min_text_length {
             let session_key_visual = build_session_key(&app_name, &window_title, url.as_deref());
             visual_tracker.reset_for(&session_key_visual);
@@ -2368,18 +2399,13 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                                 app_name,
                                 err
                             );
-                            let stored_or_skipped = if err == VISUAL_UNGROUNDED_LOW_RAM_REASON {
-                                "skipped_visual_ungrounded_low_ram"
-                            } else {
-                                "skipped_visual_vlm_failed"
-                            };
                             emit_capture_quality_signal(
                                 state.as_ref(),
                                 json!({
                                     "timestamp_ms": chrono::Utc::now().timestamp_millis(),
                                     "app_name": app_name,
                                     "bundle_id": app_context.bundle_id.clone(),
-                                    "stored_or_skipped": stored_or_skipped,
+                                    "stored_or_skipped": "skipped_visual_compose_failed",
                                     "source_kind": "visual_capture",
                                     "reason": err,
                                 }),
@@ -2972,31 +2998,145 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             &enriched_clean_text,
             url.as_deref(),
         );
-        let primary_embed_input = compose_primary_embedding_text(
-            structured_memory.as_ref(),
-            &app_name,
-            &window_title,
-            &durable_memory_context,
-            &display_summary,
-            &enriched_clean_text,
-            &lexical_shadow,
-        );
-        let snippet_embed_input = compact_summary_embedding_text(
-            &summary_source,
-            &display_summary,
-            &enriched_clean_text,
-            &lexical_shadow,
-        );
-        let support_texts = support_embedding_texts_with_config(
-            &app_name,
-            &window_title,
-            &enriched_clean_text,
-            &lexical_shadow,
-            Some(&config.chunking),
-        );
+        let mut embedding_seed = MemoryRecord {
+            app_name: app_name.clone(),
+            window_title: window_title.clone(),
+            clean_text: enriched_clean_text.clone(),
+            snippet: display_summary.clone(),
+            display_summary: display_summary.clone(),
+            summary_source: summary_source.clone(),
+            lexical_shadow: lexical_shadow.clone(),
+            url: url.clone(),
+            source_type: if url.is_some() {
+                "browser".to_string()
+            } else {
+                "screen".to_string()
+            },
+            topic: structured_memory
+                .as_ref()
+                .map(|m| {
+                    if m.topic.trim().is_empty() {
+                        "unknown".to_string()
+                    } else {
+                        m.topic.clone()
+                    }
+                })
+                .unwrap_or_else(|| "unknown".to_string()),
+            workflow: structured_memory
+                .as_ref()
+                .map(|m| {
+                    if m.workflow.trim().is_empty() {
+                        "unknown".to_string()
+                    } else {
+                        m.workflow.clone()
+                    }
+                })
+                .unwrap_or_else(|| "unknown".to_string()),
+            user_intent: structured_memory
+                .as_ref()
+                .map(|m| {
+                    if m.user_intent.trim().is_empty() {
+                        m.activity_type.clone()
+                    } else {
+                        m.user_intent.clone()
+                    }
+                })
+                .unwrap_or_default(),
+            memory_context: durable_memory_context.clone(),
+            commands: structured_memory
+                .as_ref()
+                .map(|m| m.commands.clone())
+                .unwrap_or_default(),
+            blockers: structured_memory
+                .as_ref()
+                .map(|m| m.blockers.clone())
+                .unwrap_or_default(),
+            todos: structured_memory
+                .as_ref()
+                .map(|m| m.todos.clone())
+                .unwrap_or_default(),
+            open_questions: structured_memory
+                .as_ref()
+                .map(|m| m.open_questions.clone())
+                .unwrap_or_default(),
+            results: structured_memory
+                .as_ref()
+                .map(|m| m.results.clone())
+                .unwrap_or_default(),
+            search_aliases: structured_memory
+                .as_ref()
+                .map(|m| m.search_aliases.clone())
+                .unwrap_or_default(),
+            activity_type: structured_memory
+                .as_ref()
+                .map(|m| m.activity_type.clone())
+                .unwrap_or_default(),
+            files_touched: structured_memory
+                .as_ref()
+                .map(|m| m.files_touched.clone())
+                .unwrap_or_default(),
+            symbols_changed: structured_memory
+                .as_ref()
+                .map(|m| m.symbols_changed.clone())
+                .unwrap_or_default(),
+            project: structured_memory
+                .as_ref()
+                .map(|m| m.project.clone())
+                .unwrap_or_default(),
+            tags: structured_memory
+                .as_ref()
+                .map(|m| m.tags.clone())
+                .unwrap_or_default(),
+            entities: structured_memory
+                .as_ref()
+                .map(|m| m.entities.clone())
+                .unwrap_or_default(),
+            decisions: structured_memory
+                .as_ref()
+                .map(|m| m.decisions.clone())
+                .unwrap_or_default(),
+            errors: structured_memory
+                .as_ref()
+                .map(|m| m.errors.clone())
+                .unwrap_or_default(),
+            next_steps: structured_memory
+                .as_ref()
+                .map(|m| m.next_steps.clone())
+                .unwrap_or_default(),
+            outcome: structured_memory
+                .as_ref()
+                .map(|m| m.outcome.clone())
+                .unwrap_or_default(),
+            extraction_confidence: structured_memory
+                .as_ref()
+                .map(|m| m.confidence)
+                .unwrap_or(0.0),
+            synthesis_branch: structured_memory
+                .as_ref()
+                .map(|m| m.synthesis_branch.clone())
+                .unwrap_or_else(|| "fallback".to_string()),
+            topic_categories: structured_memory
+                .as_ref()
+                .map(|m| m.topic_categories.clone())
+                .unwrap_or_default(),
+            insight_what_happened: structured_memory
+                .as_ref()
+                .filter(|m| !m.insight_what_happened.is_empty())
+                .map(|m| m.insight_what_happened.clone())
+                .unwrap_or_default(),
+            insight_why_mattered: structured_memory
+                .as_ref()
+                .filter(|m| !m.insight_why_mattered.is_empty())
+                .map(|m| m.insight_why_mattered.clone())
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        crate::memory_insight::derive_insight_for_record(&mut embedding_seed);
+        let embedding_document =
+            compose_memory_embedding_document(&embedding_seed, Some(&config.chunking));
+        let primary_embed_input = embedding_document.primary_text.clone();
 
-        let mut embedding_inputs = vec![primary_embed_input.clone(), snippet_embed_input.clone()];
-        embedding_inputs.extend(support_texts.iter().cloned());
+        let embedding_inputs = embedding_document.text_embedding_inputs();
         let semantic_embeddings_available = semantic_embeddings_enabled(text_embedder.as_ref());
         let embed_start = Instant::now();
         let embedding_vectors = embed_text_inputs_with_memo(
@@ -3031,7 +3171,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             app = %app_name,
             ocr_ms = ocr_latency.as_millis(),
             embed_ms = embed_latency.as_millis(),
-            support_chunks = support_texts.len(),
+            support_chunks = embedding_document.support_texts.len(),
             semantic_embeddings_available,
             "capture_pipeline:distilled_frame"
         );
@@ -3170,7 +3310,13 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             );
         }
 
-        let raw_evidence_payload = json!({
+        let manifest = build_embedding_manifest(
+            &embedding_document,
+            text_embedding_status(&text_embedding),
+            image_embedding_status(&image_embedding),
+            VisualSemanticSource::TextCapture,
+        );
+        let raw_evidence_payload = upsert_embedding_manifest(&json!({
             "timestamp_ms": now.timestamp_millis(),
             "app_name": app_name.clone(),
             "window_title": window_title.clone(),
@@ -3206,13 +3352,23 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             "host_supports_vlm": host_supports_qwen_vlm,
             "pressure_reason": vlm_pressure_reason,
             "clip_embedding_status": clip_embedding_status,
+            "text_embedding_dim": EMBEDDING_DIM,
+            "image_embedding_dim": DEFAULT_IMAGE_EMBEDDING_DIM,
+            "visual_understanding": {
+                "status": if clip_embedding_status == "ok" {
+                    "clip_image_embedding"
+                } else {
+                    "zero_vector_fallback"
+                },
+                "raw_pixels_persisted": false,
+            },
             "extraction_grounding_confidence": extraction_grounding_confidence,
             "extraction_issues": extraction_issues.clone(),
             "primary_embed_input": primary_embed_input.chars().take(900).collect::<String>(),
             "internal_context": internal_context.chars().take(700).collect::<String>(),
             "clean_text_excerpt": enriched_clean_text.chars().take(700).collect::<String>(),
         })
-        .to_string();
+        .to_string(), &manifest);
 
         let clean_text_len = enriched_clean_text.len();
         let session_id = build_session_id(
@@ -3432,18 +3588,16 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 .as_ref()
                 .filter(|m| !m.insight_what_happened.is_empty())
                 .map(|m| m.insight_what_happened.clone())
-                .unwrap_or_default(),
+                .unwrap_or_else(|| embedding_seed.insight_what_happened.clone()),
             insight_why_mattered: structured_memory
                 .as_ref()
                 .filter(|m| !m.insight_why_mattered.is_empty())
                 .map(|m| m.insight_why_mattered.clone())
-                .unwrap_or_default(),
-            insight_what_changed: String::new(),
-            insight_context_thread: String::new(),
-            insight_spans_json: String::new(),
+                .unwrap_or_else(|| embedding_seed.insight_why_mattered.clone()),
+            insight_what_changed: embedding_seed.insight_what_changed.clone(),
+            insight_context_thread: embedding_seed.insight_context_thread.clone(),
+            insight_spans_json: embedding_seed.insight_spans_json.clone(),
             insight_card_confidence: 0.0,
-            reviewed_at_ms: 0,
-            reviewer_generation: String::new(),
         };
         let incoming_record_id = record.id.clone();
         let batch_size_before = batch.len();
@@ -4077,19 +4231,72 @@ pub(crate) async fn merge_memory_records_with_policy(
         ),
         merged_url.as_deref(),
     );
-    let compact_snippet_text = compact_summary_embedding_text(
-        &merged_summary_source,
-        &merged_display_summary,
-        &merged_clean_text,
-        &merged_lexical_shadow,
-    );
-    let support_texts = support_embedding_texts_with_config(
-        &incoming.app_name,
-        &merged_window_title,
-        &merged_clean_text,
-        &merged_lexical_shadow,
-        None,
-    );
+    let mut merge_embedding_seed = MemoryRecord {
+        app_name: incoming.app_name.clone(),
+        window_title: merged_window_title.clone(),
+        clean_text: merged_clean_text.clone(),
+        snippet: merged_display_summary.clone(),
+        display_summary: merged_display_summary.clone(),
+        internal_context: merged_internal_context.clone(),
+        summary_source: merged_summary_source.clone(),
+        lexical_shadow: merged_lexical_shadow.clone(),
+        url: merged_url.clone(),
+        source_type: prefer_non_empty(&incoming.source_type, &existing.source_type),
+        topic: prefer_non_empty(&incoming.topic, &existing.topic),
+        workflow: prefer_non_empty(&incoming.workflow, &existing.workflow),
+        user_intent: prefer_non_empty(&incoming.user_intent, &existing.user_intent),
+        memory_context: prefer_non_empty(&incoming.memory_context, &existing.memory_context),
+        commands: merge_string_lists(&existing.commands, &incoming.commands),
+        blockers: merge_string_lists(&existing.blockers, &incoming.blockers),
+        todos: merge_string_lists(&existing.todos, &incoming.todos),
+        open_questions: merge_string_lists(&existing.open_questions, &incoming.open_questions),
+        results: merge_string_lists(&existing.results, &incoming.results),
+        search_aliases: merge_string_lists(&existing.search_aliases, &incoming.search_aliases),
+        activity_type: prefer_non_empty(&incoming.activity_type, &existing.activity_type),
+        files_touched: merge_string_lists(&existing.files_touched, &incoming.files_touched),
+        symbols_changed: merge_string_lists(&existing.symbols_changed, &incoming.symbols_changed),
+        project: prefer_non_empty(&incoming.project, &existing.project),
+        tags: merge_string_lists(&existing.tags, &incoming.tags),
+        entities: merge_string_lists(&existing.entities, &incoming.entities),
+        decisions: merge_string_lists(&existing.decisions, &incoming.decisions),
+        errors: merge_string_lists(&existing.errors, &incoming.errors),
+        next_steps: merge_string_lists(&existing.next_steps, &incoming.next_steps),
+        outcome: prefer_non_empty(&incoming.outcome, &existing.outcome),
+        extraction_confidence: existing
+            .extraction_confidence
+            .max(incoming.extraction_confidence),
+        synthesis_branch: prefer_non_empty(&incoming.synthesis_branch, &existing.synthesis_branch),
+        topic_categories: merge_string_lists(
+            &existing.topic_categories,
+            &incoming.topic_categories,
+        ),
+        insight_what_happened: prefer_non_empty(
+            &incoming.insight_what_happened,
+            &existing.insight_what_happened,
+        ),
+        insight_why_mattered: prefer_non_empty(
+            &incoming.insight_why_mattered,
+            &existing.insight_why_mattered,
+        ),
+        insight_what_changed: prefer_non_empty(
+            &incoming.insight_what_changed,
+            &existing.insight_what_changed,
+        ),
+        insight_context_thread: prefer_non_empty(
+            &incoming.insight_context_thread,
+            &existing.insight_context_thread,
+        ),
+        insight_spans_json: prefer_non_empty(
+            &incoming.insight_spans_json,
+            &existing.insight_spans_json,
+        ),
+        insight_card_confidence: existing
+            .insight_card_confidence
+            .max(incoming.insight_card_confidence),
+        ..Default::default()
+    };
+    crate::memory_insight::derive_insight_for_record(&mut merge_embedding_seed);
+    let merge_embedding_document = compose_memory_embedding_document(&merge_embedding_seed, None);
 
     let merged_embedding = if recompute_embedding && semantic_embeddings_enabled(text_embedder) {
         text_embedder
@@ -4098,7 +4305,7 @@ pub(crate) async fn merge_memory_records_with_policy(
                     .embed_batch_with_context(&[(
                         incoming.app_name.clone(),
                         merged_window_title.clone(),
-                        merged_clean_text.clone(),
+                        merge_embedding_document.primary_text.clone(),
                     )])
                     .ok()
                     .and_then(|mut vectors| vectors.drain(..).next())
@@ -4116,7 +4323,7 @@ pub(crate) async fn merge_memory_records_with_policy(
                         .embed_batch_with_context(&[(
                             incoming.app_name.clone(),
                             merged_window_title.clone(),
-                            compact_snippet_text.clone(),
+                            merge_embedding_document.snippet_text.clone(),
                         )])
                         .ok()
                         .and_then(|mut vectors| vectors.drain(..).next())
@@ -4128,9 +4335,10 @@ pub(crate) async fn merge_memory_records_with_policy(
 
     let merged_support_embedding = if recompute_embedding
         && semantic_embeddings_enabled(text_embedder)
-        && !support_texts.is_empty()
+        && !merge_embedding_document.support_texts.is_empty()
     {
-        let contexts = support_texts
+        let contexts = merge_embedding_document
+            .support_texts
             .iter()
             .map(|text| {
                 (
@@ -4175,7 +4383,11 @@ pub(crate) async fn merge_memory_records_with_policy(
         .max(incoming.extraction_confidence);
     let dedup_fingerprint =
         prefer_non_empty(&incoming.dedup_fingerprint, &existing.dedup_fingerprint);
-    let embedding_text = prefer_non_empty(&incoming.embedding_text, &existing.embedding_text);
+    let embedding_text = if recompute_embedding {
+        merge_embedding_document.primary_text.clone()
+    } else {
+        prefer_non_empty(&incoming.embedding_text, &existing.embedding_text)
+    };
     let embedding_model = prefer_non_empty(&incoming.embedding_model, &existing.embedding_model);
     let embedding_dim = incoming
         .embedding_dim
@@ -4209,6 +4421,20 @@ pub(crate) async fn merge_memory_records_with_policy(
     let insight_card_confidence = existing
         .insight_card_confidence
         .max(incoming.insight_card_confidence);
+    let raw_evidence = {
+        let raw = prefer_non_empty(&incoming.raw_evidence, &existing.raw_evidence);
+        if recompute_embedding {
+            let manifest = build_embedding_manifest(
+                &merge_embedding_document,
+                text_embedding_status(&merged_embedding),
+                image_embedding_status(&incoming.image_embedding),
+                VisualSemanticSource::TextCapture,
+            );
+            upsert_embedding_manifest(&raw, &manifest)
+        } else {
+            raw
+        }
+    };
 
     MemoryRecord {
         id: existing.id.clone(),
@@ -4273,7 +4499,7 @@ pub(crate) async fn merge_memory_records_with_policy(
             &existing.related_projects,
             &incoming.related_projects,
         ),
-        raw_evidence: prefer_non_empty(&incoming.raw_evidence, &existing.raw_evidence),
+        raw_evidence,
         reopen_kind: if incoming.reopen_kind != crate::memory::reopen::ReopenKind::Unknown {
             incoming.reopen_kind.clone()
         } else {
@@ -4412,8 +4638,6 @@ pub(crate) async fn merge_memory_records_with_policy(
         insight_context_thread,
         insight_spans_json,
         insight_card_confidence,
-        reviewed_at_ms: 0,
-        reviewer_generation: String::new(),
     }
 }
 
@@ -5396,33 +5620,6 @@ Activity patterns and insights dashboard
             .files_touched
             .iter()
             .any(|file| file == "DESIGN_DIRECTION.md"));
-    }
-
-    #[test]
-    fn visual_only_low_ram_capture_without_ocr_is_not_stored() {
-        let route = VlmRouteDecision::FallbackOcrOnly {
-            reason: "vlm_blocked_low_ram".to_string(),
-        };
-
-        assert!(should_skip_ungrounded_low_ram_visual_capture(
-            &route, 0, 0.0, 0, 20
-        ));
-        assert!(!should_skip_ungrounded_low_ram_visual_capture(
-            &route, 64, 0.42, 6, 20
-        ));
-        assert!(should_skip_ungrounded_low_ram_visual_capture(
-            &route, 9, 0.42, 6, 20
-        ));
-        assert!(!should_skip_ungrounded_low_ram_visual_capture(
-            &route, 83, 0.48, 8, 20
-        ));
-        assert!(!should_skip_ungrounded_low_ram_visual_capture(
-            &VlmRouteDecision::RunQwenVlm,
-            0,
-            0.0,
-            0,
-            20
-        ));
     }
 
     #[test]

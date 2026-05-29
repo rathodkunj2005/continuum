@@ -14,6 +14,7 @@ use lancedb::query::ExecutableQuery;
 use lancedb::Table;
 
 use crate::memory::reopen::{ReopenKind, ReopenValidationStatus};
+use crate::memory_embedding_document::search_embedding_provenance;
 use crate::storage::schema::{
     ActivityEvent, ContextDelta, ContextPack, DecisionLedgerEntry, EdgeType, EntityAliasRecord,
     GraphEdge, GraphNode, KnowledgePage, KnowledgePageType, KnowledgeStability, MeetingSegment,
@@ -320,7 +321,8 @@ pub(super) fn records_to_batch_with_text_dim(
         .iter()
         .map(|r| r.fallback_reason.as_deref())
         .collect();
-    let raw_screenshot_stored: Vec<bool> = records.iter().map(|r| r.raw_screenshot_stored).collect();
+    let raw_screenshot_stored: Vec<bool> =
+        records.iter().map(|r| r.raw_screenshot_stored).collect();
 
     RecordBatch::try_new(
         schema,
@@ -916,6 +918,7 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
     let search_reviewed_at_ms = i64_col(batch, "reviewed_at_ms");
     let search_reviewer_generations = u32_col(batch, "reviewer_generation");
     let search_storage_outcomes = str_col(batch, "storage_outcome");
+    let raw_evidences = str_col(batch, "raw_evidence");
 
     (0..n)
         .map(|i| {
@@ -1026,6 +1029,8 @@ pub(super) fn batch_to_search_results(batch: &RecordBatch) -> Vec<SearchResult> 
                 matched_routes: Vec::new(),
                 matched_chunk_ids: Vec::new(),
                 chunk_evidence: Vec::new(),
+                embedding_provenance: search_embedding_provenance(&get_str(&raw_evidences, i)),
+                embedding_reason_labels: Vec::new(),
                 enrichment_status: get_str(&search_enrichment_statuses, i),
                 reviewed_at_ms: search_reviewed_at_ms
                     .as_ref()

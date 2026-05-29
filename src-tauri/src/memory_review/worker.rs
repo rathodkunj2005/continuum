@@ -127,7 +127,15 @@ pub async fn tick_once(
                         "memory_review job failed"
                     );
                 }
-                MemoryReviewOutcome::Skipped { .. } => {}
+                MemoryReviewOutcome::Skipped { memory_id, reason } => {
+                    clear_last_error();
+                    tracing::info!(
+                        target: "fndr::memory_review",
+                        memory_id = %memory_id,
+                        reason = %reason,
+                        "memory_review job skipped"
+                    );
+                }
             }
             TickOutcome::Processed(outcome)
         }

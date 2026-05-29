@@ -180,8 +180,8 @@ pub async fn start(
 
     // axum-server does not expose the bound port before serve(); probe + drop.
     let actual_addr = if port == 0 {
-        let probe = std::net::TcpListener::bind(&addr)
-            .map_err(|e| format!("port probe failed: {e}"))?;
+        let probe =
+            std::net::TcpListener::bind(&addr).map_err(|e| format!("port probe failed: {e}"))?;
         let resolved = probe
             .local_addr()
             .map_err(|e| format!("port resolve failed: {e}"))?;
@@ -260,7 +260,10 @@ pub async fn start(
     // caller must already know the short pairing code (out-of-band — typed on
     // the iPhone after scanning the QR shown on the Mac).
     let pairing_router = Router::new()
-        .route("/v1/pair/start", post(crate::companion::handlers::pairing::start))
+        .route(
+            "/v1/pair/start",
+            post(crate::companion::handlers::pairing::start),
+        )
         .route(
             "/v1/pair/complete",
             post(crate::companion::handlers::pairing::complete),

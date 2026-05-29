@@ -4,6 +4,10 @@ use crate::context_runtime::retrieval_routes::{
     RouteHits, RouteSignals,
 };
 use crate::graph::schema::{GraphNode, GraphNodeType};
+use crate::memory_embedding_document::{
+    embedding_retrieval_adjustment, search_embedding_provenance_from_metadata, EmbeddingRole,
+};
+use crate::storage::SearchResult;
 use futures::future::BoxFuture;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -27,13 +31,20 @@ impl RetrievalRoute for EntityRoute {
                 let Some((match_score, kind_weight)) = node_match_score(node, plan) else {
                     continue;
                 };
-                let score = (node.confidence * match_score * kind_weight).clamp(0.0, 1.0);
+                let graph_adjustment = graph_node_retrieval_adjustment(node);
+                let score = ((node.confidence * match_score * kind_weight).clamp(0.0, 1.0)
+                    * graph_adjustment.score_multiplier)
+                    .clamp(0.0, 1.0);
                 for memory_id in &node.source_memory_ids {
                     if memory_id.trim().is_empty() {
                         continue;
                     }
                     let search_result = match ctx.store.get_memory_by_id(memory_id).await {
-                        Ok(Some(record)) => Some(memory_record_to_search_result(&record, score)),
+                        Ok(Some(record)) => Some(entity_search_result(
+                            &record,
+                            score,
+                            &graph_adjustment.reason_labels,
+                        )),
                         Ok(None) => None,
                         Err(err) => {
                             tracing::warn!(err = %err, memory_id = %memory_id, "retrieval_route:entity_memory_fetch_failed");
@@ -97,6 +108,31 @@ fn node_match_score(node: &GraphNode, plan: &QueryPlan) -> Option<(f32, f32)> {
     None
 }
 
+fn graph_node_retrieval_adjustment(
+    node: &GraphNode,
+) -> crate::memory_embedding_document::EmbeddingRetrievalAdjustment {
+    let provenance = search_embedding_provenance_from_metadata(&node.metadata);
+    embedding_retrieval_adjustment(
+        provenance
+            .as_ref()
+            .and_then(|provenance| provenance.role(EmbeddingRole::GraphNode)),
+        EmbeddingRole::GraphNode,
+    )
+}
+
+fn entity_search_result(
+    record: &crate::storage::MemoryRecord,
+    score: f32,
+    reason_labels: &[String],
+) -> SearchResult {
+    let mut result = memory_record_to_search_result(record, score);
+    push_unique(&mut result.matched_routes, "Entity".to_string());
+    for label in reason_labels {
+        push_unique(&mut result.embedding_reason_labels, label.clone());
+    }
+    result
+}
+
 fn kind_matches(node_type: GraphNodeType, kind: EntityHintKind) -> bool {
     match kind {
         EntityHintKind::Concept => {
@@ -149,11 +185,19 @@ fn insert_best(by_id: &mut HashMap<String, RouteHit>, hit: RouteHit) {
         .or_insert(hit);
 }
 
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !value.trim().is_empty() && !values.iter().any(|existing| existing == &value) {
+        values.push(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::SearchConfig;
     use crate::graph::schema::GraphNode;
+    use crate::memory_embedding_document::{annotate_graph_node_embedding, EmbeddingStatus};
+    use crate::storage::MemoryRecord;
     use crate::storage::Store;
     use chrono::Utc;
     use uuid::Uuid;
@@ -170,6 +214,20 @@ mod tests {
             updated_at: Utc::now(),
             stale: false,
             metadata: serde_json::json!({}),
+        }
+    }
+
+    fn memory(id: &str) -> MemoryRecord {
+        MemoryRecord {
+            id: id.to_string(),
+            text: "Entity route memory".to_string(),
+            memory_context: "Entity route memory".to_string(),
+            embedding: vec![0.1; crate::config::DEFAULT_TEXT_EMBEDDING_DIM],
+            snippet_embedding: vec![0.1; crate::config::DEFAULT_TEXT_EMBEDDING_DIM],
+            support_embedding: vec![0.1; crate::config::DEFAULT_TEXT_EMBEDDING_DIM],
+            image_embedding: vec![0.0; crate::config::DEFAULT_IMAGE_EMBEDDING_DIM],
+            embedding_dim: crate::config::DEFAULT_TEXT_EMBEDDING_DIM as u32,
+            ..Default::default()
         }
     }
 
@@ -200,6 +258,56 @@ mod tests {
         let hits = EntityRoute.run(&plan, &ctx).await;
         assert_eq!(hits.route, Route::Entity);
         assert_eq!(hits.hits[0].memory_id, "entity-1");
+    }
+
+    #[tokio::test]
+    async fn entity_route_penalizes_stale_graph_node_embedding_and_explains_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().to_path_buf();
+        let store = tokio::task::spawn_blocking(move || Store::new(&path).expect("store"))
+            .await
+            .expect("store task");
+        store
+            .add_batch_preserving_ids(&[memory("entity-1")])
+            .await
+            .expect("insert entity memory");
+        let config = SearchConfig::default().normalized();
+        let mut graph_node = node("Project Alpha", GraphNodeType::Project, "entity-1");
+        annotate_graph_node_embedding(
+            &mut graph_node,
+            EmbeddingStatus::StaleSourceText,
+            "node_type: project\nlabel: Project Alpha",
+            Some("graph node source hash no longer matches".to_string()),
+        );
+        let graph_nodes = vec![graph_node];
+        let plan = crate::context_runtime::query_plan::plan(
+            "Project Alpha",
+            &crate::context_runtime::query_plan::PlanHints {
+                entity_aliases: vec![crate::context_runtime::query_plan::EntityAliasHint {
+                    alias: "project alpha".to_string(),
+                    canonical_name: "Project Alpha".to_string(),
+                    entity_type: "project".to_string(),
+                    project: Some("Project Alpha".to_string()),
+                }],
+                ..Default::default()
+            },
+        );
+        let graph_index = crate::graph::graph_index::GraphIndex::build(&graph_nodes, &[]);
+        let ctx = RouteCtx::new(&store, &config).with_graph(&graph_index, &graph_nodes, &[]);
+
+        let hits = EntityRoute.run(&plan, &ctx).await;
+
+        assert_eq!(hits.hits[0].memory_id, "entity-1");
+        assert!(hits.hits[0].score < 0.75);
+        let result = hits.hits[0]
+            .signals
+            .search_result
+            .as_ref()
+            .expect("search result");
+        assert!(result.matched_routes.contains(&"Entity".to_string()));
+        assert!(result
+            .embedding_reason_labels
+            .contains(&"embedding:graph_node:stale_source_text".to_string()));
     }
 
     #[tokio::test]

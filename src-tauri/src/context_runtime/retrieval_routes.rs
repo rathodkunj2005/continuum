@@ -4,6 +4,9 @@ use crate::embedding::Embedder;
 use crate::graph::graph_index::GraphIndex;
 use crate::graph::schema::{GraphEdge, GraphEdgeType, GraphNode};
 use crate::inference::InferenceEngine;
+use crate::memory_embedding_document::{
+    embedding_retrieval_adjustment, search_embedding_provenance, EmbeddingRole,
+};
 use crate::storage::{MemoryRecord, SearchResult, Store};
 use crate::telemetry::runtime_metrics;
 use futures::future::{join_all, BoxFuture};
@@ -213,10 +216,28 @@ fn run_route<'a>(
 }
 
 pub fn hit_from_search_result(
-    _route: Route,
+    route: Route,
     branch: RouteBranch,
-    result: SearchResult,
+    mut result: SearchResult,
 ) -> RouteHit {
+    push_unique(
+        &mut result.matched_routes,
+        route_label(route, branch).to_string(),
+    );
+    if let Some(role) = embedding_role_for_route(route, branch) {
+        let adjustment = embedding_retrieval_adjustment(
+            result
+                .embedding_provenance
+                .as_ref()
+                .and_then(|p| p.role(role)),
+            role,
+        );
+        result.score *= adjustment.score_multiplier;
+        for label in adjustment.reason_labels {
+            push_unique(&mut result.embedding_reason_labels, label);
+        }
+    }
+
     RouteHit {
         memory_id: result.id.clone(),
         score: result.score,
@@ -300,10 +321,39 @@ pub fn memory_record_to_search_result(record: &MemoryRecord, score: f32) -> Sear
         matched_routes: Vec::new(),
         matched_chunk_ids: Vec::new(),
         chunk_evidence: Vec::new(),
+        embedding_provenance: search_embedding_provenance(&record.raw_evidence),
+        embedding_reason_labels: Vec::new(),
         enrichment_status: record.enrichment_status.clone(),
         reviewed_at_ms: record.reviewed_at_ms,
         reviewer_generation: record.reviewer_generation,
         storage_outcome: record.storage_outcome.clone(),
+    }
+}
+
+fn embedding_role_for_route(route: Route, branch: RouteBranch) -> Option<EmbeddingRole> {
+    match (route, branch) {
+        (Route::Vector, RouteBranch::Semantic) => Some(EmbeddingRole::Primary),
+        (Route::Vector, RouteBranch::Snippet) => Some(EmbeddingRole::Snippet),
+        (Route::Chunk, RouteBranch::Chunk) => Some(EmbeddingRole::Chunk),
+        _ => None,
+    }
+}
+
+fn route_label(_route: Route, branch: RouteBranch) -> &'static str {
+    match branch {
+        RouteBranch::Chunk => "Chunk",
+        RouteBranch::Semantic => "Vector",
+        RouteBranch::Snippet => "Snippet",
+        RouteBranch::Keyword => "Keyword",
+        RouteBranch::Temporal => "Temporal",
+        RouteBranch::Entity => "Entity",
+        RouteBranch::Graph => "Graph",
+    }
+}
+
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !value.trim().is_empty() && !values.iter().any(|existing| existing == &value) {
+        values.push(value);
     }
 }
 
@@ -353,5 +403,101 @@ fn route_metric_hits(name: &'static str) -> &'static str {
         "graph" => "fndr.retrieval.route.graph.hits",
         "chunk" => "fndr.retrieval.route.chunk.hits",
         _ => "fndr.retrieval.route.unknown.hits",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory_embedding_document::{
+        bge_v5_contract_for, build_embedding_manifest, compose_memory_embedding_document,
+        search_embedding_provenance, upsert_embedding_manifest, EmbeddingRole, EmbeddingRoleStatus,
+        EmbeddingStatus, VisualSemanticSource,
+    };
+
+    fn result_with_primary_status(status: EmbeddingStatus) -> SearchResult {
+        let mut record = MemoryRecord {
+            id: "memory-with-manifest".to_string(),
+            memory_context: "Structured context for vector retrieval.".to_string(),
+            ..Default::default()
+        };
+        let doc = compose_memory_embedding_document(&record, None);
+        let manifest = build_embedding_manifest(
+            &doc,
+            status,
+            EmbeddingStatus::ZeroVectorFallback,
+            VisualSemanticSource::TextCapture,
+        );
+        record.raw_evidence = upsert_embedding_manifest("{}", &manifest);
+        memory_record_to_search_result(&record, 1.0)
+    }
+
+    fn result_with_chunk_status(status: EmbeddingStatus) -> SearchResult {
+        let mut record = MemoryRecord {
+            id: "chunk-parent-with-manifest".to_string(),
+            memory_context: "Structured context for chunk retrieval.".to_string(),
+            clean_text: "Chunk source text for explicit BGE reindex.".to_string(),
+            ..Default::default()
+        };
+        let doc = compose_memory_embedding_document(&record, None);
+        let mut manifest = build_embedding_manifest(
+            &doc,
+            EmbeddingStatus::Ready,
+            EmbeddingStatus::ZeroVectorFallback,
+            VisualSemanticSource::TextCapture,
+        );
+        manifest
+            .contracts
+            .push(bge_v5_contract_for(EmbeddingRole::Chunk));
+        manifest.statuses.push(EmbeddingRoleStatus {
+            role: EmbeddingRole::Chunk,
+            status,
+            reason: Some("chunk source text differs from indexed BGE vector".to_string()),
+        });
+        record.raw_evidence = upsert_embedding_manifest("{}", &manifest);
+        memory_record_to_search_result(&record, 1.0)
+    }
+
+    #[test]
+    fn vector_hit_penalizes_stale_primary_embedding_and_records_reason() {
+        let result = result_with_primary_status(EmbeddingStatus::StaleSourceText);
+
+        let hit = hit_from_search_result(Route::Vector, RouteBranch::Semantic, result);
+
+        assert!(hit.score < 0.8);
+        let adjusted = hit.signals.search_result.expect("adjusted search result");
+        assert_eq!(adjusted.matched_routes, vec!["Vector"]);
+        assert!(adjusted
+            .embedding_reason_labels
+            .iter()
+            .any(|label| label == "embedding:primary:stale_source_text"));
+    }
+
+    #[test]
+    fn keyword_hit_keeps_embedding_penalty_out_of_lexical_route() {
+        let result = result_with_primary_status(EmbeddingStatus::StaleSourceText);
+
+        let hit = hit_from_search_result(Route::Keyword, RouteBranch::Keyword, result);
+
+        assert_eq!(hit.score, 1.0);
+        let adjusted = hit.signals.search_result.expect("adjusted search result");
+        assert_eq!(adjusted.matched_routes, vec!["Keyword"]);
+        assert!(adjusted.embedding_reason_labels.is_empty());
+        assert!(search_embedding_provenance("{}").is_none());
+    }
+
+    #[test]
+    fn chunk_hit_penalizes_stale_chunk_embedding_and_records_reason() {
+        let result = result_with_chunk_status(EmbeddingStatus::StaleSourceText);
+
+        let hit = hit_from_search_result(Route::Chunk, RouteBranch::Chunk, result);
+
+        assert!(hit.score < 0.8);
+        let adjusted = hit.signals.search_result.expect("adjusted search result");
+        assert_eq!(adjusted.matched_routes, vec!["Chunk"]);
+        assert!(adjusted
+            .embedding_reason_labels
+            .iter()
+            .any(|label| label == "embedding:chunk:stale_source_text"));
     }
 }

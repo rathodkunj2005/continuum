@@ -44,9 +44,7 @@ impl CompanionError {
             CompanionError::InsufficientPermission(_) => {
                 (StatusCode::FORBIDDEN, "insufficient_permission")
             }
-            CompanionError::PairingCodeInvalid => {
-                (StatusCode::BAD_REQUEST, "pairing_code_invalid")
-            }
+            CompanionError::PairingCodeInvalid => (StatusCode::BAD_REQUEST, "pairing_code_invalid"),
             CompanionError::PairingCodeUsed => (StatusCode::CONFLICT, "pairing_code_used"),
             CompanionError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             CompanionError::NotFound => (StatusCode::NOT_FOUND, "not_found"),

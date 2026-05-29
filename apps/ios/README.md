@@ -31,6 +31,35 @@ xcodebuild -version
 xcrun simctl list devices
 ```
 
+## Real-device install
+
+This repo can install a development build directly to a trusted iPhone. The
+phone app embeds the watchOS app; use `FNDR_WATCH_DEVICE_ID` only if you want to
+install the watch target directly as a separate step.
+
+1. Connect and trust the iPhone from Finder/Xcode.
+2. Find the device id:
+
+```bash
+xcrun devicectl list devices
+```
+
+3. Install a signed development build:
+
+```bash
+FNDR_IOS_TEAM_ID=<apple-team-id> \
+FNDR_IOS_BUNDLE_PREFIX=com.<your-name>.fndr \
+FNDR_IOS_DEVICE_ID=<iphone-device-id> \
+scripts/ios/install-real-device.sh
+```
+
+4. Start the Mac runtime (`npm run tauri dev`), open FNDR Settings -> Paired
+   devices, generate a pairing QR code, then scan it from the iPhone Pair view.
+
+The iPhone target includes local-network and camera usage strings because real
+devices need both: local-network access for the Mac companion API and camera
+access for QR pairing.
+
 ## Local verification (requires full Xcode)
 
 Build for simulator:

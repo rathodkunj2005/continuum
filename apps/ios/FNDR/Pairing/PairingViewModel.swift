@@ -17,8 +17,13 @@ final class PairingViewModel: ObservableObject {
     }
 
     func acceptPayload() {
+        accept(rawPayload: qrPayloadJSON)
+    }
+
+    func accept(rawPayload: String) {
+        qrPayloadJSON = rawPayload
         do {
-            let payload = try PairingFlow.parseQRPayload(qrPayloadJSON)
+            let payload = try PairingFlow.parseQRPayload(rawPayload)
             Task {
                 let state = await flow.accept(payload: payload)
                 await MainActor.run {

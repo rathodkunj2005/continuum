@@ -79,7 +79,10 @@ mod tests {
         assert!(q.enqueue(job("b")));
         assert!(!q.enqueue(job("a")), "duplicate memory_id must not enqueue");
         assert_eq!(q.len(), 2);
-        assert_eq!(q.pending_memory_ids(), vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(
+            q.pending_memory_ids(),
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 
     #[test]

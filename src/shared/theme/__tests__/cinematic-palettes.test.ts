@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
     applyPalette,
+    getWallpaperAuroraColors,
     getWallpaperInkColors,
     PALETTES,
     removePalette,
@@ -38,11 +39,11 @@ describe("applyPalette", () => {
         expect(style?.textContent).toContain(`--cp-wall-text-primary: ${ink.primary}`);
     });
 
-    it("injects exact wall swatch hex from aurora table for CSS fallback", () => {
+    it("injects exact palette-derived wall swatch hex for CSS fallback", () => {
         applyPalette("bladeRunner2049", "dark");
 
         const style = document.getElementById("cinematic-palette-vars");
-        const aurora = PALETTES.bladeRunner2049.aurora.dark;
+        const aurora = getWallpaperAuroraColors("bladeRunner2049", "dark");
         expect(style?.textContent).toContain(`--cp-wall-bg: ${rgbToHex(aurora.bg)}`);
         expect(style?.textContent).toContain(`--cp-wall-acc: ${rgbToHex(aurora.acc)}`);
     });

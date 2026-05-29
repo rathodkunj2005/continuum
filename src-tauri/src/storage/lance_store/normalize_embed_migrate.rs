@@ -11,19 +11,24 @@ use arrow_array::{
 use arrow_schema::{ArrowError, DataType, Schema};
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
 use futures::TryStreamExt;
-use lancedb::query::{ExecutableQuery, QueryBase};
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use lancedb::table::{AddDataMode, NewColumnTransform};
 use lancedb::{Connection, Table};
 
 use crate::capture::text_cleanup;
-use crate::config::{DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_TEXT_EMBEDDING_DIM};
+use crate::config::{DEFAULT_EMBEDDING_MODEL_NAME, DEFAULT_TEXT_EMBEDDING_DIM};
 use crate::memory::reopen::{build_reopen_target, ReopenKind, ReopenValidationStatus};
 use crate::memory_compaction::{build_lexical_shadow, compact_memory_record_payload};
+use crate::memory_embedding_document::{
+    build_embedding_manifest, compose_memory_embedding_document, image_embedding_status,
+    infer_visual_semantic_source, text_embedding_status, upsert_embedding_manifest, EmbeddingRole,
+    EmbeddingRoleStatus, EmbeddingStatus,
+};
 use crate::memory_quality::{
     cap_visual_semantics_failed_scores, classify_storage_outcome, default_memory_quality_config,
-    deterministic_dedup_fingerprint, is_supported_dedup_fingerprint,
-    is_visual_semantics_failed_record, quality_gate_reason as shared_quality_gate_reason,
-    VISUAL_SEMANTICS_FAILED_OUTCOME,
+    deterministic_dedup_fingerprint, is_low_evidence_visual_fallback_record,
+    is_supported_dedup_fingerprint, is_visual_semantics_failed_record,
+    quality_gate_reason as shared_quality_gate_reason, VISUAL_SEMANTICS_FAILED_OUTCOME,
 };
 use crate::storage::schema::{
     ExtractedEntity, GraphEdge, GraphNode, IntentAnalysis, IntentCandidate, MeetingSegment,
@@ -31,8 +36,8 @@ use crate::storage::schema::{
 };
 
 use super::arrow_and_filters::{
-    compute_content_hash, edge_to_batch, extract_domain, meeting_to_batch, node_to_batch,
-    records_to_batch, segment_to_batch, task_to_batch,
+    batch_to_memory_records, compute_content_hash, edge_to_batch, extract_domain, meeting_to_batch,
+    node_to_batch, records_to_batch, segment_to_batch, task_to_batch,
 };
 use super::schemas::*;
 use super::text_kw::{
@@ -221,6 +226,8 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
         &normalized.image_embedding,
         IMAGE_EMBED_DIM as usize,
     );
+    normalized.embedding_model = DEFAULT_EMBEDDING_MODEL_NAME.to_string();
+    normalized.embedding_dim = TEXT_EMBED_DIM as u32;
     if normalized.display_summary.trim().is_empty() {
         normalized.display_summary = normalized.snippet.clone();
     }
@@ -356,12 +363,28 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
             - (pollution * 0.20))
             .clamp(0.0, 1.0);
     }
-    if normalized.storage_outcome.trim().is_empty() {
+    let low_evidence_visual_fallback =
+        !visual_semantics_failed && is_low_evidence_visual_fallback_record(&normalized);
+    if normalized.storage_outcome.trim().is_empty()
+        || (low_evidence_visual_fallback
+            && matches!(
+                normalized.storage_outcome.as_str(),
+                "primary_memory_card" | "enriched_memory_card"
+            ))
+    {
         normalized.storage_outcome =
             classify_storage_outcome(&normalized, &default_memory_quality_config());
     }
-    if normalized.quality_gate_reason.trim().is_empty() {
+    if normalized.quality_gate_reason.trim().is_empty() || low_evidence_visual_fallback {
         normalized.quality_gate_reason = shared_quality_gate_reason(&normalized);
+    }
+    if low_evidence_visual_fallback
+        && matches!(
+            normalized.enrichment_status.as_str(),
+            "" | "review_failed" | "pending"
+        )
+    {
+        normalized.enrichment_status = "pending_visual_semantics".to_string();
     }
     if visual_semantics_failed {
         cap_visual_semantics_failed_scores(&mut normalized);
@@ -378,12 +401,45 @@ pub fn normalize_record_for_index(record: &MemoryRecord) -> MemoryRecord {
     }
     if visual_semantics_failed {
         normalized.embedding_text = failed_visual_semantics_embedding_text(&normalized);
+        let document = compose_memory_embedding_document(&normalized, None);
+        let manifest = build_embedding_manifest(
+            &document,
+            text_embedding_status(&normalized.embedding),
+            image_embedding_status(&normalized.image_embedding),
+            infer_visual_semantic_source(&normalized),
+        );
+        normalized.raw_evidence = upsert_embedding_manifest(&normalized.raw_evidence, &manifest);
         return normalized;
     }
     crate::memory_insight::derive_insight_for_record(&mut normalized);
-    normalized.embedding_text = strip_low_conf_markers(
-        &crate::memory_insight::compose_insight_embedding_text(&normalized),
+    let canonical_document = compose_memory_embedding_document(&normalized, None);
+    let canonical_embedding_text = strip_low_conf_markers(&canonical_document.primary_text);
+    let embedding_text_mismatch = if normalized.embedding_text.trim().is_empty() {
+        normalized.embedding_text = canonical_embedding_text;
+        false
+    } else {
+        normalized.embedding_text.trim() != canonical_embedding_text.trim()
+    };
+    let mut final_document = compose_memory_embedding_document(&normalized, None);
+    if embedding_text_mismatch {
+        // The existing vector was generated from the persisted `embedding_text`;
+        // keep the manifest hash tied to that source while flagging the drift.
+        final_document.primary_text = normalized.embedding_text.clone();
+    }
+    let mut manifest = build_embedding_manifest(
+        &final_document,
+        text_embedding_status(&normalized.embedding),
+        image_embedding_status(&normalized.image_embedding),
+        infer_visual_semantic_source(&normalized),
     );
+    if embedding_text_mismatch {
+        manifest.statuses.push(EmbeddingRoleStatus {
+            role: EmbeddingRole::Primary,
+            status: EmbeddingStatus::StaleSourceText,
+            reason: Some("embedding_text differs from canonical document primary_text".to_string()),
+        });
+    }
+    normalized.raw_evidence = upsert_embedding_manifest(&normalized.raw_evidence, &manifest);
     normalized
 }
 
@@ -1209,14 +1265,7 @@ pub(super) fn normalize_vector_dim(
         "memory_record:vector_dimension_mismatch"
     );
 
-    if vector.is_empty() || vector.iter().all(|value| *value == 0.0) {
-        return vec![0.0; expected_dim];
-    }
-
-    let mut repaired = vec![0.0; expected_dim];
-    let copy_len = vector.len().min(expected_dim);
-    repaired[..copy_len].copy_from_slice(&vector[..copy_len]);
-    repaired
+    vec![0.0; expected_dim]
 }
 
 pub(super) fn sanitize_index_url(url: Option<&str>, title: &str, snippet: &str) -> Option<String> {
@@ -1493,6 +1542,12 @@ pub(super) async fn open_all_tables(
     };
     ensure_memory_schema_columns(&table).await?;
     ensure_memory_table_vector_dim(&table, TEXT_EMBED_DIM, MEMORIES_TABLE).await?;
+    if let Err(err) = migrate_legacy_memories_table(&conn, &names, &table).await {
+        tracing::warn!(
+            err = %err,
+            "legacy_memories_table:migration_skipped"
+        );
+    }
 
     let memories_v5 = open_or_create_named_table(
         &conn,
@@ -1614,6 +1669,98 @@ pub(super) async fn open_all_tables(
         graph_nodes,
         graph_edges,
     ))
+}
+
+async fn migrate_legacy_memories_table(
+    conn: &Connection,
+    existing_tables: &[String],
+    target: &Table,
+) -> Result<(), Box<dyn std::error::Error>> {
+    const LEGACY_MEMORIES_TABLE: &str = "memories";
+    if MEMORIES_TABLE == LEGACY_MEMORIES_TABLE
+        || !existing_tables.contains(&LEGACY_MEMORIES_TABLE.to_string())
+    {
+        return Ok(());
+    }
+
+    let legacy = conn.open_table(LEGACY_MEMORIES_TABLE).execute().await?;
+    let legacy_count = legacy.count_rows(None).await?;
+    if legacy_count == 0 {
+        return Ok(());
+    }
+
+    let existing_ids = table_ids(target).await?;
+    let batches: Vec<RecordBatch> = legacy.query().execute().await?.try_collect().await?;
+    let mut candidates = Vec::new();
+    for batch in &batches {
+        candidates.extend(batch_to_memory_records(batch).into_iter().filter(|record| {
+            let id = record.id.trim();
+            !id.is_empty() && !existing_ids.contains(id)
+        }));
+    }
+
+    if candidates.is_empty() {
+        tracing::info!(
+            legacy_count,
+            target_table = MEMORIES_TABLE,
+            "legacy_memories_table:migration_noop"
+        );
+        return Ok(());
+    }
+
+    let normalized = candidates
+        .iter()
+        .map(normalize_record_for_index)
+        .filter(is_indexable_memory_record)
+        .collect::<Vec<_>>();
+    let compacted = dedup_records_for_insert(&normalized);
+    if compacted.is_empty() {
+        tracing::info!(
+            legacy_count,
+            target_table = MEMORIES_TABLE,
+            "legacy_memories_table:migration_all_filtered"
+        );
+        return Ok(());
+    }
+
+    let batch = records_to_batch(&compacted)?;
+    let schema = Arc::new(memory_schema());
+    let iter = RecordBatchIterator::new(vec![Ok(batch)], schema);
+    target
+        .add(Box::new(iter) as Box<dyn RecordBatchReader + Send>)
+        .mode(AddDataMode::Append)
+        .execute()
+        .await?;
+    tracing::info!(
+        legacy_count,
+        migrated_count = compacted.len(),
+        target_table = MEMORIES_TABLE,
+        "legacy_memories_table:migrated_to_active_v4"
+    );
+    Ok(())
+}
+
+async fn table_ids(table: &Table) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+    let batches: Vec<RecordBatch> = table
+        .query()
+        .select(Select::columns(&["id"]))
+        .execute()
+        .await?
+        .try_collect()
+        .await?;
+    let mut ids = HashSet::new();
+    for batch in &batches {
+        let Some(col) = batch
+            .column_by_name("id")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+        else {
+            continue;
+        };
+        for idx in 0..batch.num_rows() {
+            ids.insert(col.value(idx).to_string());
+        }
+    }
+    Ok(ids)
 }
 
 pub(super) async fn open_or_create_named_table(
@@ -1970,7 +2117,10 @@ pub(super) fn push_current_memory_writer_column_transforms(
     push("extraction_confidence", "CAST(0.0 AS FLOAT)".to_string());
     push("enrichment_status", "''".to_string());
     push("reviewed_at_ms", "CAST(0 AS BIGINT)".to_string());
-    push("reviewer_generation", "CAST(0 AS INTEGER UNSIGNED)".to_string());
+    push(
+        "reviewer_generation",
+        "CAST(0 AS INTEGER UNSIGNED)".to_string(),
+    );
     push("fallback_reason", null_string_sql());
     push("raw_screenshot_stored", "FALSE".to_string());
     push("dedup_fingerprint", "''".to_string());
@@ -2018,14 +2168,21 @@ pub(super) async fn ensure_memory_table_vector_dim(
         };
         let actual_dim = fixed_size_list_dim(field.data_type());
         if actual_dim != Some(expected_dim) {
+            let expected_label = match column {
+                "image_embedding" => format!("{expected_dim}-d CLIP image embeddings"),
+                "embedding" | "snippet_embedding" | "support_embedding" => {
+                    format!("{expected_dim}-d text embeddings for table '{table_name}'")
+                }
+                _ => format!("{expected_dim}-d vectors"),
+            };
             return Err(lancedb::Error::Schema {
                 message: format!(
-                    "LanceDB table '{}' column '{}' has vector dimension {:?}, but FNDR is configured for {}. \
-                     FNDR never falls back across embedding dimensions; keep v4 MiniLM 384 and v5 BGE 1024 in separate versioned tables.",
+                    "LanceDB table '{}' column '{}' has vector dimension {:?}, but FNDR expects {}. \
+                     Text vectors, image vectors, and BGE chunk vectors are separate contracts and are never interchangeable.",
                     table_name,
                     column,
                     actual_dim,
-                    expected_dim,
+                    expected_label,
                 ),
             });
         }

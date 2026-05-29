@@ -6,11 +6,9 @@ use crate::companion::errors::{CompanionError, CompanionResult};
 use axum::extract::Request;
 use axum::Json;
 
-pub async fn submit_feedback(
-    request: Request,
-) -> CompanionResult<Json<FeedbackResponse>> {
-    let device = device_from_extensions(request.extensions())
-        .ok_or(CompanionError::Unauthenticated)?;
+pub async fn submit_feedback(request: Request) -> CompanionResult<Json<FeedbackResponse>> {
+    let device =
+        device_from_extensions(request.extensions()).ok_or(CompanionError::Unauthenticated)?;
 
     let (_parts, body) = request.into_parts();
     let bytes = axum::body::to_bytes(body, 32 * 1024)
@@ -46,7 +44,11 @@ fn redacted_feedback_meta(payload: &FeedbackRequest) -> (bool, usize) {
         .as_ref()
         .map(|q| !q.trim().is_empty())
         .unwrap_or(false);
-    let note_chars = payload.note.as_ref().map(|n| n.chars().count()).unwrap_or(0);
+    let note_chars = payload
+        .note
+        .as_ref()
+        .map(|n| n.chars().count())
+        .unwrap_or(0);
     (has_query, note_chars)
 }
 

@@ -512,6 +512,28 @@ export function linearRgbMix3(a: RgbTriple, b: RgbTriple, c: RgbTriple): RgbTrip
     return [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3];
 }
 
+function mixRgb(a: RgbTriple, b: RgbTriple, amountB: number): RgbTriple {
+    const t = Math.max(0, Math.min(1, amountB));
+    return [
+        a[0] * (1 - t) + b[0] * t,
+        a[1] * (1 - t) + b[1] * t,
+        a[2] * (1 - t) + b[2] * t,
+    ];
+}
+
+function shadeRgb(palette: CinematicPalette, index: number): RgbTriple {
+    const hex = palette.shades[Math.max(0, Math.min(palette.shades.length - 1, index))];
+    return hexToRgb(hex);
+}
+
+function darkDominantRgb(palette: CinematicPalette): RgbTriple {
+    return linearRgbMix3(shadeRgb(palette, 0), shadeRgb(palette, 1), shadeRgb(palette, 2));
+}
+
+function darkSecondaryRgb(palette: CinematicPalette): RgbTriple {
+    return mixRgb(shadeRgb(palette, 4), shadeRgb(palette, 5), 0.5);
+}
+
 /** Exact cinematic swatch by index (0–6), same hex as the palette picker. */
 export function getPaletteShadeRgb(paletteKey: PaletteKey, index: number): RgbTriple {
     const shades = PALETTES[paletteKey].shades;
@@ -636,16 +658,34 @@ export function getAuroraColors(
     paletteKey: PaletteKey,
     mode: PaletteMode
 ): { bg: [number, number, number]; mid: [number, number, number]; acc: [number, number, number] } {
-    return PALETTES[paletteKey].aurora[mode];
+    return getWallpaperAuroraColors(paletteKey, mode);
 }
 
 /**
- * Wallpaper shader triple — cinematic aurora values tuned per palette/mode.
- * Delegates to the palette's aurora table so dark and light modes both render
- * correctly against the active background.
+ * Wallpaper shader triple: 60-30-10 palette colors for every motion shader.
+ * Dark mode uses the palette's cinematic swatches directly. Light mode keeps
+ * UI ink/readability but mixes the bright UI background with the palette's
+ * darkest swatch, so animated wallpapers do not collapse into a flat white
+ * field when users select a light appearance.
  */
 export function getWallpaperAuroraColors(paletteKey: PaletteKey, mode: PaletteMode = "dark") {
-    return PALETTES[paletteKey].aurora[mode];
+    const palette = PALETTES[paletteKey];
+    if (mode === "dark") {
+        return {
+            bg: darkDominantRgb(palette),
+            mid: darkSecondaryRgb(palette),
+            acc: shadeRgb(palette, 6),
+        };
+    }
+
+    const tokens = palette.light;
+    const dominant = linearRgbMix3(shadeRgb(palette, 1), shadeRgb(palette, 2), shadeRgb(palette, 3));
+    const secondary = darkSecondaryRgb(palette);
+    return {
+        bg: mixRgb(hexToRgb(tokens.bg), dominant, 0.55),
+        mid: mixRgb(hexToRgb(tokens.surfaceRaised), secondary, 0.52),
+        acc: hexToRgb(tokens.accent),
+    };
 }
 
 export function listPalettes() {
