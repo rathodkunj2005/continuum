@@ -378,14 +378,18 @@ fn main() {
                         });
 
                         if let Some(hit) = suggestion {
-                            // Find linked task title from graph
-                            let task_title = None::<String>;
+                            // Prefer the distilled summary over raw OCR text for display.
+                            let snippet = if hit.display_summary.trim().is_empty() {
+                                hit.snippet.clone()
+                            } else {
+                                hit.display_summary.clone()
+                            };
 
                             let suggestion = ProactiveSuggestion {
                                 memory_id: hit.id.clone(),
-                                snippet: hit.snippet.clone(),
+                                snippet,
                                 similarity: hit.score,
-                                task_title,
+                                task_title: None,
                             };
 
                             if seen_ring.len() >= config.proactive.seen_ring_capacity {
@@ -402,9 +406,9 @@ fn main() {
 
             // Background task: clipboard watcher — indexes clipboard copies into the graph.
             {
-                let clip_store = state.store.clone();
+                let clip_state = state.clone();
                 tauri::async_runtime::spawn(async move {
-                    fndr_lib::capture::clipboard::run_clipboard_watcher(clip_store).await;
+                    fndr_lib::capture::clipboard::run_clipboard_watcher(clip_state).await;
                 });
             }
 
@@ -615,6 +619,19 @@ fn main() {
                 );
             }
 
+            // Pre-create the omnibar window (hidden) and register its hotkey.
+            // register_autofill_shortcut already re-registers the omnibar
+            // shortcut after its unregister_all, so order does not matter here.
+            ipc::commands::create_omnibar_window(app.handle());
+            if let Err(err) = ipc::commands::register_omnibar_shortcut(app.handle()) {
+                tracing::warn!("Omnibar shortcut registration failed: {err}");
+            } else {
+                tracing::info!(
+                    "Omnibar global shortcut registered: {}",
+                    ipc::commands::OMNIBAR_SHORTCUT
+                );
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -749,6 +766,13 @@ fn main() {
             ipc::commands::resolve_autofill,
             ipc::commands::inject_text,
             ipc::commands::dismiss_autofill,
+            // Omnibar
+            ipc::commands::dismiss_omnibar,
+            ipc::commands::omnibar_open_memory,
+            // Clipboard history
+            ipc::commands::get_clipboard_history,
+            ipc::commands::copy_clipboard_entry,
+            ipc::commands::paste_clipboard_entry,
             // Onboarding
             ipc::onboarding::get_onboarding_state,
             ipc::onboarding::save_onboarding_state,

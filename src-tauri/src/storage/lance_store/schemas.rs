@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::storage::schema::{EdgeType, GraphEdge};
+use crate::storage::schema::{EdgeType, GraphEdge, NodeType};
 use arrow_schema::{DataType, Field, Schema};
 
 use crate::inference::model_config::BGE_V5_DIMENSIONS_I32;
@@ -472,6 +472,27 @@ pub(super) fn edge_type_literal(edge_type: EdgeType) -> &'static str {
         EdgeType::BlockedBy => "BLOCKED_BY",
         EdgeType::InformedBy => "INFORMED_BY",
         EdgeType::ResultedIn => "RESULTED_IN",
+    }
+}
+
+pub(super) fn node_type_literal(node_type: NodeType) -> &'static str {
+    match node_type {
+        NodeType::Memory => "Memory",
+        NodeType::Entity => "Entity",
+        NodeType::Task => "Task",
+        NodeType::Url => "Url",
+        NodeType::MemoryChunk => "MemoryChunk",
+        NodeType::Clipboard => "Clipboard",
+        NodeType::AudioSegment => "AudioSegment",
+        NodeType::Project => "Project",
+        NodeType::File => "File",
+        NodeType::Error => "Error",
+        NodeType::Command => "Command",
+        NodeType::Decision => "Decision",
+        NodeType::AgentSession => "AgentSession",
+        NodeType::ActivityEvent => "ActivityEvent",
+        NodeType::Issue => "Issue",
+        NodeType::Concept => "Concept",
     }
 }
 

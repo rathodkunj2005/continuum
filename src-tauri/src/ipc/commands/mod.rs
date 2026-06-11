@@ -28,6 +28,12 @@ pub use stats::*;
 mod autofill;
 pub use autofill::*;
 
+mod omnibar;
+pub use omnibar::*;
+
+mod clipboard;
+pub use clipboard::*;
+
 mod todos;
 pub use todos::*;
 

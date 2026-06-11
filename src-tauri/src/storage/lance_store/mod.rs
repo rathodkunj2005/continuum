@@ -7,7 +7,7 @@ use super::schema::{
     ActivityEvent, AppCount, ContextDelta, ContextPack, DayCount, DaypartCount,
     DecisionLedgerEntry, DomainCount, EdgeType, EntityAliasRecord, GraphEdge, GraphNode, HourCount,
     KnowledgePage, MeetingSegment, MeetingSession, MemoryChunkRecord, MemoryChunkSearchResult,
-    MemoryRecord, NodeType, ProjectContext, SearchResult, Stats, Task, TaskType, WeekdayCount,
+    MemoryRecord, NodeType, ProjectContext, SearchResult, Stats, Task, WeekdayCount,
 };
 use crate::config::{
     DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_STORE_KEYWORD_QUERY_MULTIPLIER,
@@ -15,7 +15,6 @@ use crate::config::{
     DEFAULT_TEXT_EMBEDDING_DIM,
 };
 use crate::inference::model_config::{BGE_V5_DIMENSIONS, MEMORIES_V5_TABLE};
-use crate::memory_compaction::{build_lexical_shadow, compact_memory_record_payload};
 // Re-exported so `lance_store::tests` can call the shared quality helpers via
 // `use super::*;`. These are not used directly in this file.
 #[allow(unused_imports)]
@@ -24,17 +23,15 @@ use crate::memory_quality::{
     is_supported_dedup_fingerprint, quality_gate_reason as shared_quality_gate_reason,
 };
 use arrow_array::{
-    builder::{Int64Builder, ListBuilder, StringBuilder},
-    Array, BooleanArray, FixedSizeListArray, Float32Array, Int64Array, ListArray, RecordBatch,
-    RecordBatchIterator, RecordBatchReader, StringArray, UInt32Array,
+    Array, Float32Array, Int64Array, RecordBatch,
+    RecordBatchIterator, RecordBatchReader, StringArray,
 };
-use arrow_schema::{ArrowError, DataType, Field, Schema};
-use chrono::{Datelike, Local, NaiveDate, TimeZone, Timelike};
+use chrono::{Datelike, Local, TimeZone, Timelike};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
-use lancedb::table::{AddDataMode, NewColumnTransform};
-use lancedb::{Connection, Table};
-use sha2::{Digest, Sha256};
+use lancedb::table::AddDataMode;
+use lancedb::Table;
+use sha2::Digest;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -779,6 +776,29 @@ impl Store {
         for b in batches {
             results.extend(batch_to_nodes(&b));
         }
+        Ok(results)
+    }
+
+    /// Fetch graph nodes of a single type, newest first.
+    pub async fn get_nodes_by_type(
+        &self,
+        node_type: NodeType,
+        limit: usize,
+    ) -> Result<Vec<GraphNode>, Box<dyn std::error::Error>> {
+        let batches = self
+            .nodes_table
+            .query()
+            .only_if(format!("node_type = '{}'", node_type_literal(node_type)))
+            .execute()
+            .await?
+            .try_collect::<Vec<_>>()
+            .await?;
+        let mut results = Vec::new();
+        for b in batches {
+            results.extend(batch_to_nodes(&b));
+        }
+        results.sort_by_key(|node| std::cmp::Reverse(node.created_at));
+        results.truncate(limit);
         Ok(results)
     }
 
@@ -2347,7 +2367,7 @@ impl Store {
             .table
             .query()
             .select(Select::Columns(vec!["id".to_string()]))
-            .only_if(filter.to_string())
+            .only_if(filter)
             .execute()
             .await?
             .try_collect()
