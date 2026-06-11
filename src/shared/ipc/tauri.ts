@@ -1272,6 +1272,9 @@ export async function getFunGreeting(name?: string | null): Promise<string> {
 
 
 // Capture control
+export const CAPTURE_STATUS_EVENT = "capture://status";
+export const PRIVACY_ALERTS_EVENT = "privacy://alerts";
+
 export async function getStatus(): Promise<CaptureStatus> {
     return invoke<CaptureStatus>("get_status");
 }
@@ -1997,6 +2000,40 @@ export async function injectText(text: string): Promise<void> {
 
 export async function dismissAutofill(): Promise<void> {
     return invoke("dismiss_autofill");
+}
+
+export const OMNIBAR_FOCUS_EVENT = "omnibar://focus";
+export const OMNIBAR_OPEN_MEMORY_EVENT = "omnibar://open-memory";
+
+export async function dismissOmnibar(): Promise<void> {
+    return invoke("dismiss_omnibar");
+}
+
+export async function omnibarOpenMemory(memoryId: string): Promise<void> {
+    return invoke("omnibar_open_memory", { memoryId });
+}
+
+export interface ClipboardEntry {
+    id: string;
+    text: string;
+    app_name?: string | null;
+    window_title?: string | null;
+    timestamp: number;
+}
+
+export async function getClipboardHistory(
+    query?: string,
+    limit?: number,
+): Promise<ClipboardEntry[]> {
+    return invoke("get_clipboard_history", { query, limit });
+}
+
+export async function copyClipboardEntry(text: string): Promise<void> {
+    return invoke("copy_clipboard_entry", { text });
+}
+
+export async function pasteClipboardEntry(text: string): Promise<void> {
+    return invoke("paste_clipboard_entry", { text });
 }
 
 export async function setAutofillOverlayReady(

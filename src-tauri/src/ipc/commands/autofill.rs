@@ -1,15 +1,13 @@
 //! Autofill overlay, shortcut, resolution, injection.
 
 use super::common::{
-    normalize_autofill_phrase, push_unique_case_insensitive, shared_embedder, truncate_chars,
+    normalize_autofill_phrase, push_unique_case_insensitive, truncate_chars,
 };
 use super::search::run_search_query;
 use crate::config::AutofillConfig;
-use crate::embedding::{Embedder, EmbeddingBackend};
 use crate::storage::SearchResult;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -132,6 +130,10 @@ pub fn register_autofill_shortcut<R: tauri::Runtime>(
 ) -> Result<(), String> {
     if let Err(err) = app.global_shortcut().unregister_all() {
         tracing::debug!("autofill: failed clearing existing shortcuts: {err}");
+    }
+    // unregister_all also dropped the omnibar hotkey — put it back.
+    if let Err(err) = super::omnibar::register_omnibar_shortcut(app) {
+        tracing::warn!("autofill: failed re-registering omnibar shortcut: {err}");
     }
 
     if !config.enabled {
@@ -732,7 +734,7 @@ pub(crate) fn extract_candidates_from_result(
                     let after_alias =
                         &line[lower.find(&alias_lower).unwrap_or(0) + alias_lower.len()..];
                     let value: String = after_alias
-                        .trim_start_matches(|c: char| matches!(c, ':' | '=' | ' ' | '\t'))
+                        .trim_start_matches([':', '=', ' ', '\t'])
                         .split_whitespace()
                         .take(10)
                         .collect::<Vec<_>>()

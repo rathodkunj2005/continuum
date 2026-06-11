@@ -127,9 +127,9 @@ panic = "abort"
 strip = true
 
 [profile.dev]
-debug = 1
-split-debuginfo = "unpacked"
+debug = 0
+split-debuginfo = "off"
 
 [profile.test]
-debug = 1
-split-debuginfo = "unpacked"
+debug = 0
+split-debuginfo = "off"

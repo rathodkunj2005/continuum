@@ -16,6 +16,7 @@ export default defineConfig({
             input: {
                 main: resolve(__dirname, "index.html"),
                 autofill: resolve(__dirname, "autofill.html"),
+                omnibar: resolve(__dirname, "omnibar.html"),
             },
         },
     },
