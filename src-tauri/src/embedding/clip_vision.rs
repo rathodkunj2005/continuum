@@ -156,7 +156,7 @@ fn clip_preprocess(dynamic: &DynamicImage) -> Result<Array4<f32>, String> {
     let rgb = dynamic.to_rgb8();
     let resized = image::imageops::resize(&rgb, CLIP_SIZE, CLIP_SIZE, FilterType::Triangle);
     let mean = [0.48145466f32, 0.4578275, 0.40821073];
-    let stdv = [0.26862954, 0.26130258, 0.27577711];
+    let stdv = [0.26862954, 0.261_302_6, 0.275_777_1];
     let mut tensor = Array4::<f32>::zeros((1, 3, CLIP_SIZE as usize, CLIP_SIZE as usize));
     for (x, y, pixel) in resized.enumerate_pixels() {
         let xi = x as usize;

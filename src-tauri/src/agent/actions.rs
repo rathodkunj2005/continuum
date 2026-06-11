@@ -22,7 +22,9 @@ pub enum AgentActionKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AgentActionStatus {
+    #[default]
     Proposed,
     NeedsApproval,
     Approved,
@@ -33,11 +35,6 @@ pub enum AgentActionStatus {
     Cancelled,
 }
 
-impl Default for AgentActionStatus {
-    fn default() -> Self {
-        Self::Proposed
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionResult {

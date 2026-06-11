@@ -190,7 +190,7 @@ pub(crate) fn build_manual_record(
 fn first_sentence(text: &str, max_chars: usize) -> String {
     let trimmed = text.trim();
     let candidate = trimmed
-        .split_inclusive(|c: char| c == '.' || c == '!' || c == '?')
+        .split_inclusive(['.', '!', '?'])
         .next()
         .unwrap_or(trimmed)
         .trim();

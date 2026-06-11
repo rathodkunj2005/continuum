@@ -79,7 +79,7 @@ pub fn clean_sentence(input: &str) -> String {
     }
 
     // Remove parenthetical asides and em-dash style side comments.
-    text = text.replace('(', " ").replace(')', " ");
+    text = text.replace(['(', ')'], " ");
     text = text.replace('—', "-");
     text = text
         .split_whitespace()
@@ -94,7 +94,7 @@ pub fn clean_sentence(input: &str) -> String {
 fn ensure_period(sentence: &str) -> String {
     let mut out = sentence
         .trim()
-        .trim_end_matches(|ch: char| matches!(ch, '.' | '!' | '?'))
+        .trim_end_matches(['.', '!', '?'])
         .to_string();
     if !out.is_empty() {
         out.push('.');

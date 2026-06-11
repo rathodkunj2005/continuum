@@ -187,7 +187,7 @@ fn process_rss_bytes_sample() -> Option<u64> {
         return None;
     }
     let info = unsafe { info.assume_init() };
-    Some(info.resident_size as u64)
+    Some(info.resident_size)
 }
 
 #[cfg(not(target_os = "macos"))]

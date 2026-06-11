@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::memory::distill::{is_prompt_scaffold, sanitize_field};
+use crate::memory::distill::sanitize_field;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum MemorySourceType {
@@ -292,6 +292,7 @@ fn sanitize_list(mut v: Vec<String>, max_items: usize, max_each: usize) -> Vec<S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::distill::is_prompt_scaffold;
 
     #[test]
     fn parses_valid_synthesis_json() {

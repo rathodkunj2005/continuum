@@ -505,8 +505,8 @@ mod imp {
             let info = info.assume_init();
             let rusage = sample_rusage();
             ProcessMemorySnapshot {
-                rss_bytes: info.resident_size as u64,
-                virtual_bytes: info.virtual_size as u64,
+                rss_bytes: info.resident_size,
+                virtual_bytes: info.virtual_size,
                 phys_footprint_bytes: rusage.map(|r| r.ri_phys_footprint).unwrap_or(0),
                 lifetime_max_phys_footprint_bytes: rusage
                     .map(|r| r.ri_lifetime_max_phys_footprint)
@@ -1026,8 +1026,8 @@ mod tests {
     }
 
     #[test]
-    fn vlm_safe_min_is_twelve_gib() {
-        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES, 12 * 1024 * 1024 * 1024);
+    fn vlm_safe_min_is_eight_gib() {
+        assert_eq!(VLM_SAFE_MIN_HOST_RAM_BYTES, 8 * 1024 * 1024 * 1024);
     }
 
     #[test]

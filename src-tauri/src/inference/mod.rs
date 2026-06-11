@@ -211,7 +211,7 @@ fn clean_summary_output(raw: &str) -> String {
     candidate = normalize_whitespace(&candidate);
 
     // Keep at most two sentences for browsing ergonomics.
-    let normalized = candidate.replace('!', ".").replace('?', ".");
+    let normalized = candidate.replace(['!', '?'], ".");
     let mut sentences = normalized
         .split('.')
         .map(str::trim)
@@ -464,7 +464,7 @@ fn valid_query_plan_refinement(value: &serde_json::Value) -> bool {
     for (key, field) in obj {
         match key.as_str() {
             "target_project" => {
-                if !field.as_str().is_some_and(|value| !value.trim().is_empty()) {
+                if field.as_str().is_none_or(|value| value.trim().is_empty()) {
                     return false;
                 }
             }
@@ -480,7 +480,7 @@ fn valid_query_plan_refinement(value: &serde_json::Value) -> bool {
                 }
             }
             "graph_max_hops" => {
-                if !field.as_u64().is_some_and(|value| value <= 2) {
+                if field.as_u64().is_none_or(|value| value > 2) {
                     return false;
                 }
             }
@@ -1240,8 +1240,7 @@ Rules:\n\
             return None;
         }
 
-        let system_msg = format!(
-            "You are a structured memory extractor.\n\
+        let system_msg = "You are a structured memory extractor.\n\
             RULES:\n\
             - Output ONLY raw JSON.\n\
             - No markdown formatting.\n\
@@ -1250,10 +1249,10 @@ Rules:\n\
             - memory_context must be specific, evidence-aware, and useful later.\n\
             - If uncertain, lower confidence instead of inventing details.\n\
             - Every entry in entities, tags, files_touched, symbols_changed, decisions, errors, next_steps, commands, blockers, todos, open_questions, results, and search_aliases MUST be a single STRING — never an object, never nested, never null.\n\
-            - If you would emit `{{\"name\":\"...\"}}` for an entity, emit just `\"...\"` instead.\n\
+            - If you would emit `{\"name\":\"...\"}` for an entity, emit just `\"...\"` instead.\n\
             \n\
             SCHEMA:\n\
-            {{\n\
+            {\n\
               \"session_key\": \"YYYY-MM-DD_HH\",\n\
               \"activity_type\": \"coding|debugging|reviewing_agent_output|researching|planning|writing|studying|watching_or_listening|configuring_tool|testing_workflow|reading_results|organizing_information|communication|job_or_career_work|travel_or_logistics|entertainment_or_personal_interest|unknown\",\n\
               \"project\": \"\",\n\
@@ -1263,7 +1262,7 @@ Rules:\n\
               \"memory_context\": \"\",\n\
               \"files_touched\": [],\n\
               \"symbols_changed\": [],\n\
-              \"git_stats\": {{ \"added\": 0, \"removed\": 0, \"commits\": 0 }},\n\
+              \"git_stats\": { \"added\": 0, \"removed\": 0, \"commits\": 0 },\n\
               \"outcome\": \"completed|reverted|in_progress|failed\",\n\
               \"tags\": [],\n\
               \"entities\": [],\n\
@@ -1278,8 +1277,7 @@ Rules:\n\
               \"search_aliases\": [],\n\
               \"confidence\": 0.0,\n\
               \"dedup_fingerprint\": \"\"\n\
-            }}"
-        );
+            }".to_string();
 
         let user_msg = format!(
             "APP: {}\nWINDOW: {}\nOCR TEXT:\n\"\"\"\n{}\n\"\"\"\n\nReturn JSON only.",
@@ -1357,8 +1355,7 @@ Rules:\n\
                 .join("\n")
         };
 
-        let system_msg = format!(
-            "You are a memory reviewer for a privacy-first local memory app.\n\
+        let system_msg = "You are a memory reviewer for a privacy-first local memory app.\n\
             RULES:\n\
             - Output ONLY raw JSON, no markdown.\n\
             - memory_context must be a concrete restatement of what happened, not a narration of the OCR process.\n\
@@ -1368,7 +1365,7 @@ Rules:\n\
             - Prefer empty strings to hallucinated detail; lower confidence instead of guessing.\n\
             \n\
             SCHEMA:\n\
-            {{\n\
+            {\n\
               \"memory_context\": \"\",\n\
               \"display_summary\": \"\",\n\
               \"topic\": \"\",\n\
@@ -1376,8 +1373,7 @@ Rules:\n\
               \"activity_type\": \"\",\n\
               \"related_memory_ids\": [],\n\
               \"confidence\": 0.0\n\
-            }}"
-        );
+            }".to_string();
 
         let url_line = input
             .url
@@ -1788,10 +1784,7 @@ TRANSCRIPT:\n{}",
             }
 
             #[allow(deprecated)]
-            let piece = match self.model.token_to_str(token, Special::Plaintext) {
-                Ok(s) => s,
-                Err(_) => String::new(),
-            };
+            let piece = self.model.token_to_str(token, Special::Plaintext).unwrap_or_default();
             result.push_str(&piece);
 
             batch.clear();

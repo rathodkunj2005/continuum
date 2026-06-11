@@ -97,7 +97,7 @@ fn is_low_signal_task_title(title: &str) -> bool {
 }
 
 fn task_priority_score(task: &Task, now_ms: i64) -> i64 {
-    let age_hours = ((now_ms - task.created_at).max(0) / 3_600_000) as i64;
+    let age_hours = ((now_ms - task.created_at).max(0) / 3_600_000);
     let recency_bonus = (96 - age_hours).clamp(0, 96);
     let memory_bonus = (task.linked_memory_ids.len().min(10) as i64) * 4;
     let url_bonus = (task.linked_urls.len().min(6) as i64) * 2;

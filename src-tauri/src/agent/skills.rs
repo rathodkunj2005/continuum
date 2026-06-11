@@ -9,11 +9,13 @@ const SKILL_DRAFTS_FILE: &str = "skill_drafts.jsonl";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AgentSkillCategory {
     Development,
     Writing,
     Research,
     Admin,
+    #[default]
     Other,
 }
 
@@ -37,11 +39,6 @@ pub struct AgentSkillCandidate {
     pub privacy_notes: Vec<String>,
 }
 
-impl Default for AgentSkillCategory {
-    fn default() -> Self {
-        Self::Other
-    }
-}
 
 pub fn propose_skill_from_audit(record: &AgentAuditRecord) -> Result<AgentSkillCandidate, String> {
     if record.memories_used.is_empty() {

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ActivityType {
     Researching,
     Coding,
@@ -15,6 +16,7 @@ pub enum ActivityType {
     Communicating,
     Configuring,
     Browsing,
+    #[default]
     Unknown,
 }
 
@@ -54,11 +56,6 @@ impl ActivityType {
     }
 }
 
-impl Default for ActivityType {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OcrQualityStats {

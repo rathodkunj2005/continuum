@@ -57,9 +57,7 @@ pub async fn compose_answer(
     let answer_text = if let Some(engine) = engine {
         let raw = engine.answer(&plan.raw, &context_str).await;
         let raw_trim = raw.trim();
-        if raw_trim.is_empty() {
-            compose_partial_answer(evidence, &verify)
-        } else if !citations_valid(raw_trim, evidence) {
+        if raw_trim.is_empty() || !citations_valid(raw_trim, evidence) {
             compose_partial_answer(evidence, &verify)
         } else {
             raw_trim.to_string()

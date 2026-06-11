@@ -1,19 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ReopenKind {
     BrowserUrl,
     FilePath,
     AppBundle,
     AppDeepLink,
+    #[default]
     Unknown,
 }
 
-impl Default for ReopenKind {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 impl ReopenKind {
     pub fn as_str(&self) -> &'static str {
@@ -38,17 +35,14 @@ impl ReopenKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ReopenValidationStatus {
     Valid,
     Invalid,
+    #[default]
     Unchecked,
 }
 
-impl Default for ReopenValidationStatus {
-    fn default() -> Self {
-        Self::Unchecked
-    }
-}
 
 impl ReopenValidationStatus {
     pub fn as_str(&self) -> &'static str {

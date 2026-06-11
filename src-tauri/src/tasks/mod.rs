@@ -25,7 +25,7 @@ fn strip_list_prefix(line: &str) -> &str {
     if let Some((prefix, rest)) = trimmed.split_once(' ') {
         let numbered = prefix.ends_with('.') || prefix.ends_with(')') || prefix.ends_with(':');
         let digits = prefix
-            .trim_end_matches(|ch: char| matches!(ch, '.' | ')' | ':'))
+            .trim_end_matches(['.', ')', ':'])
             .chars()
             .all(|ch| ch.is_ascii_digit());
         if numbered && digits {
@@ -128,8 +128,7 @@ pub fn parse_tasks_from_llm_response(response: &str, source_app: &str) -> Vec<Ta
             if let Some((prefix, rest)) = stripped.split_once(':') {
                 let normalized_prefix = prefix
                     .trim()
-                    .replace('-', "")
-                    .replace('_', "")
+                    .replace(['-', '_'], "")
                     .to_ascii_uppercase();
                 let parsed_type = match normalized_prefix.as_str() {
                     "TODO" => Some(TaskType::Todo),
@@ -153,7 +152,7 @@ pub fn parse_tasks_from_llm_response(response: &str, source_app: &str) -> Vec<Ta
         let cleaned_title = title
             .trim()
             .trim_matches(|ch| ch == '"' || ch == '\'' || ch == '`')
-            .trim_start_matches(|ch: char| matches!(ch, '-' | '*' | ':' | ' '))
+            .trim_start_matches(['-', '*', ':', ' '])
             .trim();
         if !is_actionable_task_title(cleaned_title) {
             continue;

@@ -561,7 +561,7 @@ pub async fn build_code_context(
         recent_commits: Vec::<CommitRef>::new(),
         relevant_decisions: pack.recent_decisions,
         unresolved_tasks: pack.open_tasks,
-        recommended_context: pack.recommended_next_action.unwrap_or_else(|| pack.summary),
+        recommended_context: pack.recommended_next_action.unwrap_or(pack.summary),
     })
 }
 
@@ -747,12 +747,22 @@ pub async fn health_check(state: &AppState) -> Result<HealthStatus, String> {
     } else {
         "degraded"
     };
+    // Read config before the struct literal: the literal contains an `.await`
+    // (latest_active_project), and temporary read guards would otherwise live
+    // across that suspension point.
+    let (embedding_model, embedding_dimension) = {
+        let config = state.config.read();
+        (
+            config.embedding.model_name.clone(),
+            config.embedding.dimension as u32,
+        )
+    };
 
     Ok(HealthStatus {
         status: status.to_string(),
         index_ready: true,
-        embedding_model: state.config.read().embedding.model_name.clone(),
-        embedding_dimension: state.config.read().embedding.dimension as u32,
+        embedding_model,
+        embedding_dimension,
         model_status: if state.ai_model_loaded() {
             "loaded".to_string()
         } else if state.ai_model_available() {
@@ -2911,7 +2921,7 @@ fn trim_chars(value: &str, max_chars: usize) -> String {
     if max_chars == 0 {
         return String::new();
     }
-    let normalized = value.replace('\n', " ").replace('\r', " ");
+    let normalized = value.replace(['\n', '\r'], " ");
     let normalized = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
     if normalized.chars().count() <= max_chars {
         normalized

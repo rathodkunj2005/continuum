@@ -401,7 +401,7 @@ pub fn get_agent_action_by_id(
 ) -> Result<Option<crate::agent::actions::AgentAction>, String> {
     let records = read_jsonl::<crate::agent::actions::AgentAction>(app_data_dir, ACTIONS_FILE)?;
     // Return the last record matching action_id (in case of updates re-appended)
-    Ok(records.into_iter().filter(|r| r.id == action_id).last())
+    Ok(records.into_iter().filter(|r| r.id == action_id).next_back())
 }
 
 pub fn list_actions_for_run(

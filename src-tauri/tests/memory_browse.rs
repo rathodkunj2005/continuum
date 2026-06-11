@@ -9,7 +9,7 @@ fn record(index: usize, now_ms: i64) -> MemoryRecord {
         id: format!("record-{index:04}"),
         timestamp: now_ms - index as i64,
         day_bucket: chrono::Local::now().format("%Y-%m-%d").to_string(),
-        app_name: if index % 2 == 0 {
+        app_name: if index.is_multiple_of(2) {
             "VS Code".to_string()
         } else {
             "Chrome".to_string()

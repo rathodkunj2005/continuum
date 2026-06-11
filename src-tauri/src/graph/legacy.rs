@@ -674,8 +674,7 @@ fn infer_task_title(record: &MemoryRecord) -> String {
     if let Some(url) = &record.url {
         let host = host_from_url(url);
         let hint: String = record
-            .window_title
-            .splitn(2, &['-', '|', '·', '—'][..])
+            .window_title.split(&['-', '|', '·', '—'][..])
             .next()
             .unwrap_or(&record.window_title)
             .trim()

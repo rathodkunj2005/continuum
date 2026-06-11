@@ -567,13 +567,7 @@ fn split_block_into_sentences(block: &str) -> Vec<String> {
         buffer.push(ch);
         let is_terminator = matches!(ch, '.' | '!' | '?');
         let next_is_break = matches!(chars.peek(), Some(' ') | Some('\n') | None);
-        if is_terminator && next_is_break {
-            let candidate = buffer.trim().to_string();
-            if candidate.chars().count() >= 12 {
-                out.push(candidate);
-                buffer.clear();
-            }
-        } else if ch == '\n' {
+        if (is_terminator && next_is_break) || ch == '\n' {
             let candidate = buffer.trim().to_string();
             if candidate.chars().count() >= 12 {
                 out.push(candidate);

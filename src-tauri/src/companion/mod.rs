@@ -181,7 +181,7 @@ pub async fn start(
     // axum-server does not expose the bound port before serve(); probe + drop.
     let actual_addr = if port == 0 {
         let probe =
-            std::net::TcpListener::bind(&addr).map_err(|e| format!("port probe failed: {e}"))?;
+            std::net::TcpListener::bind(addr).map_err(|e| format!("port probe failed: {e}"))?;
         let resolved = probe
             .local_addr()
             .map_err(|e| format!("port resolve failed: {e}"))?;

@@ -42,8 +42,10 @@ use crate::{load_ai_engines, models, AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum OnboardingStep {
     /// User has never run the app before
+    #[default]
     Welcome,
     /// Biometric lock setup
     Biometrics,
@@ -59,11 +61,6 @@ pub enum OnboardingStep {
     Complete,
 }
 
-impl Default for OnboardingStep {
-    fn default() -> Self {
-        Self::Welcome
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OnboardingState {

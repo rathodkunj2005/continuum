@@ -267,11 +267,7 @@ impl MeetingStore {
             .list_meetings()
             .await
             .map_err(|e| e.to_string())?;
-        let removed = if let Some(index) = meetings.iter().position(|m| m.id == meeting_id) {
-            Some(meetings.remove(index))
-        } else {
-            None
-        };
+        let removed = meetings.iter().position(|m| m.id == meeting_id).map(|index| meetings.remove(index));
 
         let Some(meeting) = removed else {
             return Ok(false);
@@ -457,6 +453,7 @@ struct AnalyzingMeeting {
     started_at: i64,
 }
 
+#[derive(Default)]
 struct MeetingRuntime {
     store: Option<Arc<MeetingStore>>,
     active: Option<ActiveMeeting>,
@@ -466,18 +463,6 @@ struct MeetingRuntime {
     last_error: Option<String>,
 }
 
-impl Default for MeetingRuntime {
-    fn default() -> Self {
-        Self {
-            store: None,
-            active: None,
-            analyzing: None,
-            app_handle: None,
-            app_state: None,
-            last_error: None,
-        }
-    }
-}
 
 static RUNTIME: OnceLock<Mutex<MeetingRuntime>> = OnceLock::new();
 static POSTPROCESS_IN_FLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -860,7 +845,7 @@ pub async fn stop_recording() -> Result<MeetingRecorderStatus, String> {
     stop_flag.store(true, Ordering::SeqCst);
 
     request_ffmpeg_stop(&mut recorder);
-    let stopped = wait_for_process_exit(&mut recorder, Duration::from_secs(6));
+    let stopped = wait_for_process_exit(&mut recorder, Duration::from_secs(6)).await;
     if !stopped {
         if let Err(err) = recorder.kill() {
             tracing::warn!("Failed to terminate ffmpeg recorder cleanly: {}", err);
@@ -1643,7 +1628,7 @@ fn request_ffmpeg_stop(recorder: &mut Child) {
     }
 }
 
-fn wait_for_process_exit(process: &mut Child, timeout: Duration) -> bool {
+async fn wait_for_process_exit(process: &mut Child, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
         match process.try_wait() {
@@ -1655,7 +1640,7 @@ fn wait_for_process_exit(process: &mut Child, timeout: Duration) -> bool {
         if Instant::now() >= deadline {
             return false;
         }
-        std::thread::sleep(Duration::from_millis(50));
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
 
@@ -2448,28 +2433,28 @@ Carlos must test the meeting feature in three scenarios and send results by Frid
     }
 
     #[cfg(unix)]
-    #[test]
-    fn wait_for_process_exit_reports_timeout_for_long_running_process() {
+    #[tokio::test]
+    async fn wait_for_process_exit_reports_timeout_for_long_running_process() {
         let mut child = Command::new("sh")
             .arg("-c")
             .arg("sleep 2")
             .spawn()
             .expect("spawn sleep");
-        let exited = wait_for_process_exit(&mut child, Duration::from_millis(120));
+        let exited = wait_for_process_exit(&mut child, Duration::from_millis(120)).await;
         assert!(!exited);
         let _ = child.kill();
         let _ = child.wait();
     }
 
     #[cfg(unix)]
-    #[test]
-    fn wait_for_process_exit_detects_completion() {
+    #[tokio::test]
+    async fn wait_for_process_exit_detects_completion() {
         let mut child = Command::new("sh")
             .arg("-c")
             .arg("sleep 0.1")
             .spawn()
             .expect("spawn short sleep");
-        let exited = wait_for_process_exit(&mut child, Duration::from_secs(2));
+        let exited = wait_for_process_exit(&mut child, Duration::from_secs(2)).await;
         assert!(exited);
     }
 

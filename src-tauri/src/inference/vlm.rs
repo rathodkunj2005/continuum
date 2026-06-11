@@ -170,9 +170,7 @@ impl VlmEngine {
         preferred_size: &str,
         app_data_dir: Option<&Path>,
     ) -> Result<crate::models::ResolvedModel, VlmError> {
-        let preferred_model_id = match preferred_size {
-            _ => Some("qwen3-vl-2b"),
-        };
+        let preferred_model_id = Some("qwen3-vl-2b");
 
         crate::models::resolve_model(preferred_model_id, app_data_dir).ok_or_else(|| {
             let searched_dirs = crate::models::candidate_model_dirs(app_data_dir)

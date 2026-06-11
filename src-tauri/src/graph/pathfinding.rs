@@ -25,8 +25,8 @@ pub fn find_path(
         }
         if let Some(nbrs) = adj.get(&u) {
             for &(v, _, w) in nbrs {
-                if !parent.contains_key(&v) {
-                    parent.insert(v, (Some(u), w));
+                if let std::collections::hash_map::Entry::Vacant(e) = parent.entry(v) {
+                    e.insert((Some(u), w));
                     q.push_back(v);
                 }
             }

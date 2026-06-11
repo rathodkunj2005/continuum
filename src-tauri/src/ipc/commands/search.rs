@@ -91,7 +91,7 @@ pub(super) async fn run_search_query(
 
 pub(super) fn cache_is_fresh(computed_at_ms: i64) -> bool {
     let age_ms = chrono::Utc::now().timestamp_millis() - computed_at_ms;
-    age_ms >= 0 && age_ms <= MEMORY_DERIVED_CACHE_TTL_MS
+    (0..=MEMORY_DERIVED_CACHE_TTL_MS).contains(&age_ms)
 }
 
 pub(super) fn card_domain(url: &str) -> Option<String> {
@@ -783,15 +783,14 @@ fn evidence_relevance(
 
 fn clean_summary_fragment(text: &str) -> String {
     truncate_chars(
-        &text
+        text
             .replace('\n', " ")
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
             .trim_matches('"')
             .trim_matches('\'')
-            .trim()
-            .to_string(),
+            .trim(),
         180,
     )
 }

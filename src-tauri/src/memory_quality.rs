@@ -243,7 +243,7 @@ pub fn deterministic_dedup_fingerprint(
         .unwrap_or_default();
     let signal_source = evidence_hint
         .filter(|hint| !hint.trim().is_empty())
-        .unwrap_or_else(|| record.clean_text.as_str());
+        .unwrap_or(record.clean_text.as_str());
     let evidence = stable_signal_terms(signal_source, 6);
     let mut parts = vec![
         if app.is_empty() {

@@ -1,6 +1,5 @@
 //! Arrow batch conversions, column readers, and time/app filter SQL fragments.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use arrow_array::{
@@ -8,7 +7,7 @@ use arrow_array::{
     StringArray, UInt32Array,
 };
 use arrow_schema::{ArrowError, DataType, Field};
-use chrono::{Datelike, Local, NaiveDate, TimeZone};
+use chrono::{Local, NaiveDate, TimeZone};
 use futures::TryStreamExt;
 use lancedb::query::ExecutableQuery;
 use lancedb::Table;
@@ -17,9 +16,8 @@ use crate::memory::reopen::{ReopenKind, ReopenValidationStatus};
 use crate::memory_embedding_document::search_embedding_provenance;
 use crate::storage::schema::{
     ActivityEvent, ContextDelta, ContextPack, DecisionLedgerEntry, EdgeType, EntityAliasRecord,
-    GraphEdge, GraphNode, KnowledgePage, KnowledgePageType, KnowledgeStability, MeetingSegment,
-    MeetingSession, MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, NodeType,
-    PrivacyClass, ProjectContext, SearchResult, Task, TaskType,
+    GraphEdge, GraphNode, KnowledgePage, MeetingSegment,
+    MeetingSession, MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, NodeType, ProjectContext, SearchResult, Task, TaskType,
 };
 
 use super::schemas::{
@@ -29,8 +27,8 @@ use super::schemas::{
     project_context_schema, segment_schema, task_schema,
 };
 use super::{
-    IMAGE_EMBED_DIM, KEYWORD_QUERY_MULTIPLIER, MAX_KEYWORD_SCAN, SEARCH_RESULT_COLUMNS,
-    TEXT_EMBED_DIM, VECTOR_QUERY_MULTIPLIER,
+    IMAGE_EMBED_DIM,
+    TEXT_EMBED_DIM,
 };
 use arrow_array::builder::{Int64Builder, ListBuilder, StringBuilder};
 use sha2::{Digest, Sha256};

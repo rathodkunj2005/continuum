@@ -1,22 +1,18 @@
 //! Hermes bridge, gateway, and agent task Tauri commands.
 
 use crate::context_runtime;
-use crate::embedding::{embedding_runtime_status, Embedder, EmbeddingBackend};
 use crate::http_util::{llm_http_client, local_service_client, post_json_response};
-use crate::search::{MemoryCard, QueryContext};
-use crate::storage::{SearchResult, Stats};
+use crate::search::MemoryCard;
 use crate::AppState;
 use chrono::{TimeZone, Timelike};
 use parking_lot::Mutex as AgentMutex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, OnceLock as AgentOnceLock};
 use std::time::UNIX_EPOCH;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{Manager, State};
 use tokio::time::{Duration, Instant};
 
 use super::common::{strip_internal_fndr_results, truncate_chars};
@@ -1739,25 +1735,23 @@ pub fn get_fun_greeting(name: Option<String>) -> Result<String, String> {
 
     let hour = chrono::Local::now().hour();
 
-    let prefix = if hour >= 4 && hour < 12 {
+    let prefix = if (4..12).contains(&hour) {
         "Good Morning"
-    } else if hour >= 12 && hour < 16 {
+    } else if (12..16).contains(&hour) {
         "Good Afternoon"
-    } else if hour >= 16 && hour < 20 {
+    } else if (16..20).contains(&hour) {
         "Good Evening"
     } else {
         "Good Night"
     };
 
-    let fun_suffixes = vec![
-        "Ready to conquer the day?",
+    let fun_suffixes = ["Ready to conquer the day?",
         "Let's dive into your memories.",
         "What are we exploring today?",
         "Time to make some magic happen.",
         "Welcome back to the matrix.",
         "Let's get productive.",
-        "System fully operational.",
-    ];
+        "System fully operational."];
 
     let mut rng = rand::rng();
     let random_suffix = fun_suffixes.choose(&mut rng).unwrap_or(&"");

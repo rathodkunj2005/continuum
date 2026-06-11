@@ -55,7 +55,7 @@ fn apply_node_privacy(node: &mut GraphNode, filter: &PrivacyFilter) {
 
 fn is_sensitive_app(app: &str) -> bool {
     // List of apps where window titles are often sensitive
-    let sensitive_apps = vec!["vault", "password", "credentials", "banking", "email"];
+    let sensitive_apps = ["vault", "password", "credentials", "banking", "email"];
 
     let app_lower = app.to_lowercase();
     sensitive_apps.iter().any(|&s| app_lower.contains(s))

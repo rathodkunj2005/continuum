@@ -32,13 +32,13 @@ fn is_stop_phrase(lower: &str) -> bool {
         "the", "and", "for", "with", "from", "this", "that", "unknown", "none", "n/a", "untitled",
         "page", "window", "document", "loading", "error", "home", "search",
     ];
-    STOPS.iter().any(|w| *w == lower)
+    STOPS.contains(&lower)
 }
 
 fn acceptable_label(label: &str) -> bool {
     let t = norm_label(label);
     let c = t.chars().count();
-    if c < MIN_LABEL || c > MAX_LABEL {
+    if !(MIN_LABEL..=MAX_LABEL).contains(&c) {
         return false;
     }
     let lower = t.to_ascii_lowercase();

@@ -1,27 +1,39 @@
 //! Bounded [`reqwest::Client`] builders for localhost probes and LLM-style HTTP.
 //! Core capture/search stay offline; this backs agent and provider status from `api::commands`.
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 const USER_AGENT: &str = "FNDR/1.0";
 
 /// Health and tag-list probes to local services (Ollama, Hermes gateway).
+/// Cached: rebuilding a `Client` per call would discard its connection pool.
 pub fn local_service_client() -> reqwest::Result<reqwest::Client> {
-    reqwest::Client::builder()
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(2))
         .timeout(Duration::from_secs(6))
         .pool_idle_timeout(Duration::from_secs(30))
-        .build()
+        .build()?;
+    Ok(CLIENT.get_or_init(|| client).clone())
 }
 
 /// Chat/completions against Ollama or similar — long generation, bounded stall.
 pub fn llm_http_client() -> reqwest::Result<reqwest::Client> {
-    reqwest::Client::builder()
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(600))
-        .build()
+        .build()?;
+    Ok(CLIENT.get_or_init(|| client).clone())
 }
 
 /// POST JSON, read JSON body; used by agent chat paths to keep error handling in one place.

@@ -336,7 +336,7 @@ fn build_v5_memory_chunks(
     let now = chrono::Utc::now().timestamp_millis();
     selected
         .into_iter()
-        .zip(vectors.into_iter())
+        .zip(vectors)
         .map(|(chunk, embedding)| {
             if embedding.len() != embedding_v5_contract().dimensions {
                 return Err(format!(
@@ -758,7 +758,7 @@ async fn run_memory_repair_backfill_for_state(
             if let Some(anchor) = continuity_anchor_for_memory(&merged) {
                 anchor_index.insert(anchor, target_index);
             }
-            if processed % heartbeat_count_step == 0
+            if processed.is_multiple_of(heartbeat_count_step)
                 || last_heartbeat.elapsed() >= heartbeat_interval
             {
                 tracing::info!(
@@ -783,7 +783,7 @@ async fn run_memory_repair_backfill_for_state(
                 last_heartbeat = Instant::now();
             }
 
-            if processed % MEMORY_REPAIR_CHECKPOINT_ITEM_STEP == 0
+            if processed.is_multiple_of(MEMORY_REPAIR_CHECKPOINT_ITEM_STEP)
                 || last_checkpoint.elapsed() >= checkpoint_interval
             {
                 persist_memory_repair_checkpoint(
@@ -814,7 +814,7 @@ async fn run_memory_repair_backfill_for_state(
         app_index.entry(normalized_app).or_default().push(index);
         merged_memories.push(incoming);
 
-        if processed % heartbeat_count_step == 0 || last_heartbeat.elapsed() >= heartbeat_interval {
+        if processed.is_multiple_of(heartbeat_count_step) || last_heartbeat.elapsed() >= heartbeat_interval {
             tracing::info!(
                 "memory_repair_backfill:progress processed={} total={} merged={} anchor_merges={}",
                 processed,
@@ -837,7 +837,7 @@ async fn run_memory_repair_backfill_for_state(
             last_heartbeat = Instant::now();
         }
 
-        if processed % MEMORY_REPAIR_CHECKPOINT_ITEM_STEP == 0
+        if processed.is_multiple_of(MEMORY_REPAIR_CHECKPOINT_ITEM_STEP)
             || last_checkpoint.elapsed() >= checkpoint_interval
         {
             persist_memory_repair_checkpoint(
@@ -1580,7 +1580,7 @@ async fn reclaim_memory_storage_for_state(
         progress.processed = rewritten_memories.len();
         progress.records_rewritten = records_rewritten;
         progress.screenshot_paths_cleared = screenshot_paths_cleared;
-        if progress.processed % STORAGE_RECLAIM_HEARTBEAT_ITEM_STEP == 0
+        if progress.processed.is_multiple_of(STORAGE_RECLAIM_HEARTBEAT_ITEM_STEP)
             || last_heartbeat.elapsed() >= heartbeat_interval
         {
             progress.timestamp_ms = chrono::Utc::now().timestamp_millis();

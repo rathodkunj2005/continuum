@@ -324,8 +324,8 @@ fn search_embedding_provenance_from_manifest(
     manifest: &EmbeddingManifest,
 ) -> Option<SearchEmbeddingProvenance> {
     let mut roles = Vec::new();
-    for role in manifest_roles(&manifest) {
-        let status = effective_role_status(&manifest, role);
+    for role in manifest_roles(manifest) {
+        let status = effective_role_status(manifest, role);
         let source = manifest
             .source_hashes
             .iter()

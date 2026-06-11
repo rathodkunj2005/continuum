@@ -1,23 +1,22 @@
 //! Record normalization, embedding text, alias generation, dedupe helpers, and JSON migrations.
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use arrow_array::{
-    Array, BooleanArray, FixedSizeListArray, Float32Array, Int64Array, ListArray, RecordBatch,
-    RecordBatchIterator, RecordBatchReader, StringArray, UInt32Array,
+    Array, RecordBatch,
+    RecordBatchIterator, RecordBatchReader, StringArray,
 };
 use arrow_schema::{ArrowError, DataType, Schema};
-use chrono::{Datelike, Local, NaiveDate, TimeZone};
+use chrono::TimeZone;
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use lancedb::table::{AddDataMode, NewColumnTransform};
 use lancedb::{Connection, Table};
 
-use crate::capture::text_cleanup;
 use crate::config::{DEFAULT_EMBEDDING_MODEL_NAME, DEFAULT_TEXT_EMBEDDING_DIM};
-use crate::memory::reopen::{build_reopen_target, ReopenKind, ReopenValidationStatus};
+use crate::memory::reopen::{build_reopen_target, ReopenKind};
 use crate::memory_compaction::{build_lexical_shadow, compact_memory_record_payload};
 use crate::memory_embedding_document::{
     build_embedding_manifest, compose_memory_embedding_document, image_embedding_status,
@@ -31,8 +30,8 @@ use crate::memory_quality::{
     quality_gate_reason as shared_quality_gate_reason, VISUAL_SEMANTICS_FAILED_OUTCOME,
 };
 use crate::storage::schema::{
-    ExtractedEntity, GraphEdge, GraphNode, IntentAnalysis, IntentCandidate, MeetingSegment,
-    MeetingSession, MemoryActionItem, MemoryRecord, SearchResult, Task,
+    GraphEdge, GraphNode, MeetingSegment,
+    MeetingSession, MemoryRecord, SearchResult, Task,
 };
 
 use super::arrow_and_filters::{
@@ -41,14 +40,14 @@ use super::arrow_and_filters::{
 };
 use super::schemas::*;
 use super::text_kw::{
-    canonicalize_index_url, char_ngrams, drop_middle_char, is_keyword_stop_word, keyword_terms,
+    canonicalize_index_url, is_keyword_stop_word,
     normalize_keyword_text, trim_chars,
 };
 use super::{
     ACTIVITY_EVENTS_TABLE, CONTEXT_DELTAS_TABLE, CONTEXT_PACKS_TABLE, DECISION_LEDGER_TABLE,
     EDGES_TABLE, ENTITY_ALIASES_TABLE, GRAPH_EDGES_TABLE, GRAPH_NODES_TABLE, IMAGE_EMBED_DIM,
     INDEX_NOISE_HOSTS, KNOWLEDGE_PAGES_TABLE, MEETINGS_TABLE, MEMORIES_TABLE, MEMORY_CHUNKS_TABLE,
-    NODES_TABLE, PROJECT_CONTEXTS_TABLE, SEARCH_RESULT_COLUMNS, SEGMENTS_TABLE, TASKS_TABLE,
+    NODES_TABLE, PROJECT_CONTEXTS_TABLE, SEGMENTS_TABLE, TASKS_TABLE,
     TEXT_EMBED_DIM,
 };
 use crate::inference::model_config::{BGE_V5_DIMENSIONS, MEMORIES_V5_TABLE};
@@ -639,7 +638,7 @@ pub(super) fn infer_topic(record: &MemoryRecord) -> String {
     }
     if let Some(url) = record.url.as_deref() {
         if let Some(path) = extract_path_segments(url, 2) {
-            let normalized = path.replace('/', " ").replace('_', " ");
+            let normalized = path.replace(['/', '_'], " ");
             let topic = normalized
                 .split_whitespace()
                 .take(4)

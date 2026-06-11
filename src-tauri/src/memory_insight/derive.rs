@@ -50,7 +50,7 @@ fn is_template_summary(s: &str) -> bool {
 fn dedupe_repeating_phrases(s: &str) -> String {
     // Conservative pass: collapse runs of identical comma/dash/colon separated
     // tokens (case-insensitive). Keeps the first occurrence.
-    let parts: Vec<&str> = s.split(|c| matches!(c, '|' | '·' | '—')).collect();
+    let parts: Vec<&str> = s.split(['|', '·', '—']).collect();
     if parts.len() < 2 {
         return s.to_string();
     }
@@ -86,7 +86,7 @@ fn coherent_what_happened_from_metadata(record: &MemoryRecord) -> String {
         .collect();
 
     let win_is_meaningful =
-        !win.is_empty() && win.to_ascii_lowercase() != app.to_ascii_lowercase() && win.len() <= 120;
+        !win.is_empty() && !win.eq_ignore_ascii_case(app) && win.len() <= 120;
 
     // Preferred shape: "You {intent} {window_title}" — concrete, specific,
     // does NOT mention the app name (the app chip already shows that).
@@ -205,7 +205,7 @@ fn clip_chars(s: String, max: usize) -> String {
         return s;
     }
     let trimmed: String = s.chars().take(max.saturating_sub(1)).collect();
-    let trimmed = trimmed.trim_end_matches(|c: char| matches!(c, ',' | ';' | '—' | '-' | ' '));
+    let trimmed = trimmed.trim_end_matches([',', ';', '—', '-', ' ']);
     format!("{}…", trimmed)
 }
 
@@ -269,16 +269,12 @@ pub fn derive_insight_for_record(record: &mut MemoryRecord) {
     changed.extend(
         record
             .next_steps
-            .iter()
-            .cloned()
-            .filter(|s| !s.trim().is_empty()),
+            .iter().filter(|&s| !s.trim().is_empty()).cloned(),
     );
     changed.extend(
         record
             .files_touched
-            .iter()
-            .cloned()
-            .filter(|s| !s.trim().is_empty()),
+            .iter().filter(|&s| !s.trim().is_empty()).cloned(),
     );
     let joined = changed.join("; ");
     record.insight_what_changed = if joined.is_empty() {

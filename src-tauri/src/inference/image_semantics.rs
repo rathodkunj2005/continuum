@@ -1012,7 +1012,7 @@ fn rank_salient_spans(text: &str, max_spans: usize) -> Vec<String> {
     let mut spans: Vec<(usize, usize, String)> = Vec::new();
     for (idx, raw_line) in scrubbed.lines().enumerate() {
         for chunk in raw_line
-            .split(|c: char| matches!(c, '|' | '\t' | '·' | '•' | '◦' | '↑' | '↓' | '→' | '←'))
+            .split(['|', '\t', '·', '•', '◦', '↑', '↓', '→', '←'])
         {
             let trimmed = chunk.trim();
             if trimmed.len() < 6 || trimmed.len() > 90 {

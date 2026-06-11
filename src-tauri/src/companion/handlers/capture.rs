@@ -44,6 +44,7 @@ pub async fn control(
             tracing::info!(reason, until_ms, "Mobile companion entered incognito");
         }
     }
+    crate::ipc::commands::emit_capture_status(app_state.as_ref());
 
     let is_paused = app_state.is_paused.load(Ordering::SeqCst);
     let is_incognito = app_state.is_incognito.load(Ordering::SeqCst);

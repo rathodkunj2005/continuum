@@ -621,7 +621,7 @@ pub async fn start(
     // axum-server::bind doesn't expose local_addr() before serving,
     // so we probe first, drop the socket, and immediately re-bind.
     let actual_addr = if port == 0 {
-        let probe = std::net::TcpListener::bind(&addr)
+        let probe = std::net::TcpListener::bind(addr)
             .map_err(|e| format!("Failed to probe for free port: {e}"))?;
         let resolved = probe
             .local_addr()

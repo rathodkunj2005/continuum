@@ -239,14 +239,12 @@ async fn inject_download_memory(
 
     if state.store.add_batch(&[record.clone()]).await.is_err() {
         tracing::error!("Failed to store download memory");
-    } else {
-        if let Err(err) =
-            crate::context_runtime::sync_memory_record(state.as_ref(), &record, Some("file")).await
-        {
-            tracing::warn!(
-                "Failed to sync download memory into context runtime: {}",
-                err
-            );
-        }
+    } else if let Err(err) =
+        crate::context_runtime::sync_memory_record(state.as_ref(), &record, Some("file")).await
+    {
+        tracing::warn!(
+            "Failed to sync download memory into context runtime: {}",
+            err
+        );
     }
 }

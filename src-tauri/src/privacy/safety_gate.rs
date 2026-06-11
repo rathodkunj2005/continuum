@@ -39,11 +39,10 @@ pub fn evaluate(
 
     if let Some(id) = bundle_id {
         let id_lower = id.to_ascii_lowercase();
-        if id_lower.starts_with("com.fndr") || id_lower.contains(".fndr.") {
-            if !app.contains("fndr meeting") {
+        if (id_lower.starts_with("com.fndr") || id_lower.contains(".fndr."))
+            && !app.contains("fndr meeting") {
                 return SafetyDecision::SkipStorage;
             }
-        }
     }
 
     const PASSWORD_MANAGERS: &[&str] = &[

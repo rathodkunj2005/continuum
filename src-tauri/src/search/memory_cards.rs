@@ -1457,7 +1457,7 @@ fn strip_leading_transitions(value: &str) -> String {
         for prefix in prefixes {
             if starts_with_ascii_case_insensitive(trimmed, prefix) {
                 out = trimmed[prefix.len()..]
-                    .trim_start_matches(|ch: char| matches!(ch, ' ' | ',' | ':' | ';' | '-'))
+                    .trim_start_matches([' ', ',', ':', ';', '-'])
                     .to_string();
                 stripped = true;
                 break;
