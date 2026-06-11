@@ -911,6 +911,10 @@
     --toast-accent: var(--cp-secondary-1, var(--accent));
 }
 
+.app-toast-proactive_memory {
+    --toast-accent: var(--cp-secondary-2, var(--accent));
+}
+
 @keyframes appToastIn {
     from {
         opacity: 0;

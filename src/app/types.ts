@@ -7,4 +7,6 @@ export interface AppToast {
     kind: string;
     actionLabel?: string;
     targetPanel?: PanelKey;
+    /** When set with targetPanel "memoryCards", the vault opens focused on this memory. */
+    memoryId?: string;
 }

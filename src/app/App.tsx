@@ -15,10 +15,13 @@ import "@/domains/workspace/FocusModePanel.css";
 
 import { useSearch } from "@/shared/hooks/useSearch";
 import { usePolling } from "@/shared/hooks/usePolling";
+import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
 import { POLL_INTERVALS, TOAST } from "@/shared/utils/config";
 import { createClientId } from "@/shared/utils/id";
 import {
+    CAPTURE_STATUS_EVENT,
     CaptureStatus,
+    OMNIBAR_OPEN_MEMORY_EVENT,
     type FndrNotificationPayload,
     MeetingRecorderStatus,
     MemoryCard,
@@ -165,17 +168,20 @@ function App() {
     }, []);
     usePolling(loadAppNames, POLL_INTERVALS.appNamesMs);
 
-    const fetchStatus = useCallback(async (isMounted: () => boolean) => {
-        try {
-            const nextStatus = await getStatus();
-            if (isMounted()) {
-                setStatus(nextStatus);
-            }
-        } catch (e) {
-            console.error("Failed to get status:", e);
-        }
+    useEffect(() => {
+        let mounted = true;
+        getStatus()
+            .then((nextStatus) => {
+                if (mounted) {
+                    setStatus(nextStatus);
+                }
+            })
+            .catch((e) => console.error("Failed to get status:", e));
+        return () => {
+            mounted = false;
+        };
     }, []);
-    usePolling(fetchStatus, POLL_INTERVALS.captureStatusMs);
+    useTauriEvent<CaptureStatus>(CAPTURE_STATUS_EVENT, setStatus);
 
     useEffect(() => {
         let mounted = true;
@@ -280,6 +286,8 @@ function App() {
         setActivePanel("memoryCards");
     }, []);
 
+    useTauriEvent<string>(OMNIBAR_OPEN_MEMORY_EVENT, handleOpenMemoryById);
+
     // Research trigger — opens Research panel seeded with a memory
     const handleResearchMemory = useCallback((memory: MemoryCard) => {
         setResearchSeedMemory(memory);
@@ -317,6 +325,9 @@ function App() {
             if (toast.targetPanel !== "research") {
                 setResearchSeedMemory(null);
             }
+            if (toast.targetPanel === "memoryCards" && toast.memoryId) {
+                setMemoryVaultFocusId(toast.memoryId);
+            }
             if (toast.targetPanel) {
                 setActivePanel(toast.targetPanel);
             }
@@ -336,7 +347,8 @@ function App() {
         return () => window.removeEventListener("keydown", handler);
     }, []);
 
-    // Proactive suggestion listener — surfaces focus drift alerts as a toast.
+    // Proactive suggestion listener — surfaces focus drift alerts and
+    // resurfaced memories as toasts.
     // Uses async inner function so the unlisten handle is guaranteed to be
     // assigned before any cleanup can run, avoiding a listener leak.
     useEffect(() => {
@@ -354,7 +366,16 @@ function App() {
                             actionLabel: "View Focus Mode",
                             targetPanel: "focusMode",
                         });
+                        return;
                     }
+                    enqueueToast({
+                        title: suggestion.task_title ?? "From your memory",
+                        body: suggestion.snippet,
+                        kind: "proactive_memory",
+                        actionLabel: "Open memory",
+                        targetPanel: "memoryCards",
+                        memoryId: suggestion.memory_id,
+                    });
                 });
                 if (mounted) {
                     unlisten = fn;
