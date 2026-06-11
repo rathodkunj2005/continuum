@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Per-reason capture pipeline breakdown surfaced to the UI.
 ///
@@ -76,24 +76,38 @@ pub struct VoiceTranscriptionResult {
 }
 #[tauri::command]
 pub async fn get_status(state: State<'_, Arc<AppState>>) -> Result<CaptureStatus, String> {
+    Ok(build_capture_status(state.inner()))
+}
+
+pub fn build_capture_status(state: &AppState) -> CaptureStatus {
     let embed_status = embedding_runtime_status();
-    Ok(CaptureStatus {
-        is_capturing: state.inner().is_capturing(),
-        is_paused: state.inner().is_paused.load(Ordering::SeqCst),
-        is_incognito: state.inner().is_incognito.load(Ordering::SeqCst),
-        frames_captured: state.inner().frames_captured.load(Ordering::Relaxed),
-        frames_dropped: state.inner().frames_dropped.load(Ordering::Relaxed),
-        last_capture_time: state.inner().last_capture_time.load(Ordering::Relaxed),
-        ai_model_available: state.inner().ai_model_available(),
-        ai_model_loaded: state.inner().ai_model_loaded(),
-        loaded_model_id: state.inner().loaded_model_id(),
+    CaptureStatus {
+        is_capturing: state.is_capturing(),
+        is_paused: state.is_paused.load(Ordering::SeqCst),
+        is_incognito: state.is_incognito.load(Ordering::SeqCst),
+        frames_captured: state.frames_captured.load(Ordering::Relaxed),
+        frames_dropped: state.frames_dropped.load(Ordering::Relaxed),
+        last_capture_time: state.last_capture_time.load(Ordering::Relaxed),
+        ai_model_available: state.ai_model_available(),
+        ai_model_loaded: state.ai_model_loaded(),
+        loaded_model_id: state.loaded_model_id(),
         embedding_backend: embed_status.backend,
         embedding_degraded: embed_status.degraded,
         embedding_detail: embed_status.detail,
         embedding_model_name: embed_status.model_name,
         embedding_dimension: embed_status.dimension,
-        pipeline: capture_pipeline_breakdown(state.inner()),
-    })
+        pipeline: capture_pipeline_breakdown(state),
+    }
+}
+
+/// Push the current capture status to the UI over `capture://status`.
+///
+/// No-op before the app handle is registered during setup.
+pub fn emit_capture_status(state: &AppState) {
+    let handle = state.app_handle.read().clone();
+    if let Some(handle) = handle {
+        let _ = handle.emit("capture://status", build_capture_status(state));
+    }
 }
 
 #[tauri::command]
@@ -218,6 +232,7 @@ pub async fn transcribe_voice_input(
 #[tauri::command]
 pub async fn pause_capture(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     state.inner().pause();
+    emit_capture_status(state.inner());
     Ok(())
 }
 
@@ -225,6 +240,7 @@ pub async fn pause_capture(state: State<'_, Arc<AppState>>) -> Result<(), String
 #[tauri::command]
 pub async fn resume_capture(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     state.inner().resume();
+    emit_capture_status(state.inner());
     Ok(())
 }
 

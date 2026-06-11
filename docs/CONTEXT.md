@@ -30,6 +30,7 @@ A macOS Tauri application that builds a **searchable local memory** from screen 
 - **Hybrid search**: vector + keyword retrieval with reranking as implemented in Rust.
 - **Parent-child RAG**: retrieval pattern where child chunks are searched first for precision, then matched chunks' parent records are fetched for full-context card synthesis. Governed by ADR 008.
 - **Sidecar**: Python helpers under `src-tauri/sidecars/` for transcription, agent, graph, TTS, etc.
+- **Status events**: backend → renderer push channels (`capture://status`, `privacy://alerts`, `meeting://status`, `proactive_suggestion`, model-download events). Always-on UI state subscribes via `useTauriEvent` after one initial fetch instead of polling. See ADR 011.
 
 ## Default quality bar
 

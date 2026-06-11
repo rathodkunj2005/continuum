@@ -7,6 +7,8 @@ import {
     ContextRuntimeStatus,
     MemoryRepairProgress,
     MemoryRepairSummary,
+    PRIVACY_ALERTS_EVENT,
+    PrivacyAlert,
     StorageHealth,
     StorageReclaimProgress,
     StorageReclaimSummary,
@@ -46,8 +48,10 @@ import {
 } from "@/shared/ipc/onboarding";
 import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
 import { usePolling } from "@/shared/hooks/usePolling";
+import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
 import { STORAGE_KEYS } from "@/shared/utils/config";
 import { formatBytes } from "@/shared/utils/format";
+import { Icon } from "@/shared/components/atoms";
 import {
     PALETTES,
     applyPalette,
@@ -231,17 +235,22 @@ export function ControlPanel({
         }
     }, []);
 
-    const checkAlerts = useCallback(async (isMounted: () => boolean) => {
-        try {
-            const alerts = await getPrivacyAlerts();
-            if (isMounted()) {
-                setPrivacyAlertCount(alerts.length);
-            }
-        } catch (err) {
-            console.error("Failed fetching alerts:", err);
-        }
+    useEffect(() => {
+        let mounted = true;
+        getPrivacyAlerts()
+            .then((alerts) => {
+                if (mounted) {
+                    setPrivacyAlertCount(alerts.length);
+                }
+            })
+            .catch((err) => console.error("Failed fetching alerts:", err));
+        return () => {
+            mounted = false;
+        };
     }, []);
-    usePolling(checkAlerts, 3000);
+    useTauriEvent<PrivacyAlert[]>(PRIVACY_ALERTS_EVENT, (alerts) =>
+        setPrivacyAlertCount(alerts.length)
+    );
 
     useEffect(() => {
         const previous = prevPrivacyAlertCountRef.current;
@@ -1270,7 +1279,7 @@ export function ControlPanel({
                                 onClick={() => selectAppearance(paletteKey, "dark")}
                                 aria-pressed={theme === "dark"}
                             >
-                                <span className="theme-choice-icon" aria-hidden="true">🌙</span>
+                                <span className="theme-choice-icon" aria-hidden="true"><Icon name="moon" size={14} /></span>
                                 Dark
                             </button>
                             <button
@@ -1279,7 +1288,7 @@ export function ControlPanel({
                                 onClick={() => selectAppearance(paletteKey, "light")}
                                 aria-pressed={theme === "light"}
                             >
-                                <span className="theme-choice-icon" aria-hidden="true">☀️</span>
+                                <span className="theme-choice-icon" aria-hidden="true"><Icon name="sun" size={14} /></span>
                                 Light
                             </button>
                         </div>

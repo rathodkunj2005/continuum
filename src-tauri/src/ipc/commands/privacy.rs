@@ -82,6 +82,17 @@ pub async fn get_privacy_alerts(
     Ok(pending.clone())
 }
 
+/// Push the current pending privacy alerts to the UI over `privacy://alerts`.
+///
+/// No-op before the app handle is registered during setup.
+pub fn emit_privacy_alerts(state: &AppState) {
+    let alerts = state.pending_privacy_alerts.read().clone();
+    let handle = state.app_handle.read().clone();
+    if let Some(handle) = handle {
+        let _ = tauri::Emitter::emit(&handle, "privacy://alerts", alerts);
+    }
+}
+
 #[tauri::command]
 pub async fn dismiss_privacy_alert(
     site: String,
@@ -103,6 +114,7 @@ pub async fn dismiss_privacy_alert(
         push_unique_case_insensitive(&mut config.dismissed_privacy_alerts, site_key);
         config.save().map_err(|e| e.to_string())?;
     }
+    emit_privacy_alerts(state.inner());
     Ok(())
 }
 
@@ -143,6 +155,7 @@ pub async fn add_to_blocklist(site: String, state: State<'_, Arc<AppState>>) -> 
         state.invalidate_memory_derived_caches();
     }
 
+    emit_privacy_alerts(state.inner());
     Ok(())
 }
 

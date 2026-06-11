@@ -810,7 +810,7 @@ fn clean_file_reference(token: &str) -> String {
                     ',' | ';' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | '\'' | '`' | '•'
                 )
         })
-        .trim_end_matches(|ch: char| matches!(ch, ':' | '.' | ')' | ']'))
+        .trim_end_matches([':', '.', ')', ']'])
         .to_string()
 }
 
@@ -1211,7 +1211,7 @@ fn validate_structured_memory_extraction(
         issues.push("activity_type_multi_option_dump".to_string());
     } else if !original_activity_type.trim().is_empty()
         && extraction.activity_type == "unknown"
-        && original_activity_type.trim().to_ascii_lowercase() != "unknown"
+        && !original_activity_type.trim().eq_ignore_ascii_case("unknown")
     {
         issues.push("activity_type_invalid".to_string());
     }
@@ -1332,7 +1332,7 @@ fn pick_semantic_center(
 ) -> String {
     if let Some(mem) = extraction {
         let topic = mem.topic.trim();
-        if !topic.is_empty() && topic.to_ascii_lowercase() != "unknown" {
+        if !topic.is_empty() && !topic.eq_ignore_ascii_case("unknown") {
             return topic.to_string();
         }
     }
@@ -1398,7 +1398,7 @@ fn pad_with_structured(
     if let Some(mem) = extraction {
         let topic_norm = normalize_text_for_overlap(mem.topic.trim());
         if !mem.topic.trim().is_empty()
-            && mem.topic.trim().to_ascii_lowercase() != "unknown"
+            && !mem.topic.trim().eq_ignore_ascii_case("unknown")
             && (topic_norm.is_empty() || !base_norm.contains(&topic_norm))
         {
             extras.push(format!("Topic: {}", mem.topic.trim()));
@@ -1406,7 +1406,7 @@ fn pad_with_structured(
         if !mem.user_intent.trim().is_empty() {
             extras.push(format!("Intent: {}", mem.user_intent.trim()));
         }
-        if !mem.workflow.trim().is_empty() && mem.workflow.trim().to_ascii_lowercase() != "unknown"
+        if !mem.workflow.trim().is_empty() && !mem.workflow.trim().eq_ignore_ascii_case("unknown")
         {
             extras.push(format!("Workflow: {}", mem.workflow.trim()));
         }
@@ -1468,7 +1468,7 @@ fn pad_with_structured(
     }
     for extra in extras {
         if !out.is_empty() {
-            out.push_str("\n");
+            out.push('\n');
         }
         out.push_str(&extra);
         if out.chars().count() >= min_chars {
@@ -1483,7 +1483,7 @@ fn pad_with_structured(
         };
         if !surface.trim().is_empty() && !out.contains(&surface) {
             if !out.is_empty() {
-                out.push_str("\n");
+                out.push('\n');
             }
             out.push_str(&surface);
         }
@@ -1536,7 +1536,7 @@ pub(crate) fn build_durable_memory_context(
             if !intent.is_empty() {
                 what_lines.push(format!("You were {}.", intent));
             } else if !mem.activity_type.trim().is_empty()
-                && mem.activity_type.trim().to_ascii_lowercase() != "unknown"
+                && !mem.activity_type.trim().eq_ignore_ascii_case("unknown")
             {
                 what_lines.push(format!("Activity: {}.", mem.activity_type.trim()));
             }
@@ -1896,7 +1896,28 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
 
     tracing::info!("Capture loop started");
 
+    // Pushes `capture://status` to the UI only when counters or toggles change,
+    // replacing the renderer's fixed-interval status poll. At most one event per
+    // loop tick; none while idle.
+    type StatusFingerprint = (u64, u64, u64, u64, u64, bool, bool, bool);
+    let mut last_status_fingerprint: Option<StatusFingerprint> = None;
+
     loop {
+        let status_fingerprint = (
+            state.frames_captured.load(Ordering::Relaxed),
+            state.frames_dropped.load(Ordering::Relaxed),
+            state.capture_stats.evaluated.load(Ordering::Relaxed),
+            state.capture_stats.total_stored(),
+            state.capture_stats.total_skipped(),
+            state.is_paused.load(Ordering::SeqCst),
+            state.is_incognito.load(Ordering::SeqCst),
+            state.ai_model_loaded(),
+        );
+        if last_status_fingerprint != Some(status_fingerprint) {
+            crate::ipc::commands::emit_capture_status(state.as_ref());
+            last_status_fingerprint = Some(status_fingerprint);
+        }
+
         let config = state.config.read().clone();
         let flush_interval = Duration::from_secs(config.capture_pipeline.flush_interval_secs);
         let max_batch_size = config.capture_pipeline.max_batch_size;
@@ -1904,7 +1925,6 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         // Flush batch if needed
         let should_flush = batch.len() >= max_batch_size || last_flush.elapsed() >= flush_interval;
         if should_flush && !batch.is_empty() {
-            let pre_filter_count = batch.len();
             // Filter batch and outcomes in lockstep so their indices stay
             // aligned. A plain `retain` + `truncate` would keep the first N
             // outcomes regardless of which records were removed.
@@ -2257,7 +2277,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                 let semantic_text = semantic.content_text();
                 let high_signal =
                     text_cleanup::build_high_signal_text_for_app(&app_name, &semantic_text);
-                let mut stats = high_signal.stats.clone();
+                let mut stats = high_signal.stats;
                 if stats.total_lines == 0 {
                     stats.total_lines = 1;
                 }
@@ -2977,14 +2997,27 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
             };
 
             if !is_dismissed && !is_snoozed {
-                let mut pending = state.pending_privacy_alerts.write();
-                if !pending.iter().any(|a| a.domain_or_title == alert_key) {
-                    pending.push(crate::PrivacyAlert {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        domain_or_title: alert_key,
-                        detected_at: now.timestamp_millis(),
-                    });
+                let pushed = {
+                    let mut pending = state.pending_privacy_alerts.write();
+                    if pending.iter().any(|a| a.domain_or_title == alert_key) {
+                        false
+                    } else {
+                        // Bound the queue so an unattended alert spike (many unique
+                        // titles) cannot grow this Vec without limit.
+                        if pending.len() >= 50 {
+                            pending.remove(0);
+                        }
+                        pending.push(crate::PrivacyAlert {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            domain_or_title: alert_key,
+                            detected_at: now.timestamp_millis(),
+                        });
+                        true
+                    }
+                };
+                if pushed {
                     tracing::info!("Surfaced proactive privacy alert for sensitive context");
+                    crate::ipc::commands::emit_privacy_alerts(state.as_ref());
                 }
             }
         }
@@ -3183,7 +3216,9 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         // the source of truth; on any CLIP failure we fall back to a zero vector
         // so retrieval/storage stay healthy.
         let (image_embedding, clip_embedding_status) = {
-            let bytes = image_data.clone();
+            // Last use of the frame bytes: move them into the blocking task
+            // instead of cloning a multi-megabyte PNG buffer per frame.
+            let bytes = image_data;
             let models_dir = models_dir.clone();
             let clip_start = Instant::now();
             let join = tokio::task::spawn_blocking(move || -> Result<Vec<f32>, String> {
@@ -3697,9 +3732,6 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
         state
             .last_capture_time
             .store(now.timestamp_millis() as u64, Ordering::Relaxed);
-
-        // Drop image data immediately (important for memory)
-        drop(image_data);
 
         tokio::time::sleep(sleep_duration).await;
     }

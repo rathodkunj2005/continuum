@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ControlPanel } from "./ControlPanel";
 
 vi.mock("@/shared/ipc/tauri", () => ({
+    PRIVACY_ALERTS_EVENT: "privacy://alerts",
+    CAPTURE_STATUS_EVENT: "capture://status",
     deleteAllData: vi.fn(),
     deleteOlderThan: vi.fn(),
     getBlocklist: vi.fn().mockResolvedValue([]),

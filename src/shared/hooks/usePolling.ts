@@ -14,7 +14,7 @@ export function usePolling(
 
         const isMounted = () => mounted;
         const run = async () => {
-            if (!mounted) {
+            if (!mounted || document.hidden) {
                 return;
             }
             await callback(isMounted);
@@ -24,10 +24,17 @@ export function usePolling(
         const timer = window.setInterval(() => {
             void run();
         }, intervalMs);
+        const onVisibilityChange = () => {
+            if (!document.hidden) {
+                void run();
+            }
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
 
         return () => {
             mounted = false;
             window.clearInterval(timer);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
         };
     }, [callback, enabled, intervalMs]);
 }

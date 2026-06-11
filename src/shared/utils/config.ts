@@ -50,7 +50,6 @@ export const TOAST = {
 /** Background polling cadences. */
 export const POLL_INTERVALS = {
     appNamesMs: 30_000,
-    captureStatusMs: 2_000,
     clockTickMs: 60_000,
     /** Automation scheduler tick cadence. */
     automationsMs: 60_000,
