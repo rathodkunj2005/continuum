@@ -41,16 +41,6 @@
     border-right-width: 1px;
 }
 
-/* ── DossierFrame (4-corner wrapper) ────────────────────────── */
-.fndr-dossier-frame {
-    position: relative;
-    padding: 22px;
-    background: var(--bg-3);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-medium);
-}
-
 /* ── Stamp (rotated archival badge) ─────────────────────────── */
 .fndr-stamp {
     display: inline-block;
@@ -140,86 +130,6 @@
     background: var(--bg);
 }
 
-/* ── MonoLabel ──────────────────────────────────────────────── */
-.fndr-mono-label-atom {
-    font-family: var(--font-mono);
-    font-weight: 500;
-    font-size: var(--t-micro);
-    line-height: 1.2;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--fg-3);
-    margin: 0;
-}
-.fndr-mono-label-atom--accent {
-    color: var(--accent);
-    letter-spacing: var(--film-track-stamp);
-}
-.fndr-mono-label-atom--fg-2 {
-    color: var(--fg-2);
-}
-
-/* ── Field (input) ──────────────────────────────────────────── */
-.fndr-field-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 100%;
-}
-.fndr-field-icon {
-    position: absolute;
-    left: 12px;
-    color: var(--fg-3);
-    display: flex;
-    pointer-events: none;
-}
-.fndr-field {
-    width: 100%;
-    background: var(--bg-2);
-    border: 1px solid var(--hairline-2);
-    border-radius: var(--radius-sm);
-    padding: 10px 14px;
-    color: var(--fg);
-    font-family: var(--font-body);
-    font-weight: 400;
-    font-size: 14px;
-    line-height: 1.2;
-    outline: none;
-    transition: border-color var(--film-dur-fast) var(--film-ease-shutter),
-        box-shadow var(--film-dur-fast) var(--film-ease-shutter);
-    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.18);
-}
-.fndr-field--icon {
-    padding-left: 38px;
-}
-.fndr-field::placeholder {
-    color: var(--fg-3);
-    font-style: italic;
-}
-.fndr-field:focus,
-.fndr-field[data-focused="true"] {
-    border-color: var(--accent);
-    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.18), var(--halation-soft);
-}
-.fndr-field--display {
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 22px;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--hairline);
-    border-radius: 0;
-    box-shadow: none;
-    padding: 8px 0;
-}
-.fndr-field--display:focus {
-    border-color: var(--accent);
-    box-shadow: 0 1px 0 var(--accent);
-}
-.fndr-field--error {
-    border-color: var(--alarm);
-}
-
 /* ── Button ─────────────────────────────────────────────────── */
 .fndr-button {
     display: inline-flex;
@@ -292,33 +202,8 @@
     padding: 8px 14px;
 }
 
-/* ── Pin (amber dot / hollow ring) ──────────────────────────── */
-.fndr-pin {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+/* ── Icon ─────────────────────────────────────────────────────── */
+.fndr-icon {
+    vertical-align: -0.125em;
     flex-shrink: 0;
-}
-.fndr-pin--on {
-    background: var(--accent);
-    box-shadow: 0 0 6px var(--accent);
-}
-.fndr-pin--off {
-    background: transparent;
-    border: 1px solid var(--hairline-strong);
-}
-
-/* ── Divider ────────────────────────────────────────────────── */
-.fndr-divider {
-    background: var(--hairline);
-    height: 1px;
-    width: 100%;
-    border: 0;
-    margin: 0;
-}
-.fndr-divider--vertical {
-    width: 1px;
-    height: auto;
-    align-self: stretch;
 }

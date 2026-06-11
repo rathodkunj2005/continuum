@@ -5,15 +5,20 @@
 /* Root ------------------------------------------------------------------- */
 
 .ap-root {
+    /* Panel identity accents (theme-invariant); neutrals come from tokens. */
+    --ap-green: #10d98c;
+    --ap-amber: #f5a623;
+    --ap-indigo: #6d6aff;
+
     position: fixed;
     inset: 0;
     z-index: 1040;
     display: flex;
     flex-direction: column;
     background:
-        radial-gradient(ellipse 60% 40% at 15% 0%, rgba(82, 100, 255, 0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 40% 30% at 85% 100%, rgba(16, 185, 129, 0.05) 0%, transparent 55%),
-        #080C14;
+        radial-gradient(ellipse 60% 40% at 15% 0%, color-mix(in srgb, var(--ap-indigo) 8%, transparent) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 85% 100%, color-mix(in srgb, var(--ap-green) 5%, transparent) 0%, transparent 55%),
+        var(--bg);
     color: var(--text-primary);
     font-family: inherit;
 }
@@ -26,9 +31,9 @@
     justify-content: space-between;
     padding: 0 18px;
     height: 46px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    background: rgba(8, 12, 20, 0.6);
+    background: var(--surface-translucent);
     backdrop-filter: blur(12px);
 }
 
@@ -47,9 +52,9 @@
 
 .ap-header-badge {
     padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--film-radius-pill);
+    background: var(--bg-3);
+    border: 1px solid var(--border);
     font-size: 0.7rem;
     font-family: var(--font-mono);
     color: var(--text-muted);
@@ -59,9 +64,9 @@
 .ap-close-btn {
     width: 28px;
     height: 28px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--film-radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-3);
     color: var(--text-muted);
     display: flex;
     align-items: center;
@@ -71,7 +76,7 @@
 }
 
 .ap-close-btn:hover {
-    background: rgba(255, 255, 255, 0.09);
+    background: var(--surface-hover);
     color: var(--text-primary);
 }
 
@@ -88,11 +93,11 @@
 
 .ap-sidebar {
     padding: 16px 10px;
-    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 4px;
-    background: rgba(0, 0, 0, 0.12);
+    background: var(--surface);
 }
 
 .ap-nav-item {
@@ -100,7 +105,7 @@
     align-items: center;
     gap: 9px;
     padding: 9px 11px;
-    border-radius: 10px;
+    border-radius: var(--film-radius-md);
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-muted);
@@ -114,13 +119,13 @@
 
 .ap-nav-item:hover {
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-hover);
 }
 
 .ap-nav-item.active {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--surface-elevated);
+    border-color: var(--border);
 }
 
 .ap-nav-icon {
@@ -137,10 +142,10 @@
 .ap-nav-ready-dot {
     width: 6px;
     height: 6px;
-    border-radius: 999px;
-    background: #10d98c;
+    border-radius: var(--film-radius-pill);
+    background: var(--ap-green);
     margin-left: auto;
-    box-shadow: 0 0 6px rgba(16, 217, 140, 0.6);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--ap-green) 60%, transparent);
 }
 
 /* Content area ----------------------------------------------------------- */
@@ -162,33 +167,33 @@
 .ap-dot {
     width: 7px;
     height: 7px;
-    border-radius: 999px;
+    border-radius: var(--film-radius-pill);
     flex-shrink: 0;
 }
 
 .ap-dot-ready,
 .ap-header-dot.ap-dot-ready {
-    background: #10d98c;
-    box-shadow: 0 0 6px rgba(16, 217, 140, 0.5);
+    background: var(--ap-green);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--ap-green) 50%, transparent);
     animation: ap-pulse-green 2.5s ease-in-out infinite;
 }
 
 .ap-dot-starting,
 .ap-header-dot.ap-dot-starting {
-    background: #f5a623;
-    box-shadow: 0 0 6px rgba(245, 166, 35, 0.5);
+    background: var(--ap-amber);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--ap-amber) 50%, transparent);
     animation: ap-pulse-amber 1.5s ease-in-out infinite;
 }
 
 .ap-dot-off,
 .ap-header-dot.ap-dot-off {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--border-strong);
 }
 
 .ap-header-dot {
     width: 7px;
     height: 7px;
-    border-radius: 999px;
+    border-radius: var(--film-radius-pill);
 }
 
 @keyframes ap-pulse-green {
@@ -204,9 +209,9 @@
 /* Cards ------------------------------------------------------------------ */
 
 .ap-card {
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--border);
+    border-radius: var(--film-radius-lg);
+    background: var(--surface-translucent);
     padding: 16px;
 }
 
@@ -261,7 +266,7 @@
 .ap-setup-body {
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--border);
 }
 
 /* Metrics row ------------------------------------------------------------ */
@@ -273,9 +278,9 @@
 }
 
 .ap-metric-card {
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--film-radius-lg);
+    background: var(--surface-translucent);
     padding: 13px 14px;
     display: flex;
     flex-direction: column;
@@ -319,9 +324,9 @@
     align-items: center;
     gap: 0;
     padding: 14px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid var(--border);
+    border-radius: var(--film-radius-lg);
+    background: var(--surface-translucent);
 }
 
 .ap-step {
@@ -334,9 +339,9 @@
 .ap-step-dot {
     width: 22px;
     height: 22px;
-    border-radius: 999px;
-    border: 1.5px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--film-radius-pill);
+    border: 1.5px solid var(--border-strong);
+    background: var(--bg-3);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -348,16 +353,16 @@
 }
 
 .ap-step.done .ap-step-dot {
-    border-color: #10d98c;
-    background: rgba(16, 217, 140, 0.12);
-    color: #10d98c;
+    border-color: var(--ap-green);
+    background: color-mix(in srgb, var(--ap-green) 12%, transparent);
+    color: var(--ap-green);
 }
 
 .ap-step.active .ap-step-dot {
-    border-color: #6D6AFF;
-    background: rgba(109, 106, 255, 0.14);
-    color: #6D6AFF;
-    box-shadow: 0 0 8px rgba(109, 106, 255, 0.3);
+    border-color: var(--ap-indigo);
+    background: color-mix(in srgb, var(--ap-indigo) 14%, transparent);
+    color: var(--ap-indigo);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--ap-indigo) 30%, transparent);
 }
 
 .ap-step-label {
@@ -379,13 +384,13 @@
 .ap-step-line {
     flex: 1;
     height: 1px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--border);
     margin: 0 8px;
 }
 
 .ap-step.done + .ap-step .ap-step-line,
 .ap-step.done .ap-step-line {
-    background: rgba(16, 217, 140, 0.25);
+    background: color-mix(in srgb, var(--ap-green) 25%, transparent);
 }
 
 /* Ollama quick-connect banner -------------------------------------------- */
@@ -396,9 +401,9 @@
     justify-content: space-between;
     gap: 14px;
     padding: 14px 16px;
-    border-radius: 13px;
-    border: 1px solid rgba(16, 217, 140, 0.22);
-    background: rgba(16, 217, 140, 0.06);
+    border-radius: var(--film-radius-lg);
+    border: 1px solid color-mix(in srgb, var(--ap-green) 22%, transparent);
+    background: color-mix(in srgb, var(--ap-green) 6%, transparent);
 }
 
 .ap-ollama-banner-left {
@@ -410,28 +415,28 @@
 .ap-ollama-pulse {
     width: 10px;
     height: 10px;
-    border-radius: 999px;
-    background: #10d98c;
-    box-shadow: 0 0 0 0 rgba(16, 217, 140, 0.4);
+    border-radius: var(--film-radius-pill);
+    background: var(--ap-green);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ap-green) 40%, transparent);
     animation: ap-ollama-ripple 1.8s ease-out infinite;
     flex-shrink: 0;
 }
 
 @keyframes ap-ollama-ripple {
-    0% { box-shadow: 0 0 0 0 rgba(16, 217, 140, 0.4); }
-    70% { box-shadow: 0 0 0 8px rgba(16, 217, 140, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(16, 217, 140, 0); }
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ap-green) 40%, transparent); }
+    70% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .ap-ollama-banner-title {
     font-size: 0.84rem;
     font-weight: 600;
-    color: #c6f5e8;
+    color: color-mix(in srgb, var(--ap-green) 35%, var(--text-primary));
 }
 
 .ap-ollama-banner-sub {
     font-size: 0.74rem;
-    color: rgba(198, 245, 232, 0.65);
+    color: var(--text-secondary);
     font-family: var(--font-mono);
     margin-top: 2px;
 }
@@ -443,9 +448,9 @@
     align-items: center;
     gap: 6px;
     padding: 7px 13px;
-    border-radius: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--film-radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-3);
     color: var(--text-primary);
     font-size: 0.8rem;
     font-weight: 500;
@@ -455,8 +460,8 @@
 }
 
 .ap-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.09);
-    border-color: rgba(255, 255, 255, 0.16);
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
 }
 
 .ap-btn:disabled {
@@ -465,24 +470,24 @@
 }
 
 .ap-btn-primary {
-    background: rgba(109, 106, 255, 0.2);
-    border-color: rgba(109, 106, 255, 0.35);
-    color: rgba(200, 198, 255, 0.95);
+    background: color-mix(in srgb, var(--ap-indigo) 20%, transparent);
+    border-color: color-mix(in srgb, var(--ap-indigo) 35%, transparent);
+    color: color-mix(in srgb, var(--ap-indigo) 40%, var(--text-primary));
 }
 
 .ap-btn-primary:hover:not(:disabled) {
-    background: rgba(109, 106, 255, 0.3);
-    border-color: rgba(109, 106, 255, 0.5);
+    background: color-mix(in srgb, var(--ap-indigo) 30%, transparent);
+    border-color: color-mix(in srgb, var(--ap-indigo) 50%, transparent);
 }
 
 .ap-btn-danger {
-    background: rgba(220, 60, 60, 0.16);
-    border-color: rgba(220, 60, 60, 0.3);
-    color: rgba(255, 170, 170, 0.9);
+    background: var(--danger-light);
+    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+    color: var(--danger);
 }
 
 .ap-btn-danger:hover:not(:disabled) {
-    background: rgba(220, 60, 60, 0.25);
+    background: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 
 .ap-ghost-btn {
@@ -507,7 +512,7 @@
 .ap-link-btn {
     background: none;
     border: none;
-    color: rgba(109, 106, 255, 0.85);
+    color: var(--ap-indigo);
     font-size: 0.78rem;
     cursor: pointer;
     padding: 0;
@@ -516,7 +521,7 @@
 }
 
 .ap-link-btn:hover {
-    color: rgba(150, 148, 255, 1);
+    color: color-mix(in srgb, var(--ap-indigo) 70%, var(--text-primary));
     text-decoration: underline;
 }
 
@@ -541,9 +546,9 @@
     flex-direction: column;
     gap: 3px;
     padding: 9px 13px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--film-radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-translucent);
     color: var(--text-secondary);
     cursor: pointer;
     text-align: left;
@@ -553,13 +558,13 @@
 }
 
 .ap-provider-tab:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
 }
 
 .ap-provider-tab.active {
-    border-color: rgba(109, 106, 255, 0.4);
-    background: rgba(109, 106, 255, 0.1);
+    border-color: color-mix(in srgb, var(--ap-indigo) 40%, transparent);
+    background: color-mix(in srgb, var(--ap-indigo) 10%, transparent);
 }
 
 .ap-provider-tab-name {
@@ -569,7 +574,7 @@
 }
 
 .ap-provider-tab.active .ap-provider-tab-name {
-    color: rgba(200, 198, 255, 0.95);
+    color: color-mix(in srgb, var(--ap-indigo) 40%, var(--text-primary));
 }
 
 .ap-provider-tab-status {
@@ -582,9 +587,9 @@
 
 .ap-provider-note {
     padding: 11px 13px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--film-radius-md);
+    background: var(--surface-translucent);
+    border: 1px solid var(--border);
     font-size: 0.78rem;
     line-height: 1.6;
     color: var(--text-secondary);
@@ -622,9 +627,9 @@
 .ap-field select {
     width: 100%;
     padding: 9px 11px;
-    border-radius: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--film-radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-3);
     color: var(--text-primary);
     font: inherit;
     font-size: 0.82rem;
@@ -634,8 +639,8 @@
 
 .ap-field input:focus,
 .ap-field select:focus {
-    border-color: rgba(109, 106, 255, 0.4);
-    background: rgba(255, 255, 255, 0.06);
+    border-color: color-mix(in srgb, var(--ap-indigo) 40%, transparent);
+    background: var(--surface-hover);
 }
 
 .ap-field input::placeholder {
@@ -645,13 +650,14 @@
 
 /* Terminal line ---------------------------------------------------------- */
 
+/* Deliberately dark in both themes — it renders a shell command. */
 .ap-terminal-line {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 13px;
-    border-radius: 9px;
-    background: rgba(0, 0, 0, 0.35);
+    border-radius: var(--film-radius-md);
+    background: rgba(15, 19, 27, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.07);
     font-family: var(--font-mono);
     font-size: 0.75rem;
@@ -661,7 +667,7 @@
 }
 
 .ap-terminal-prompt {
-    color: #10d98c;
+    color: var(--ap-green);
     flex-shrink: 0;
 }
 
@@ -692,24 +698,24 @@
 .ap-gateway-dot {
     width: 8px;
     height: 8px;
-    border-radius: 999px;
+    border-radius: var(--film-radius-pill);
     flex-shrink: 0;
 }
 
 .ap-gateway-dot.ready {
-    background: #10d98c;
-    box-shadow: 0 0 6px rgba(16, 217, 140, 0.5);
+    background: var(--ap-green);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--ap-green) 50%, transparent);
     animation: ap-pulse-green 2.5s ease-in-out infinite;
 }
 
 .ap-gateway-dot.starting {
-    background: #f5a623;
-    box-shadow: 0 0 6px rgba(245, 166, 35, 0.4);
+    background: var(--ap-amber);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--ap-amber) 40%, transparent);
     animation: ap-pulse-amber 1.5s ease-in-out infinite;
 }
 
 .ap-gateway-dot.off {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--border-strong);
 }
 
 .ap-gateway-label {
@@ -738,7 +744,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--border);
 }
 
 .ap-chat-header .ap-card-title {
@@ -753,7 +759,7 @@
     flex-direction: column;
     gap: 12px;
     padding: 16px;
-    background: rgba(0, 0, 0, 0.18);
+    background: var(--surface);
 }
 
 .ap-chat-messages::-webkit-scrollbar {
@@ -765,8 +771,8 @@
 }
 
 .ap-chat-messages::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: var(--border-strong);
+    border-radius: var(--film-radius-sm);
 }
 
 .ap-chat-empty {
@@ -782,7 +788,8 @@
 }
 
 .ap-chat-empty-icon {
-    color: rgba(255, 255, 255, 0.12);
+    color: var(--text-muted);
+    opacity: 0.45;
     margin-bottom: 4px;
 }
 
@@ -826,7 +833,7 @@
 
 .ap-chat-bubble {
     padding: 10px 13px;
-    border-radius: 13px;
+    border-radius: var(--film-radius-lg);
     font-size: 0.83rem;
     line-height: 1.65;
     white-space: pre-wrap;
@@ -834,16 +841,16 @@
 }
 
 .ap-chat-user .ap-chat-bubble {
-    background: rgba(109, 106, 255, 0.16);
-    border: 1px solid rgba(109, 106, 255, 0.22);
-    border-bottom-right-radius: 5px;
-    color: rgba(218, 216, 255, 0.95);
+    background: color-mix(in srgb, var(--ap-indigo) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ap-indigo) 22%, transparent);
+    border-bottom-right-radius: var(--film-radius-sm);
+    color: var(--text-primary);
 }
 
 .ap-chat-assistant .ap-chat-bubble {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-bottom-left-radius: 5px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: var(--film-radius-sm);
 }
 
 /* Thinking dots */
@@ -858,8 +865,8 @@
 .ap-chat-thinking span {
     width: 6px;
     height: 6px;
-    border-radius: 999px;
-    background: rgba(180, 210, 255, 0.7);
+    border-radius: var(--film-radius-pill);
+    background: var(--text-muted);
     animation: ap-bounce 1.1s infinite ease-in-out;
 }
 
@@ -878,8 +885,8 @@
     align-items: flex-end;
     gap: 8px;
     padding: 12px 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(0, 0, 0, 0.12);
+    border-top: 1px solid var(--border);
+    background: var(--surface);
 }
 
 .ap-chat-textarea {
@@ -888,9 +895,9 @@
     max-height: 120px;
     resize: vertical;
     padding: 9px 12px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--film-radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-3);
     color: var(--text-primary);
     font: inherit;
     font-size: 0.82rem;
@@ -900,8 +907,8 @@
 }
 
 .ap-chat-textarea:focus {
-    border-color: rgba(109, 106, 255, 0.38);
-    background: rgba(255, 255, 255, 0.06);
+    border-color: color-mix(in srgb, var(--ap-indigo) 38%, transparent);
+    background: var(--surface-hover);
 }
 
 .ap-chat-textarea::placeholder {
@@ -916,10 +923,10 @@
 .ap-chat-send-btn {
     width: 38px;
     height: 38px;
-    border-radius: 10px;
-    border: 1px solid rgba(109, 106, 255, 0.3);
-    background: rgba(109, 106, 255, 0.18);
-    color: rgba(200, 198, 255, 0.9);
+    border-radius: var(--film-radius-md);
+    border: 1px solid color-mix(in srgb, var(--ap-indigo) 30%, transparent);
+    background: color-mix(in srgb, var(--ap-indigo) 18%, transparent);
+    color: color-mix(in srgb, var(--ap-indigo) 40%, var(--text-primary));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -929,8 +936,8 @@
 }
 
 .ap-chat-send-btn:hover:not(:disabled) {
-    background: rgba(109, 106, 255, 0.28);
-    border-color: rgba(109, 106, 255, 0.5);
+    background: color-mix(in srgb, var(--ap-indigo) 28%, transparent);
+    border-color: color-mix(in srgb, var(--ap-indigo) 50%, transparent);
 }
 
 .ap-chat-send-btn:disabled {
@@ -945,10 +952,10 @@
     align-items: flex-start;
     gap: 9px;
     padding: 11px 13px;
-    border-radius: 10px;
-    border: 1px solid rgba(220, 80, 80, 0.24);
-    background: rgba(180, 50, 50, 0.12);
-    color: rgba(255, 185, 185, 0.9);
+    border-radius: var(--film-radius-md);
+    border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+    background: var(--danger-light);
+    color: var(--danger);
     font-size: 0.78rem;
     line-height: 1.55;
 }
@@ -965,19 +972,19 @@
     align-items: flex-start;
     gap: 18px;
     padding: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    border-radius: var(--film-radius-lg);
     background:
-        linear-gradient(135deg, rgba(109, 106, 255, 0.08) 0%, transparent 60%),
-        rgba(255, 255, 255, 0.02);
+        linear-gradient(135deg, color-mix(in srgb, var(--ap-indigo) 8%, transparent) 0%, transparent 60%),
+        var(--surface-translucent);
 }
 
 .ap-overview-node-ring {
     width: 56px;
     height: 56px;
-    border-radius: 999px;
-    border: 1px solid rgba(109, 106, 255, 0.2);
-    background: rgba(109, 106, 255, 0.08);
+    border-radius: var(--film-radius-pill);
+    border: 1px solid color-mix(in srgb, var(--ap-indigo) 20%, transparent);
+    background: color-mix(in srgb, var(--ap-indigo) 8%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -987,12 +994,12 @@
 .ap-overview-node {
     width: 42px;
     height: 42px;
-    border-radius: 999px;
-    background: rgba(109, 106, 255, 0.14);
+    border-radius: var(--film-radius-pill);
+    background: color-mix(in srgb, var(--ap-indigo) 14%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(190, 188, 255, 0.85);
+    color: color-mix(in srgb, var(--ap-indigo) 50%, var(--text-primary));
 }
 
 .ap-overview-node.running {
@@ -1000,8 +1007,8 @@
 }
 
 @keyframes ap-node-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(109, 106, 255, 0.25); }
-    50% { box-shadow: 0 0 0 8px rgba(109, 106, 255, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ap-indigo) 25%, transparent); }
+    50% { box-shadow: 0 0 0 8px transparent; }
 }
 
 .ap-overview-hero-text {
@@ -1050,7 +1057,7 @@
 
 .ap-memory-row {
     padding: 10px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border);
 }
 
 .ap-memory-row:last-child {
@@ -1080,92 +1087,6 @@
     line-height: 1.55;
 }
 
-/* Light theme ------------------------------------------------------------ */
-
-[data-theme="light"] .ap-root {
-    background:
-        radial-gradient(ellipse 60% 40% at 15% 0%, rgba(100, 100, 220, 0.06) 0%, transparent 60%),
-        #F4F6FA;
-}
-
-[data-theme="light"] .ap-header {
-    background: rgba(244, 246, 250, 0.8);
-    border-bottom-color: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .ap-sidebar {
-    background: rgba(255, 255, 255, 0.5);
-    border-right-color: rgba(0, 0, 0, 0.07);
-}
-
-[data-theme="light"] .ap-nav-item.active {
-    background: rgba(0, 0, 0, 0.05);
-    border-color: rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .ap-card,
-[data-theme="light"] .ap-metric-card {
-    background: rgba(255, 255, 255, 0.8);
-    border-color: rgba(0, 0, 0, 0.07);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-[data-theme="light"] .ap-steps-bar {
-    background: rgba(255, 255, 255, 0.7);
-    border-color: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .agent-footer {
-    border-top-color: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .btn-done {
-    background: #f2f2f4;
-    color: #1a1a1a;
-    border: 1px solid rgba(0, 0, 0, 0.14);
-}
-
-[data-theme="light"] .btn-done:hover {
-    filter: none;
-    background: #e8e8ec;
-}
-
-[data-theme="light"] .ap-provider-tab {
-    background: rgba(255, 255, 255, 0.7);
-    border-color: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .ap-field input,
-[data-theme="light"] .ap-field select,
-[data-theme="light"] .ap-chat-textarea {
-    background: rgba(246, 248, 252, 0.95);
-    border-color: rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .ap-chat-messages {
-    background: rgba(0, 0, 0, 0.03);
-}
-
-[data-theme="light"] .ap-chat-user .ap-chat-bubble {
-    background: rgba(109, 106, 255, 0.12);
-    border-color: rgba(109, 106, 255, 0.2);
-    color: rgba(60, 58, 180, 0.95);
-}
-
-[data-theme="light"] .ap-chat-assistant .ap-chat-bubble {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(0, 0, 0, 0.07);
-}
-
-[data-theme="light"] .ap-terminal-line {
-    background: rgba(20, 24, 32, 0.88);
-}
-
-[data-theme="light"] .ap-overview-hero {
-    background: rgba(255, 255, 255, 0.8);
-    border-color: rgba(0, 0, 0, 0.07);
-}
-
 /* Responsive ------------------------------------------------------------- */
 
 @media (max-width: 860px) {
@@ -1177,7 +1098,7 @@
         flex-direction: row;
         padding: 10px 12px;
         border-right: none;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        border-bottom: 1px solid var(--border);
     }
 
     .ap-metrics-row {

@@ -10,6 +10,7 @@ import {
     resumeCapture,
     startAgentTask,
 } from "@/shared/ipc/tauri";
+import { Icon } from "@/shared/components/atoms";
 import "./CommandPalette.css";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -514,7 +515,7 @@ export function CommandPalette({ isOpen, onClose, selectedMemory, context }: Com
                 {/* Memory context banner */}
                 {selectedMemory && (
                     <div className="cp-context-banner">
-                        <span className="cp-context-icon">🧠</span>
+                        <span className="cp-context-icon"><Icon name="sparkles" size={14} /></span>
                         <span className="cp-context-text">
                             {selectedMemory.app_name} · {selectedMemory.title.slice(0, 55)}{selectedMemory.title.length > 55 ? "…" : ""}
                         </span>

@@ -13,10 +13,8 @@
    ============================================================= */
 
 :root {
-    /* Body font is EB Garamond; --font-ui retained as an alias so any
-       straggler reference still resolves. */
-    --font-ui: var(--font-body);
-    --font-primary: var(--font-body);
+    /* Native form controls (date pickers, scrollbars) follow the theme. */
+    color-scheme: dark;
 
     /* Map legacy semantic names onto the new --bg / --fg / --accent. */
     --bg-primary: var(--bg);
@@ -75,6 +73,8 @@
    forwarding to the same paper palette. */
 [data-theme="light"],
 [data-theme="paper"] {
+    color-scheme: light;
+
     --bg-primary: var(--bg);
     --surface: var(--bg-2);
     --surface-elevated: var(--bg-3);

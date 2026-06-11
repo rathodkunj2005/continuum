@@ -1,12 +1,14 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+    PRIVACY_ALERTS_EVENT,
     PrivacyAlert,
     getBlocklist,
     getPrivacyAlerts,
     addSiteToBlocklist,
     dismissPrivacyAlert,
 } from "@/shared/ipc/tauri";
-import { usePolling } from "@/shared/hooks/usePolling";
+import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
+import { Icon } from "@/shared/components/atoms";
 import "./PrivacyPanel.css";
 
 interface PrivacyPanelProps {
@@ -42,7 +44,14 @@ export function PrivacyPanel({
         }
     }, [onAlertsChange]);
 
-    usePolling(refreshAlerts, 2000);
+    useEffect(() => {
+        void refreshAlerts();
+    }, [refreshAlerts]);
+
+    useTauriEvent<PrivacyAlert[]>(PRIVACY_ALERTS_EVENT, (data) => {
+        setAlerts(data);
+        onAlertsChange?.(data.length);
+    });
 
     const handleAddBlocklist = async (site: string) => {
         setLoading(true);
@@ -92,7 +101,7 @@ export function PrivacyPanel({
             <div className="privacy-content">
                 {alerts.length === 0 ? (
                     <div className="empty-alerts">
-                        <span className="empty-icon">🛡️</span>
+                        <span className="empty-icon"><Icon name="shield" size={32} /></span>
                         <p>No active privacy alerts.</p>
                         <small>Your data is secure.</small>
                     </div>
@@ -101,7 +110,7 @@ export function PrivacyPanel({
                         {alerts.map((alert) => (
                             <div key={alert.id} className="privacy-alert-card">
                                 <div className="shield-icon-container">
-                                    <span className="shield-icon">🛡️</span>
+                                    <Icon name="shield" size={22} className="shield-icon" />
                                 </div>
                                 <div className="alert-details">
                                     <h4>Privacy Alert</h4>

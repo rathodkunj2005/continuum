@@ -4,11 +4,11 @@
     right: 0;
     width: 380px;
     height: 100vh;
-    background: #111111;
-    border-left: 1px solid rgba(180, 140, 60, 0.2);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
     z-index: 10001;
     padding: 24px;
-    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-strong);
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -26,18 +26,6 @@
     overflow: visible;
 }
 
-[data-theme="light"] .privacy-panel {
-    background: #fdfaf5;
-    border-left-color: rgba(180, 140, 60, 0.15);
-    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.05);
-}
-
-[data-theme="light"] .privacy-panel.embedded {
-    background: transparent;
-    border-left-color: transparent;
-    box-shadow: none;
-}
-
 .privacy-header {
     display: flex;
     justify-content: space-between;
@@ -52,24 +40,20 @@
 .privacy-header h2 {
     font-size: 20px;
     font-weight: 500;
-    color: #e0e0e0;
+    color: var(--text-primary);
     margin: 0;
-}
-
-[data-theme="light"] .privacy-header h2 {
-    color: #333333;
 }
 
 .privacy-header .close-btn {
     background: transparent;
-    color: #888;
+    color: var(--text-muted);
     padding: 6px;
     min-width: 32px;
 }
 
 .privacy-header .close-btn:hover {
-    color: #ccc;
-    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    background: var(--surface-hover);
 }
 
 .privacy-content {
@@ -86,7 +70,7 @@
     align-items: center;
     justify-content: center;
     height: 60%;
-    color: #888;
+    color: var(--text-muted);
     text-align: center;
 }
 
@@ -105,11 +89,7 @@
 .empty-alerts p {
     margin: 0 0 8px 0;
     font-size: 16px;
-    color: #bbb;
-}
-
-[data-theme="light"] .empty-alerts p {
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .alerts-list {
@@ -119,17 +99,13 @@
 }
 
 .privacy-alert-card {
-    background: rgba(255, 50, 50, 0.05);
-    border: 1px solid rgba(255, 50, 50, 0.2);
-    border-radius: 12px;
+    background: var(--danger-light);
+    border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+    border-radius: var(--film-radius-lg);
     padding: 16px;
     display: flex;
     gap: 12px;
     align-items: flex-start;
-}
-
-[data-theme="light"] .privacy-alert-card {
-    background: rgba(220, 50, 50, 0.05);
 }
 
 .shield-icon-container {
@@ -138,7 +114,7 @@
 
 .shield-icon {
     font-size: 24px;
-    filter: sepia(1) saturate(10) hue-rotate(320deg); /* Makes it red-ish */
+    color: var(--danger);
 }
 
 .alert-details {
@@ -149,18 +125,14 @@
     margin: 0 0 8px 0;
     font-size: 15px;
     font-weight: 600;
-    color: #ff6b6b;
+    color: var(--danger);
 }
 
 .alert-details p {
     margin: 0 0 16px 0;
     font-size: 14px;
     line-height: 1.5;
-    color: #ccc;
-}
-
-[data-theme="light"] .alert-details p {
-    color: #444;
+    color: var(--text-secondary);
 }
 
 .alert-actions {
@@ -170,43 +142,34 @@
 }
 
 .block-btn {
-    background: rgba(255, 50, 50, 0.1);
-    color: #ff6b6b;
-    border-color: rgba(255, 50, 50, 0.3);
+    background: var(--danger-light);
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 32%, transparent);
     flex: 1;
     font-size: 13px;
     padding: 8px;
 }
 
 .block-btn:hover {
-    background: rgba(255, 50, 50, 0.2);
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
 }
 
 .dismiss-btn {
-    background: rgba(255, 255, 255, 0.05);
-    color: #aaa;
+    background: var(--bg-3);
+    color: var(--text-muted);
     flex: 1;
     font-size: 13px;
     padding: 8px;
 }
 
 .dismiss-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ccc;
-}
-
-[data-theme="light"] .dismiss-btn {
-    background: rgba(0, 0, 0, 0.05);
-    color: #666;
-}
-
-[data-theme="light"] .dismiss-btn:hover {
-    background: rgba(0, 0, 0, 0.1);
+    background: var(--surface-hover);
+    color: var(--text-secondary);
 }
 
 .destructive-warning {
     display: block;
     font-size: 11px;
-    color: #ff6b6b;
+    color: var(--danger);
     opacity: 0.8;
 }

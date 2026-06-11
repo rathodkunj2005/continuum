@@ -42,9 +42,9 @@
 
 .daily-summary-close-btn {
     padding: 6px 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     background: transparent;
-    border-radius: 6px;
+    border-radius: var(--film-radius-md);
     border: none;
     font-size: 13px;
     cursor: pointer;
@@ -53,8 +53,8 @@
 }
 
 .daily-summary-close-btn:hover {
-    color: rgba(255, 255, 255, 0.9);
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    background: var(--surface-hover);
 }
 
 .daily-summary-body {
@@ -73,10 +73,10 @@
     display: flex;
     align-items: flex-end;
     gap: 16px;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-translucent);
     padding: 20px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--film-radius-lg);
+    border: 1px solid var(--border);
 }
 
 .date-picker-wrapper {
@@ -93,31 +93,30 @@
 }
 
 .date-picker-wrapper input[type="date"] {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-3);
+    border: 1px solid var(--border);
     color: var(--text-primary);
     padding: 10px 14px;
-    border-radius: 8px;
+    border-radius: var(--film-radius-md);
     font-size: 14px;
     font-family: inherit;
     outline: none;
     transition: all 0.2s;
-    color-scheme: dark;
 }
 
 .date-picker-wrapper input[type="date"]:focus {
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: var(--border-strong);
 }
 
 .generate-btn {
     padding: 10px 20px;
-    border-radius: 8px;
+    border-radius: var(--film-radius-md);
     font-weight: 500;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-3);
 }
 
 .generate-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--surface-hover);
 }
 
 .generate-btn:disabled {
@@ -149,21 +148,21 @@
 }
 
 .error-state p {
-    color: #ff6b6b;
-    background: rgba(200, 40, 40, 0.1);
+    color: var(--danger);
+    background: var(--danger-light);
     padding: 12px 16px;
-    border-radius: 8px;
-    border: 1px solid rgba(200, 40, 40, 0.3);
+    border-radius: var(--film-radius-md);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .summary-bullets {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--surface-translucent);
+    border: 1px solid var(--border);
     padding: 24px;
-    border-radius: 12px;
+    border-radius: var(--film-radius-lg);
 }
 
 .summary-bullet {
@@ -180,17 +179,17 @@
     top: 24px;
     left: 50%;
     transform: translateX(-50%);
-    background: #1a1a1a;
-    border: 1px solid rgba(180, 140, 60, 0.4);
-    color: #bfa16a;
+    background: var(--surface-elevated);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
     padding: 14px 16px;
-    border-radius: 12px;
+    border-radius: var(--film-radius-lg);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     min-width: min(420px, calc(100vw - 24px));
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-strong);
     z-index: 9999;
     animation: toast-in-out 6s ease forwards;
 }
@@ -204,13 +203,13 @@
 .daily-toast-copy strong {
     font-size: 0.88rem;
     font-weight: 700;
-    color: #f0d59d;
+    color: color-mix(in srgb, var(--accent) 65%, var(--text-primary));
 }
 
 .daily-toast-copy span {
     font-size: 0.78rem;
     line-height: 1.45;
-    color: rgba(235, 224, 198, 0.82);
+    color: var(--text-secondary);
 }
 
 .daily-toast-actions {
@@ -220,10 +219,10 @@
 }
 
 .daily-toast-btn {
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(245, 240, 224, 0.92);
+    border-radius: var(--film-radius-pill);
+    border: 1px solid var(--border);
+    background: var(--bg-3);
+    color: var(--text-primary);
     padding: 7px 11px;
     font: inherit;
     font-size: 0.74rem;
@@ -231,29 +230,8 @@
 }
 
 .daily-toast-btn.primary {
-    border-color: rgba(191, 161, 106, 0.45);
-    color: #f0d59d;
-}
-
-[data-theme="light"] .daily-toast {
-    background: #ffffff;
-    border-color: rgba(180, 140, 60, 0.3);
-    color: #8c703d;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .daily-toast-copy strong {
-    color: #8c703d;
-}
-
-[data-theme="light"] .daily-toast-copy span {
-    color: rgba(90, 76, 46, 0.8);
-}
-
-[data-theme="light"] .daily-toast-btn {
-    background: rgba(245, 247, 251, 0.96);
-    border-color: rgba(80, 60, 20, 0.12);
-    color: rgba(70, 58, 34, 0.9);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: color-mix(in srgb, var(--accent) 65%, var(--text-primary));
 }
 
 .toast-icon {
@@ -262,15 +240,10 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    background: #bfa16a;
-    color: #1a1a1a;
+    background: var(--accent);
+    color: var(--text-inverse);
     border-radius: 50%;
     font-size: 12px;
-}
-
-[data-theme="light"] .toast-icon {
-    background: #8c703d;
-    color: #ffffff;
 }
 
 @keyframes toast-in-out {

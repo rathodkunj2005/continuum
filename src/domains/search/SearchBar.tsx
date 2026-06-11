@@ -15,6 +15,7 @@ import {
 } from "@/shared/utils/config";
 import { bubblePurityGate, extractAnchorTerms, scoreAnchorCoverage } from "@/shared/utils/search";
 import { PLACEHOLDERS } from "./placeholders";
+import { Icon } from "@/shared/components/atoms";
 import "./SearchBar.css";
 
 interface SearchBarProps {
@@ -659,7 +660,7 @@ export function SearchBar({
                         </div>
                     ) : (
                         <p className="summary-text">
-                            <span className="summary-icon">💡</span>
+                            <span className="summary-icon"><Icon name="lightbulb" size={15} /></span>
                             {summary}
                         </p>
                     )}

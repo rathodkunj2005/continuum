@@ -4,6 +4,7 @@ import { cleanupCardsForRender, tokenOverlap } from "@/shared/utils/cardCleanup"
 import { extractAnchorTerms, scoreAnchorCoverage } from "@/shared/utils/search";
 import { TIMELINE_DEDUPE, TIMELINE_MATCH_LABEL, TIMELINE_STREAM } from "./timelineConfig";
 import { InsightLayers } from "@/domains/memory-vault/InsightLayers";
+import { Icon } from "@/shared/components/atoms";
 import "./Timeline.css";
 
 interface TimelineProps {
@@ -94,7 +95,7 @@ export function Timeline({
         }
         return (
             <div className="timeline-state">
-                <div className="empty-icon">🔍</div>
+                <div className="empty-icon"><Icon name="search" size={48} /></div>
                 <h3>No memories found</h3>
                 <p>Try a different search term</p>
             </div>

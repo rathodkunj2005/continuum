@@ -7,6 +7,7 @@ import {
 } from "@/shared/ipc/onboarding";
 import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
 import { formatBytes } from "@/shared/utils/format";
+import { Icon } from "@/shared/components/atoms";
 import "./ModelDownloadBanner.css";
 
 export function ModelDownloadBanner() {
@@ -121,7 +122,7 @@ export function ModelDownloadBanner() {
     return (
         <div className="model-download-banner">
             <div className="banner-header">
-                <h3>⚠️ Qwen Model Required</h3>
+                <h3><Icon name="alert-triangle" size={15} /> Qwen Model Required</h3>
                 <p>
                     FNDR is in OCR-only mode because the required local Qwen3-VL model is missing.
                     Search still works, but memory Q&A, summaries, and smarter indexing need the core model on disk.
@@ -149,7 +150,7 @@ export function ModelDownloadBanner() {
                 </div>
             ) : isDownloading ? (
                 <div className="banner-progress-area" style={{ textAlign: "center", fontStyle: "italic", opacity: 0.8 }}>
-                    <span className="ob-icon pulse" style={{ marginRight: 8 }}>⚙️</span>
+                    <span className="ob-icon pulse" style={{ marginRight: 8 }}><Icon name="settings" size={16} /></span>
                     {isActivatingModel
                         ? "Loading model into FNDR"
                         : activeDownloadStatus?.state === "finalizing"
