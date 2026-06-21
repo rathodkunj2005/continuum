@@ -6,6 +6,7 @@
 pub mod accessibility;
 pub mod agent;
 pub mod capture;
+pub mod cloud;
 pub mod companion;
 pub mod config;
 pub mod context_runtime;
@@ -353,6 +354,10 @@ pub struct AppState {
     pub low_confidence_graph_candidates: Mutex<Vec<PendingGraphUpdate>>,
     /// When true, idle graph commit treats the machine as battery-saver tier.
     pub graph_governor_battery_saver: AtomicBool,
+    /// Outbound team-graph sync: queue, dedup window, cached identity/policy,
+    /// and counters. Drained by [`cloud::sync::spawn_worker`]. No-ops cheaply
+    /// when cloud is unconfigured or the cluster policy withholds sharing.
+    pub cloud_sync: cloud::sync::CloudSyncState,
 }
 
 impl AppState {
@@ -399,6 +404,7 @@ impl AppState {
             pending_memory_reviews: memory_review::MemoryReviewQueue::new(),
             low_confidence_graph_candidates: Mutex::new(Vec::new()),
             graph_governor_battery_saver: AtomicBool::new(false),
+            cloud_sync: cloud::sync::CloudSyncState::new(),
         }
     }
 
@@ -469,6 +475,48 @@ impl AppState {
             queue_depth = self.pending_memory_reviews.len(),
             "memory_review queued"
         );
+    }
+
+    /// Consider a flushed memory for team-graph sync. Cheap + synchronous:
+    /// derive the descriptor, classify it, apply the cached cluster policy,
+    /// dedup, and enqueue. The network push happens off the hot path in
+    /// [`cloud::sync::spawn_worker`]. No-ops when cloud is not ready or the
+    /// policy withholds sharing.
+    pub fn enqueue_cloud_sync_from_flushed_memory(&self, record: &storage::MemoryRecord) {
+        if !self.cloud_sync.runtime.read().ready() {
+            return;
+        }
+        let Some(descriptor) = cloud::descriptor::Descriptor::from_memory_record(record) else {
+            return;
+        };
+        let config = self.config.read();
+        let ctx = cloud::share_policy::ClassifyCtx {
+            bundle_id: record.bundle_id.as_deref(),
+            app_name: Some(record.app_name.as_str()),
+            url: record.url.as_deref(),
+            window_title: Some(record.window_title.as_str()),
+            private_mode: self.is_incognito.load(Ordering::SeqCst),
+            user_blocklist: &config.blocklist,
+        };
+        let outcome = cloud::sync::decide(
+            &self.cloud_sync,
+            &descriptor,
+            &ctx,
+            chrono::Utc::now().timestamp_millis(),
+            // Reuse the embedding capture already computed on-device (MiniLM
+            // 384-d), projected into the cluster's 1536-d space, so the cloud
+            // never re-embeds with OpenAI.
+            cloud::embed::to_cloud_embedding(&record.embedding),
+            crate::inference::model_config::EMBEDDING_MODEL_ID,
+        );
+        if matches!(outcome, cloud::sync::DecideOutcome::Enqueued) {
+            tracing::debug!(
+                target: "continuum::cloud_sync",
+                memory_id = %record.id,
+                queue_depth = self.cloud_sync.queue.len(),
+                "cloud_sync queued"
+            );
+        }
     }
 
     pub fn set_app_handle(&self, handle: tauri::AppHandle) {

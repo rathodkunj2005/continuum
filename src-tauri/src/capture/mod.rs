@@ -1972,6 +1972,7 @@ pub async fn run_capture_loop(state: Arc<AppState>) -> Result<(), Box<dyn std::e
                         for rec in batch.iter() {
                             state.enqueue_graph_from_flushed_memory(rec);
                             state.enqueue_memory_review_from_flushed_memory(rec);
+                            state.enqueue_cloud_sync_from_flushed_memory(rec);
                         }
                         if let Err(err) =
                             crate::ipc::commands::commit_graph_updates_now(state.clone()).await

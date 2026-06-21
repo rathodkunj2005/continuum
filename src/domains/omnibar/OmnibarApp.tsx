@@ -13,14 +13,23 @@ import {
     searchMemoryCards,
 } from "@/shared/ipc/tauri";
 import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
+import { useClusterQuery } from "@/features/query/useClusterQuery";
 
 const SEARCH_DEBOUNCE_MS = 250;
 const CLIP_DEBOUNCE_MS = 150;
 const RESULT_LIMIT = 8;
 const CLIP_LIMIT = 30;
 const COPIED_FLASH_MS = 550;
+const CITATION_LIMIT = 6;
 
-type Surface = "memory" | "clipboard";
+type Surface = "memory" | "clipboard" | "cluster";
+
+const SURFACE_ORDER: Surface[] = ["memory", "clipboard", "cluster"];
+
+function nextSurface(surface: Surface): Surface {
+    const i = SURFACE_ORDER.indexOf(surface);
+    return SURFACE_ORDER[(i + 1) % SURFACE_ORDER.length];
+}
 
 type Mode =
     | { kind: "search" }
@@ -43,6 +52,20 @@ function formatTimestamp(ms: number): string {
     });
 }
 
+function formatIsoTime(iso: string | null): string {
+    if (!iso) {
+        return "";
+    }
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+    return date.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+    });
+}
+
 export function OmnibarApp() {
     const [surface, setSurface] = useState<Surface>("memory");
     const [query, setQuery] = useState("");
@@ -55,6 +78,11 @@ export function OmnibarApp() {
     const inputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
     const searchSeq = useRef(0);
+    const {
+        state: clusterState,
+        ask: askCluster,
+        reset: resetCluster,
+    } = useClusterQuery();
 
     const reset = useCallback(() => {
         setSurface("memory");
@@ -65,7 +93,8 @@ export function OmnibarApp() {
         setSearching(false);
         setMode({ kind: "search" });
         setCopiedId(null);
-    }, []);
+        resetCluster();
+    }, [resetCluster]);
 
     useTauriEvent<void>(OMNIBAR_FOCUS_EVENT, () => {
         reset();
@@ -189,20 +218,32 @@ export function OmnibarApp() {
         void dismissOmnibar();
     }, [reset]);
 
-    const toggleSurface = useCallback(() => {
-        setSurface((s) => (s === "memory" ? "clipboard" : "memory"));
+    const cycleSurface = useCallback(() => {
+        setSurface((s) => nextSurface(s));
         setQuery("");
         setResults([]);
         setClips([]);
         setSelectedIndex(0);
         setMode({ kind: "search" });
+        resetCluster();
         inputRef.current?.focus();
-    }, []);
+    }, [resetCluster]);
+
+    const askClusterNow = useCallback(() => {
+        askCluster(query);
+    }, [askCluster, query]);
 
     const handleKeyDown = (event: React.KeyboardEvent) => {
         if (event.key === "Escape") {
             event.preventDefault();
-            if (mode.kind === "answer" || mode.kind === "asking") {
+            if (surface === "cluster") {
+                if (clusterState.status !== "idle") {
+                    resetCluster();
+                    inputRef.current?.focus();
+                } else {
+                    dismiss();
+                }
+            } else if (mode.kind === "answer" || mode.kind === "asking") {
                 setMode({ kind: "search" });
                 inputRef.current?.focus();
             } else {
@@ -212,7 +253,14 @@ export function OmnibarApp() {
         }
         if (event.key === "Tab") {
             event.preventDefault();
-            toggleSurface();
+            cycleSurface();
+            return;
+        }
+        if (surface === "cluster") {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                askClusterNow();
+            }
             return;
         }
         if (mode.kind !== "search") {
@@ -262,21 +310,29 @@ export function OmnibarApp() {
                     placeholder={
                         surface === "memory"
                             ? "Search your memory…"
-                            : "Search clipboard history…"
+                            : surface === "clipboard"
+                              ? "Search clipboard history…"
+                              : "Ask your cluster…"
                     }
                     spellCheck={false}
                     autoComplete="off"
-                    disabled={mode.kind === "asking"}
+                    disabled={
+                        mode.kind === "asking" ||
+                        clusterState.status === "asking"
+                    }
                 />
-                {searching && <span className="omnibar-spinner" aria-hidden />}
+                {(searching || clusterState.status === "asking") && (
+                    <span className="omnibar-spinner" aria-hidden />
+                )}
                 <button
                     type="button"
                     className="omnibar-surface-toggle"
-                    onClick={toggleSurface}
+                    onClick={cycleSurface}
                     tabIndex={-1}
                 >
                     <span data-active={surface === "memory"}>Memory</span>
                     <span data-active={surface === "clipboard"}>Clips</span>
+                    <span data-active={surface === "cluster"}>Cluster</span>
                 </button>
             </div>
 
@@ -381,20 +437,79 @@ export function OmnibarApp() {
                 </div>
             )}
 
+            {surface === "cluster" && (
+                <div className="omnibar-results" ref={listRef}>
+                    {clusterState.status === "idle" && (
+                        <div className="omnibar-empty">
+                            {query.trim()
+                                ? "Press ↵ to ask your cluster"
+                                : "Ask your team's shared memory"}
+                        </div>
+                    )}
+                    {clusterState.status === "asking" && (
+                        <div className="omnibar-answer omnibar-answer-loading">
+                            Asking your cluster…
+                        </div>
+                    )}
+                    {clusterState.status === "error" && (
+                        <div className="omnibar-answer omnibar-answer-error">
+                            {clusterState.message}
+                        </div>
+                    )}
+                    {clusterState.status === "answer" && (
+                        <div className="omnibar-answer">
+                            <p className="omnibar-answer-text">
+                                {clusterState.answer.answer}
+                            </p>
+                            {clusterState.answer.citations.length > 0 && (
+                                <div className="omnibar-citations">
+                                    {clusterState.answer.citations
+                                        .slice(0, CITATION_LIMIT)
+                                        .map((citation) => (
+                                            <div
+                                                key={citation.node_id}
+                                                className="omnibar-citation"
+                                            >
+                                                <span className="omnibar-result-title">
+                                                    {citation.concept}
+                                                </span>
+                                                <span className="omnibar-result-meta">
+                                                    {[
+                                                        citation.user,
+                                                        citation.app,
+                                                        formatIsoTime(
+                                                            citation.timestamp
+                                                        ),
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(" · ")}
+                                                </span>
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div className="omnibar-footer">
-                <span>↹ {surface === "memory" ? "clips" : "memory"}</span>
-                <span>↑↓ navigate</span>
-                {surface === "memory" ? (
+                <span>↹ {nextSurface(surface)}</span>
+                {surface === "memory" && (
                     <>
+                        <span>↑↓ navigate</span>
                         <span>↵ open</span>
                         <span>⌘↵ ask</span>
                     </>
-                ) : (
+                )}
+                {surface === "clipboard" && (
                     <>
+                        <span>↑↓ navigate</span>
                         <span>↵ copy</span>
                         <span>⌘↵ paste</span>
                     </>
                 )}
+                {surface === "cluster" && <span>↵ ask cluster</span>}
                 <span>esc close</span>
             </div>
         </div>

@@ -9,9 +9,13 @@ demo: install
 test:
 	npm run typecheck
 	npm test
+	# cargo test compiles the Tauri binary, whose generate_context!() requires
+	# the frontend bundle (frontendDist = ../dist) to exist at compile time.
+	npm run build
 	cd src-tauri && cargo test
 
 rust-test:
+	test -d dist || npm run build
 	cd src-tauri && cargo fmt --check && cargo clippy --all-targets && cargo test
 
 diagnostic:

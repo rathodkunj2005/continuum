@@ -47,6 +47,8 @@ pub enum OnboardingStep {
     /// User has never run the app before
     #[default]
     Welcome,
+    /// Cloud account sign-in (Supabase email OTP)
+    Account,
     /// Biometric lock setup
     Biometrics,
     /// Privacy explanation screen
@@ -72,6 +74,10 @@ pub struct OnboardingState {
     pub model_id: Option<String>,
     #[serde(default)]
     pub display_name: Option<String>,
+    /// Email used for cloud sign-in (display continuity across steps; the
+    /// authoritative session lives in the OS keychain, not here).
+    #[serde(default)]
+    pub account_email: Option<String>,
 }
 
 impl Default for OnboardingState {
@@ -84,6 +90,7 @@ impl Default for OnboardingState {
             model_downloaded: false,
             model_id: None,
             display_name: None,
+            account_email: None,
         }
     }
 }
@@ -102,6 +109,11 @@ fn normalize_onboarding_state(mut state: OnboardingState) -> OnboardingState {
         .display_name
         .map(|name| name.trim().to_string())
         .filter(|name| !name.is_empty());
+
+    state.account_email = state
+        .account_email
+        .map(|email| email.trim().to_string())
+        .filter(|email| !email.is_empty());
 
     state
 }

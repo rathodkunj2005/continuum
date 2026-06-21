@@ -5,6 +5,10 @@ describe("activeUseClock", () => {
     beforeEach(() => __resetActiveClock());
 
     it("starts near 0", () => {
+        // Reset synchronously here so no real wall-clock time accrues between
+        // resetting lastTick and reading; the beforeEach reset can be separated
+        // from the test body by hundreds of ms under parallel load.
+        __resetActiveClock();
         expect(getActiveMillis()).toBeLessThan(100);
     });
 

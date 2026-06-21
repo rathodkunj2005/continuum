@@ -99,6 +99,8 @@ genpdf = "0.2"
 once_cell = "1.21.4"
 notify = "6.1.1"
 rfd = "0.15"
+# Secure OS-keychain storage for the Supabase session (refresh token).
+keyring = { version = "3", features = ["apple-native"] }
 
 # macOS specific
 [target.'cfg(target_os = "macos")'.dependencies]

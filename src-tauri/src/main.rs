@@ -39,6 +39,9 @@ const BRIEFING_MIN_MEMORIES: usize = 3;
 const BRIEFING_MAX_CARD_LINES: usize = 20;
 const GRAPH_COMMIT_INTERVAL: Duration = Duration::from_secs(90);
 const MEMORY_REVIEW_INTERVAL: Duration = Duration::from_secs(45);
+/// Cadence for the outbound team-graph sync worker (queue drain + periodic
+/// identity/policy refresh). Cheap no-op when cloud is unconfigured.
+const CLOUD_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 
 fn main() {
     // Install default TLS crypto provider (required by rustls 0.23+)
@@ -266,6 +269,16 @@ fn main() {
             {
                 let daily_state = state.clone();
                 continuum_lib::memory_review::spawn_daily_scheduler(daily_state);
+            }
+
+            // Background: outbound team-graph sync worker. Restores the offline
+            // buffer, refreshes cached identity/cluster-policy, and drains the
+            // cloud_sync queue to the `agent-sync` Edge Function. No-ops cheaply
+            // until the user signs in, joins a cluster, and the manager policy
+            // permits sharing.
+            {
+                let cloud_state = state.clone();
+                continuum_lib::cloud::sync::spawn_worker(cloud_state, CLOUD_SYNC_INTERVAL);
             }
 
             let runtime_state = state.clone();
@@ -786,6 +799,14 @@ fn main() {
             ipc::onboarding::check_model_exists,
             ipc::onboarding::delete_ai_model,
             ipc::onboarding::set_preferred_inference_model,
+            // Cloud sync / auth (Supabase email OTP)
+            ipc::cloud::cloud_status,
+            ipc::cloud::cloud_request_otp,
+            ipc::cloud::cloud_verify_otp,
+            ipc::cloud::cloud_sign_out,
+            ipc::cloud::cloud_get_identity,
+            ipc::cloud::cloud_query_cluster,
+            ipc::cloud::cloud_sync_status,
             ipc::commands::import_meta_glasses_photo,
             ipc::commands::models_cleanup_dry_run,
             ipc::commands::models_cleanup_confirm,

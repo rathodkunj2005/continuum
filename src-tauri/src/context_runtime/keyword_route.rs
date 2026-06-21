@@ -219,9 +219,13 @@ mod tests {
             .add_batch(&[record("keyword-1", "route runner keyword planning")])
             .await
             .expect("add");
+        // Functional check (does the keyword route find a seeded doc?), not a
+        // latency check. Use the max budgets so heavy parallel CPU contention
+        // during the full `cargo test` run can't time the LanceDB query out and
+        // return empty hits, flaking the assertion below.
         let config = SearchConfig {
-            keyword_timeout_ms: 5_000,
-            keyword_variant_timeout_ms: 2_000,
+            keyword_timeout_ms: 10_000,
+            keyword_variant_timeout_ms: 5_000,
             ..SearchConfig::default()
         }
         .normalized();

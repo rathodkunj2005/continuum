@@ -1239,6 +1239,69 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
+name = "continuum"
+version = "0.2.11"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "axum",
+ "axum-server",
+ "block2 0.5.1",
+ "chrono",
+ "crossbeam-channel",
+ "directories",
+ "dirs 6.0.0",
+ "dotenvy",
+ "enigo",
+ "futures",
+ "futures-util",
+ "genpdf",
+ "image",
+ "img_hash",
+ "keyring",
+ "lancedb",
+ "libc",
+ "llama-cpp-2",
+ "ndarray 0.17.2",
+ "notify",
+ "objc2 0.5.2",
+ "objc2-app-kit 0.2.2",
+ "objc2-foundation 0.2.2",
+ "once_cell",
+ "ort",
+ "parking_lot",
+ "rand 0.10.1",
+ "rcgen",
+ "regex",
+ "reqwest 0.11.27",
+ "rfd",
+ "rustls",
+ "rustls-pemfile 2.2.0",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "sha2",
+ "specta",
+ "tantivy 0.22.1",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-shell",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokenizers",
+ "tokio",
+ "tokio-stream",
+ "toml 0.8.2",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2842,68 +2905,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "continuum"
-version = "0.2.11"
-dependencies = [
- "arrow-array",
- "arrow-schema",
- "axum",
- "axum-server",
- "block2 0.5.1",
- "chrono",
- "crossbeam-channel",
- "directories",
- "dirs 6.0.0",
- "dotenvy",
- "enigo",
- "futures",
- "futures-util",
- "genpdf",
- "image",
- "img_hash",
- "lancedb",
- "libc",
- "llama-cpp-2",
- "ndarray 0.17.2",
- "notify",
- "objc2 0.5.2",
- "objc2-app-kit 0.2.2",
- "objc2-foundation 0.2.2",
- "once_cell",
- "ort",
- "parking_lot",
- "rand 0.10.1",
- "rcgen",
- "regex",
- "reqwest 0.11.27",
- "rfd",
- "rustls",
- "rustls-pemfile 2.2.0",
- "serde",
- "serde_json",
- "serial_test",
- "sha2",
- "specta",
- "tantivy 0.22.1",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-shell",
- "tempfile",
- "thiserror 2.0.18",
- "tokenizers",
- "tokio",
- "tokio-stream",
- "toml 0.8.2",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4351,6 +4352,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "log",
+ "security-framework 2.11.1",
+ "security-framework 3.7.0",
+ "zeroize",
+]
+
+[[package]]
 name = "kqueue"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5551,7 +5564,7 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework",
+ "security-framework 3.7.0",
  "security-framework-sys",
  "tempfile",
 ]
@@ -6834,7 +6847,7 @@ version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -7571,7 +7584,7 @@ dependencies = [
  "openssl-probe",
  "rustls-pki-types",
  "schannel",
- "security-framework",
+ "security-framework 3.7.0",
 ]
 
 [[package]]
@@ -7732,6 +7745,19 @@ name = "sdd"
 version = "3.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490dcfcbfef26be6800d11870ff2df8774fa6e86d047e3e8c8a76b25655e41ca"
+
+[[package]]
+name = "security-framework"
+version = "2.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
+dependencies = [
+ "bitflags 2.11.0",
+ "core-foundation 0.9.4",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
+]
 
 [[package]]
 name = "security-framework"
@@ -8201,7 +8227,7 @@ version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -8213,7 +8239,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54254b8531cafa275c5e096f62d48c81435d1015405a91198ddb11e967301d40"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",

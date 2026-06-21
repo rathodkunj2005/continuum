@@ -15,11 +15,13 @@ import {
 import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
 import { usePolling } from "@/shared/hooks/usePolling";
 import { formatBytes } from "@/shared/utils/format";
+import { CloudSignIn } from "./CloudSignIn";
 import "./Onboarding.css";
 
 // ── Helper: step index for progress dots ─────────────────────────────────
 const STEPS: OnboardingStep[] = [
     "welcome",
+    "account",
     "biometrics",
     "privacy_promise",
     "model_download",
@@ -34,6 +36,7 @@ const DEFAULT_ONBOARDING_STATE: OnboardingState = {
     model_downloaded: false,
     model_id: null,
     display_name: null,
+    account_email: null,
 };
 
 function stepIndex(s: OnboardingStep) {
@@ -69,7 +72,7 @@ function StepWelcome({
         onSave({
             ...state,
             display_name: displayName.trim() || null,
-            step: "biometrics",
+            step: "account",
         });
     }
 
@@ -81,7 +84,8 @@ function StepWelcome({
                 Continuum remembers what you&apos;ve worked on so you don&apos;t have to.
                 Synthesize meetings and track tasks — all instantly.
                 <br /><br />
-                Everything runs on your computer. Nothing leaves it. Ever.
+                Capture, search, and AI all run locally. You sign in so a
+                privacy-filtered subset can sync to your team&apos;s shared graph.
             </p>
             <label className="ob-name-label" htmlFor="ob-display-name">
                 What should Continuum call you?
@@ -106,6 +110,36 @@ function StepWelcome({
                 Skip for now
             </button>
         </>
+    );
+}
+
+// ── Step: Cloud account (mandatory sign-in) ───────────────────────────────
+function StepAccount({
+    state,
+    onSave,
+}: {
+    state: OnboardingState;
+    onSave: (s: OnboardingState) => void;
+}) {
+    const goNext = useCallback(
+        (email: string | null) => {
+            onSave({
+                ...state,
+                account_email: email ?? state.account_email ?? null,
+                step: "biometrics",
+            });
+        },
+        [onSave, state]
+    );
+
+    // Sign-in is required; the only bypass is when this build ships without a
+    // cloud backend, in which case there is nothing to sign in to.
+    return (
+        <CloudSignIn
+            onSignedIn={goNext}
+            onUnavailable={() => goNext(null)}
+            unavailableLabel="Continue without an account"
+        />
     );
 }
 
@@ -169,8 +203,8 @@ function StepPrivacyPromise({ state, onSave }: { state: OnboardingState; onSave:
                     },
                     {
                         icon: "🌐",
-                        title: "Nothing leaves your Mac",
-                        body: "No servers. No cloud. Local Qwen3-VL and Whisper models process everything offline.",
+                        title: "Local by default, you choose what syncs",
+                        body: "Capture, OCR, Qwen3-VL, and Whisper all run on your Mac. Only a privacy-filtered text descriptor of work you choose to share reaches your team's graph — raw screen content, screenshots, and embeddings never leave the device.",
                     },
                     {
                         icon: "🎭",
@@ -621,6 +655,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 )}
 
                 {state.step === "welcome" && <StepWelcome state={state} onSave={save} />}
+                {state.step === "account" && <StepAccount state={state} onSave={save} />}
                 {state.step === "biometrics" && <StepBiometrics state={state} onSave={save} />}
                 {state.step === "privacy_promise" && <StepPrivacyPromise state={state} onSave={save} />}
                 {state.step === "model_download" && <StepModelDownload state={state} onSave={save} />}

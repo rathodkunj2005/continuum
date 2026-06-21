@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 
 export type OnboardingStep =
     | "welcome"
+    | "account"
     | "biometrics"
     | "privacy_promise"
     | "permissions"
@@ -20,6 +21,7 @@ export interface OnboardingState {
     model_downloaded: boolean;
     model_id: string | null;
     display_name: string | null;
+    account_email: string | null;
 }
 
 export async function getOnboardingState(): Promise<OnboardingState> {

@@ -46,6 +46,13 @@ import {
     refreshAiModels,
     saveOnboardingState,
 } from "@/shared/ipc/onboarding";
+import {
+    CloudIdentity,
+    CloudStatus,
+    cloudGetIdentity,
+    cloudSignOut,
+    cloudStatus,
+} from "@/shared/ipc/cloud";
 import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
 import { usePolling } from "@/shared/hooks/usePolling";
 import { useTauriEvent } from "@/shared/hooks/useTauriEvent";
@@ -157,6 +164,12 @@ export function ControlPanel({
     const [isActivatingModel, setIsActivatingModel] = useState(false);
     const downloadStatus = useModelDownloadStatus();
 
+    // Cloud account state
+    const [cloudAccount, setCloudAccount] = useState<CloudStatus | null>(null);
+    const [cloudIdentity, setCloudIdentity] = useState<CloudIdentity | null>(null);
+    const [cloudSigningOut, setCloudSigningOut] = useState(false);
+    const [cloudError, setCloudError] = useState<string | null>(null);
+
     const loadData = useCallback(async () => {
         try {
             if (evalUi) {
@@ -251,6 +264,26 @@ export function ControlPanel({
     useTauriEvent<PrivacyAlert[]>(PRIVACY_ALERTS_EVENT, (alerts) =>
         setPrivacyAlertCount(alerts.length)
     );
+
+    useEffect(() => {
+        let mounted = true;
+        cloudStatus()
+            .then((account) => {
+                if (!mounted) return;
+                setCloudAccount(account);
+                if (account.configured && account.signed_in) {
+                    cloudGetIdentity()
+                        .then((identity) => {
+                            if (mounted) setCloudIdentity(identity);
+                        })
+                        .catch((err) => console.error("Failed to load cloud identity:", err));
+                }
+            })
+            .catch((err) => console.error("Failed to load cloud status:", err));
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     useEffect(() => {
         const previous = prevPrivacyAlertCountRef.current;
@@ -643,6 +676,18 @@ export function ControlPanel({
     const autofillDirty =
         JSON.stringify(autofillSettings) !== JSON.stringify(savedAutofillSettings);
 
+    const handleCloudSignOut = async () => {
+        setCloudSigningOut(true);
+        setCloudError(null);
+        try {
+            await cloudSignOut();
+            window.location.reload();
+        } catch (err) {
+            setCloudError(String(err));
+            setCloudSigningOut(false);
+        }
+    };
+
     return (
         <div className="control-panel-container">
             <div className="control-panel-actions continuum-os-chrome-row">
@@ -748,6 +793,39 @@ export function ControlPanel({
                                     </button>
                                 </div>
                                 {profileMsg && <p className="profile-msg">{profileMsg}</p>}
+                            </section>
+
+                            <section className="panel-section">
+                                <h3>Cloud account</h3>
+                                {cloudAccount === null ? (
+                                    <p className="section-hint">Loading…</p>
+                                ) : !cloudAccount.configured ? (
+                                    <p className="section-hint">Cloud sync not configured</p>
+                                ) : cloudAccount.signed_in ? (
+                                    <>
+                                        <div className="mcp-status-row">
+                                            <span className="mcp-pill running">Signed in</span>
+                                            <button
+                                                className="ui-action-btn btn-secondary"
+                                                onClick={() => void handleCloudSignOut()}
+                                                disabled={cloudSigningOut}
+                                            >
+                                                {cloudSigningOut ? "Signing out..." : "Sign out"}
+                                            </button>
+                                        </div>
+                                        <div className="storage-health-line">
+                                            <span>{cloudAccount.email ?? "Signed in"}</span>
+                                            <span>
+                                                Team: {cloudIdentity ? (cloudIdentity.cluster_id ?? "No team yet") : "…"}
+                                            </span>
+                                        </div>
+                                        {cloudError && (
+                                            <p className="section-hint" style={{ marginTop: 8 }}>{cloudError}</p>
+                                        )}
+                                    </>
+                                ) : (
+                                    <p className="section-hint">Not signed in</p>
+                                )}
                             </section>
 
                             <section className="panel-section">

@@ -8,6 +8,8 @@ import { Timeline } from "@/domains/timeline/Timeline";
 import { ControlPanel } from "@/domains/workspace/ControlPanel";
 import { ModelDownloadBanner } from "@/domains/workspace/ModelDownloadBanner";
 import { Onboarding } from "@/domains/workspace/Onboarding";
+import { CloudSignIn } from "@/domains/workspace/CloudSignIn";
+import "@/domains/workspace/Onboarding.css";
 import { appendToSearchHistory } from "@/domains/workspace/SearchHistoryPanel";
 import { type PanelKey } from "@/domains/command-palette/CommandPalette";
 import { useAutomationScheduler } from "@/domains/workspace/AutomationPanel";
@@ -35,6 +37,7 @@ import {
     getFunGreeting,
 } from "@/shared/ipc/tauri";
 import { getOnboardingState, saveOnboardingState, type OnboardingState } from "@/shared/ipc/onboarding";
+import { cloudStatus } from "@/shared/ipc/cloud";
 import { EVAL_UI } from "@/shared/utils/eval-ui";
 import "./styles/App.css";
 
@@ -97,6 +100,9 @@ function App() {
     const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
     const [biometricRequired, setBiometricRequired] = useState<boolean | null>(null);
     const [biometricUnlocked, setBiometricUnlocked] = useState(false);
+    // Mandatory cloud sign-in gate. null = resolving, true = ok to proceed
+    // (signed in, or this build has no cloud backend), false = needs sign-in.
+    const [cloudGateOk, setCloudGateOk] = useState<boolean | null>(null);
     const [selectedResult, setSelectedResult] = useState<MemoryCard | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [deletedMemoryIds, setDeletedMemoryIds] = useState<Set<string>>(new Set());
@@ -142,6 +148,25 @@ function App() {
                 setBiometricRequired(false);
             });
     }, []);
+
+    // Resolve the cloud sign-in gate once onboarding is complete. Onboarding's
+    // own Account step covers first-run; this also catches users who finished
+    // onboarding before sign-in existed, or who later signed out. Fails open on
+    // a local status-read error so a hiccup never bricks the app.
+    useEffect(() => {
+        if (!onboardingDone) return;
+        let cancelled = false;
+        cloudStatus()
+            .then((s) => {
+                if (!cancelled) setCloudGateOk(!s.configured || s.signed_in);
+            })
+            .catch(() => {
+                if (!cancelled) setCloudGateOk(true);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [onboardingDone]);
 
     const isFocusMode = !query.trim();
 
@@ -513,6 +538,27 @@ function App() {
                 onUnlock={handleUnlock}
                 onDisableBiometricLock={handleDisableBiometricLock}
             />
+        );
+    }
+
+    // Resolving cloud status — avoid flashing the app before the gate decides.
+    if (cloudGateOk === null) {
+        return null;
+    }
+
+    // Mandatory sign-in: block the app until a session exists (or there is no
+    // cloud backend to sign in to).
+    if (cloudGateOk === false) {
+        return (
+            <div className="onboarding-overlay">
+                <div className="ob-card">
+                    <CloudSignIn
+                        onSignedIn={() => setCloudGateOk(true)}
+                        onUnavailable={() => setCloudGateOk(true)}
+                        unavailableLabel="Continue"
+                    />
+                </div>
+            </div>
         );
     }
 

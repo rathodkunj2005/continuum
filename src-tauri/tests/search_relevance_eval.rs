@@ -1,4 +1,4 @@
-use continuum_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
+use continuum_lib::config::{SearchConfig, DEFAULT_IMAGE_EMBEDDING_DIM};
 use continuum_lib::embedding::{Embedder, EMBEDDING_DIM};
 use continuum_lib::search::HybridSearcher;
 use continuum_lib::storage::{MemoryRecord, Store};
@@ -215,10 +215,32 @@ fn hybrid_search_relevance_eval_suite() {
     let mut mrr_sum = 0.0f32;
     let mut negative_failures = Vec::new();
 
+    // This suite measures ranking quality, not latency. The production default
+    // search budgets (keyword 900ms total / 320ms per variant, etc.) intermittently
+    // fire under the multi-threaded test runtime / loaded CI, making a route return
+    // EMPTY and tanking precision/MRR nondeterministically. Use generous budgets so
+    // retrieval is deterministic and we measure the variable under test.
+    let search_config = SearchConfig {
+        semantic_timeout_ms: 10_000,
+        snippet_timeout_ms: 10_000,
+        keyword_timeout_ms: 10_000,
+        keyword_variant_timeout_ms: 5_000,
+        ..SearchConfig::default()
+    };
+
     for case in &cases {
         let hits = rt
             .block_on(async {
-                HybridSearcher::search(&store, &embedder, &case.query, 6, None, None).await
+                HybridSearcher::search_with_config(
+                    &store,
+                    &embedder,
+                    &case.query,
+                    6,
+                    None,
+                    None,
+                    &search_config,
+                )
+                .await
             })
             .expect("search query");
         let hit_ids = hits.into_iter().map(|item| item.id).collect::<Vec<_>>();

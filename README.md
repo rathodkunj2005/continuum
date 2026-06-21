@@ -197,6 +197,7 @@ Runs:
 
 - `npm run typecheck`
 - `npm test`
+- `npm run build` (produces `dist/`, required because the Tauri binary's `generate_context!()` embeds the frontend bundle at compile time)
 - `cd src-tauri && cargo test`
 
 ### Useful maintenance commands
