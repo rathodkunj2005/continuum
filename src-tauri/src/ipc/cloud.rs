@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::cloud::manual_sync::{ManualSyncReport, MANUAL_SYNC_WINDOW_HOURS};
 use crate::cloud::query::ClusterAnswer;
 use crate::cloud::sync::CloudSyncStatus;
 use crate::cloud::{self, CloudConfig, CloudIdentity, CloudStatus};
@@ -64,6 +65,26 @@ pub async fn cloud_verify_otp(email: String, code: String) -> Result<CloudStatus
     })
 }
 
+/// Sign in by pasting a Supabase magic link (or its token) when the project's
+/// email template sends a link instead of a 6-digit code. Verifies the link,
+/// persists the session, and returns the new status.
+#[tauri::command]
+pub async fn cloud_verify_magic_link(link: String) -> Result<CloudStatus, String> {
+    let cfg = config_or_err()?;
+    let link = link.trim().to_string();
+    if link.is_empty() {
+        return Err("Paste the sign-in link from your email.".to_string());
+    }
+    let session = cloud::auth::verify_magic_link(&cfg, &link).await?;
+    cloud::session::store(&session)?;
+    Ok(CloudStatus {
+        configured: true,
+        signed_in: true,
+        email: session.email.clone(),
+        user_id: Some(session.user_id.clone()),
+    })
+}
+
 /// Sign out: clear the persisted session.
 #[tauri::command]
 pub async fn cloud_sign_out() -> Result<(), String> {
@@ -98,4 +119,45 @@ pub async fn cloud_query_cluster(query: String) -> Result<ClusterAnswer, String>
 #[tauri::command]
 pub async fn cloud_sync_status(state: State<'_, Arc<AppState>>) -> Result<CloudSyncStatus, String> {
     Ok(state.inner().cloud_sync.status())
+}
+
+/// Manual "Sync now": push recent local memories (last 7 days) to the team
+/// graph immediately. Explicit user action — bypasses the cluster policy gate
+/// but keeps the safety floor (BLOCKED/LOCAL_ONLY content never leaves).
+#[tauri::command]
+pub async fn cloud_sync_now(state: State<'_, Arc<AppState>>) -> Result<ManualSyncReport, String> {
+    crate::cloud::manual_sync::sync_now(state.inner(), MANUAL_SYNC_WINDOW_HOURS).await
+}
+
+/// Create a new workspace; the signed-in user becomes its admin and receives a
+/// shareable join code. Refreshes the sync runtime so it begins syncing into
+/// the new cluster right away.
+#[tauri::command]
+pub async fn cloud_create_cluster(
+    name: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<cloud::clusters::ClusterMembership, String> {
+    let cfg = config_or_err()?;
+    let session = cloud::ensure_fresh_session(&cfg).await?;
+    let membership = cloud::clusters::create_cluster(&cfg, &session, &name).await?;
+    // Pick up the new cluster immediately so sync + cluster Q&A work without
+    // waiting for the worker's periodic identity refresh.
+    cloud::sync::refresh_runtime(state.inner()).await;
+    Ok(membership)
+}
+
+/// Join a workspace using a code shared by its admin; the signed-in user
+/// becomes a member. Idempotent if already joined.
+#[tauri::command]
+pub async fn cloud_join_cluster(
+    join_code: String,
+    state: State<'_, Arc<AppState>>,
+) -> Result<cloud::clusters::ClusterMembership, String> {
+    let cfg = config_or_err()?;
+    let session = cloud::ensure_fresh_session(&cfg).await?;
+    let membership = cloud::clusters::join_cluster(&cfg, &session, &join_code).await?;
+    // Pick up the joined cluster immediately so sync + cluster Q&A work without
+    // waiting for the worker's periodic identity refresh.
+    cloud::sync::refresh_runtime(state.inner()).await;
+    Ok(membership)
 }

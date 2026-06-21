@@ -23,6 +23,7 @@ use crate::cloud::share_policy::{
     allows_graph_push, classify, scrub, ClassifyCtx, ClusterSharePolicy, ShareDecision,
 };
 use crate::cloud::{self, CloudConfig};
+use crate::embedding::Embedder;
 use crate::storage::StateStore;
 use crate::AppState;
 
@@ -323,7 +324,7 @@ fn http_client() -> Result<reqwest::Client, String> {
 /// POST one descriptor to `agent-sync`. Returns `Ok(())` on a 2xx (synchronized
 /// or server-side deduplicated); `Err` on transient failure so the caller can
 /// re-enqueue and retry.
-async fn push_node(
+pub(crate) async fn push_node(
     client: &reqwest::Client,
     cfg: &CloudConfig,
     access_token: &str,
@@ -351,7 +352,7 @@ async fn push_node(
 }
 
 /// Refresh the cached identity + cluster policy off the hot path.
-async fn refresh_runtime(state: &AppState) {
+pub async fn refresh_runtime(state: &AppState) {
     let Some(cfg) = CloudConfig::from_env() else {
         *state.cloud_sync.runtime.write() = CloudRuntime::default();
         return;
@@ -442,21 +443,45 @@ pub fn spawn_worker(state: Arc<AppState>, interval: Duration) {
                 return;
             }
         };
+        // Worker-local BGE-large (1024-d) embedder for richer cloud embeddings,
+        // lazily constructed the first time we actually have something to sync.
+        // Kept on the worker task (no Send/Sync needed). `None` means the model
+        // isn't downloaded — we fall back to the cheaper embedding on the job.
+        let mut bge: Option<Embedder> = None;
+        let mut bge_attempted = false;
         let mut tick: u64 = 0;
         loop {
             if tick % REFRESH_EVERY_TICKS == 0 {
                 refresh_runtime(&state).await;
             }
             tick = tick.wrapping_add(1);
-            drain_once(&state, &client).await;
+            if !bge_attempted
+                && !state.cloud_sync.queue.is_empty()
+                && state.cloud_sync.runtime.read().ready()
+            {
+                bge_attempted = true;
+                match Embedder::new_bge_v5_for_query() {
+                    Ok(e) => {
+                        tracing::info!(target: "continuum::cloud_sync", "cloud embedder: BGE-large 1024-d");
+                        bge = Some(e);
+                    }
+                    Err(e) => tracing::info!(
+                        target: "continuum::cloud_sync",
+                        "cloud embedder: BGE unavailable ({e}); using local fallback embedding"
+                    ),
+                }
+            }
+            drain_once(&state, &client, bge.as_ref()).await;
             tokio::time::sleep(interval).await;
         }
     });
 }
 
 /// Drain up to [`MAX_PUSH_PER_TICK`] queued jobs. Stops early and re-enqueues on
-/// the first transient failure so an offline burst is retried next tick.
-async fn drain_once(state: &AppState, client: &reqwest::Client) {
+/// the first transient failure so an offline burst is retried next tick. When a
+/// BGE embedder is available, each job's embedding is upgraded (off the capture
+/// hot path, under the model lock) before push.
+async fn drain_once(state: &AppState, client: &reqwest::Client, bge: Option<&Embedder>) {
     let st = &state.cloud_sync;
     if st.queue.is_empty() {
         return;
@@ -484,9 +509,19 @@ async fn drain_once(state: &AppState, client: &reqwest::Client) {
     let mut pushed = 0usize;
     let mut dirty = false;
     while pushed < MAX_PUSH_PER_TICK {
-        let Some(job) = st.queue.dequeue() else {
+        let Some(mut job) = st.queue.dequeue() else {
             break;
         };
+        // Upgrade to a BGE-large embedding when available (serialized through
+        // the model pipeline lock so it never races capture). On failure the
+        // job keeps the cheaper embedding it was queued with.
+        if let Some(embedder) = bge {
+            let _guard = state.model_pipeline_lock.lock().await;
+            if let Some(v) = cloud::embed::embed_descriptor_bge(embedder, &job.descriptor) {
+                job.embedding = v;
+                job.embed_model = crate::inference::model_config::BGE_V5_MODEL_ID.to_string();
+            }
+        }
         match push_node(client, &cfg, &session.access_token, &cluster_id, &job).await {
             Ok(()) => {
                 st.synced.fetch_add(1, Ordering::Relaxed);

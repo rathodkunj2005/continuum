@@ -34,6 +34,15 @@ export async function cloudVerifyOtp(email: string, code: string): Promise<Cloud
     return invoke<CloudStatus>("cloud_verify_otp", { email, code });
 }
 
+/**
+ * Sign in by pasting a Supabase magic link (or its token) — for projects whose
+ * email template sends a link instead of a 6-digit code. The session is
+ * persisted in the OS keychain on success.
+ */
+export async function cloudVerifyMagicLink(link: string): Promise<CloudStatus> {
+    return invoke<CloudStatus>("cloud_verify_magic_link", { link });
+}
+
 export async function cloudSignOut(): Promise<void> {
     return invoke("cloud_sign_out");
 }
@@ -86,9 +95,29 @@ export interface ClusterAnswer {
     node_ids: string[];
 }
 
+/** Result of a manual / daily "sync now" run. */
+export interface ManualSyncReport {
+    considered: number;
+    pushed: number;
+    skipped_blocked: number;
+    skipped_local_only: number;
+    skipped_empty: number;
+    skipped_duplicate: number;
+    failed: number;
+}
+
 /** Status of the outbound team-graph sync pipeline. Cheap; safe to poll. */
 export async function cloudSyncStatus(): Promise<CloudSyncStatus> {
     return invoke<CloudSyncStatus>("cloud_sync_status");
+}
+
+/**
+ * Manually push recent local memories (last 7 days) to the team graph now.
+ * Explicit user action: bypasses the cluster policy gate but keeps the safety
+ * floor (BLOCKED / LOCAL_ONLY content never leaves the device).
+ */
+export async function cloudSyncNow(): Promise<ManualSyncReport> {
+    return invoke<ManualSyncReport>("cloud_sync_now");
 }
 
 /**
@@ -97,4 +126,22 @@ export async function cloudSyncStatus(): Promise<CloudSyncStatus> {
  */
 export async function cloudQueryCluster(query: string): Promise<ClusterAnswer> {
     return invoke<ClusterAnswer>("cloud_query_cluster", { query });
+}
+
+/** A workspace the user belongs to. `join_code` is only present after creating. */
+export interface ClusterMembership {
+    cluster_id: string;
+    name: string;
+    role: string;
+    join_code: string | null;
+}
+
+/** Create a workspace; the caller becomes its admin and gets a shareable code. */
+export async function cloudCreateCluster(name: string): Promise<ClusterMembership> {
+    return invoke<ClusterMembership>("cloud_create_cluster", { name });
+}
+
+/** Join a workspace with a code shared by its admin. */
+export async function cloudJoinCluster(joinCode: string): Promise<ClusterMembership> {
+    return invoke<ClusterMembership>("cloud_join_cluster", { joinCode });
 }

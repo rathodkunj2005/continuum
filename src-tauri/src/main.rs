@@ -281,6 +281,14 @@ fn main() {
                 continuum_lib::cloud::sync::spawn_worker(cloud_state, CLOUD_SYNC_INTERVAL);
             }
 
+            // Background: daily auto-sync. Wakes hourly and pushes the previous
+            // day's shareable memories to the team graph once per UTC day (the
+            // automatic counterpart to the manual "Sync now" button).
+            {
+                let daily_cloud_state = state.clone();
+                continuum_lib::cloud::manual_sync::spawn_daily_scheduler(daily_cloud_state);
+            }
+
             let runtime_state = state.clone();
 
             // Background: 1 Hz Activity-Monitor-grade system metrics sampler.
@@ -803,10 +811,14 @@ fn main() {
             ipc::cloud::cloud_status,
             ipc::cloud::cloud_request_otp,
             ipc::cloud::cloud_verify_otp,
+            ipc::cloud::cloud_verify_magic_link,
             ipc::cloud::cloud_sign_out,
             ipc::cloud::cloud_get_identity,
             ipc::cloud::cloud_query_cluster,
             ipc::cloud::cloud_sync_status,
+            ipc::cloud::cloud_sync_now,
+            ipc::cloud::cloud_create_cluster,
+            ipc::cloud::cloud_join_cluster,
             ipc::commands::import_meta_glasses_photo,
             ipc::commands::models_cleanup_dry_run,
             ipc::commands::models_cleanup_confirm,

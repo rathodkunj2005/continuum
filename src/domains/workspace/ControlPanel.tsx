@@ -49,9 +49,12 @@ import {
 import {
     CloudIdentity,
     CloudStatus,
+    cloudCreateCluster,
     cloudGetIdentity,
+    cloudJoinCluster,
     cloudSignOut,
     cloudStatus,
+    cloudSyncNow,
 } from "@/shared/ipc/cloud";
 import { useModelDownloadStatus } from "@/shared/hooks/useModelDownloadStatus";
 import { usePolling } from "@/shared/hooks/usePolling";
@@ -169,6 +172,14 @@ export function ControlPanel({
     const [cloudIdentity, setCloudIdentity] = useState<CloudIdentity | null>(null);
     const [cloudSigningOut, setCloudSigningOut] = useState(false);
     const [cloudError, setCloudError] = useState<string | null>(null);
+    const [syncingNow, setSyncingNow] = useState(false);
+    const [syncNowMsg, setSyncNowMsg] = useState<string | null>(null);
+    // Workspace (cluster) create / join
+    const [clusterNameDraft, setClusterNameDraft] = useState("");
+    const [joinCodeDraft, setJoinCodeDraft] = useState("");
+    const [clusterBusy, setClusterBusy] = useState(false);
+    const [clusterMsg, setClusterMsg] = useState<string | null>(null);
+    const [newJoinCode, setNewJoinCode] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -688,6 +699,68 @@ export function ControlPanel({
         }
     };
 
+    const refreshCloudIdentity = async () => {
+        try {
+            setCloudIdentity(await cloudGetIdentity());
+        } catch (err) {
+            console.error("Failed to refresh cloud identity:", err);
+        }
+    };
+
+    const handleSyncNow = async () => {
+        if (syncingNow) return;
+        setSyncingNow(true);
+        setSyncNowMsg(null);
+        try {
+            const report = await cloudSyncNow();
+            const keptPrivate = report.skipped_blocked + report.skipped_local_only;
+            const parts = [`Synced ${report.pushed} to the team graph`];
+            if (keptPrivate > 0) parts.push(`${keptPrivate} kept private`);
+            if (report.failed > 0) parts.push(`${report.failed} failed`);
+            setSyncNowMsg(`${parts.join(" · ")}.`);
+        } catch (err) {
+            setSyncNowMsg(String(err));
+        } finally {
+            setSyncingNow(false);
+        }
+    };
+
+    const handleCreateCluster = async () => {
+        const name = clusterNameDraft.trim();
+        if (!name || clusterBusy) return;
+        setClusterBusy(true);
+        setClusterMsg(null);
+        try {
+            const created = await cloudCreateCluster(name);
+            setClusterNameDraft("");
+            setNewJoinCode(created.join_code);
+            setClusterMsg(`Created "${created.name}". Share code ${created.join_code} to invite teammates.`);
+            await refreshCloudIdentity();
+        } catch (err) {
+            setClusterMsg(String(err));
+        } finally {
+            setClusterBusy(false);
+        }
+    };
+
+    const handleJoinCluster = async () => {
+        const code = joinCodeDraft.trim();
+        if (!code || clusterBusy) return;
+        setClusterBusy(true);
+        setClusterMsg(null);
+        try {
+            const joined = await cloudJoinCluster(code);
+            setJoinCodeDraft("");
+            setNewJoinCode(null);
+            setClusterMsg(`Joined "${joined.name}" as ${joined.role}.`);
+            await refreshCloudIdentity();
+        } catch (err) {
+            setClusterMsg(String(err));
+        } finally {
+            setClusterBusy(false);
+        }
+    };
+
     return (
         <div className="control-panel-container">
             <div className="control-panel-actions continuum-os-chrome-row">
@@ -819,6 +892,80 @@ export function ControlPanel({
                                                 Team: {cloudIdentity ? (cloudIdentity.cluster_id ?? "No team yet") : "…"}
                                             </span>
                                         </div>
+                                        {cloudIdentity && !cloudIdentity.cluster_id && (
+                                            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                                                <p className="section-hint">Create a workspace or join one with a code.</p>
+                                                <div className="profile-row">
+                                                    <input
+                                                        type="text"
+                                                        value={clusterNameDraft}
+                                                        onChange={(event) => setClusterNameDraft(event.target.value)}
+                                                        placeholder="Workspace name"
+                                                        className="profile-input"
+                                                        maxLength={80}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === "Enter") void handleCreateCluster();
+                                                        }}
+                                                    />
+                                                    <button
+                                                        className="ui-action-btn btn-secondary"
+                                                        onClick={() => void handleCreateCluster()}
+                                                        disabled={clusterBusy || !clusterNameDraft.trim()}
+                                                    >
+                                                        {clusterBusy ? "..." : "Create"}
+                                                    </button>
+                                                </div>
+                                                <div className="profile-row">
+                                                    <input
+                                                        type="text"
+                                                        value={joinCodeDraft}
+                                                        onChange={(event) => setJoinCodeDraft(event.target.value)}
+                                                        placeholder="Join code"
+                                                        className="profile-input"
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === "Enter") void handleJoinCluster();
+                                                        }}
+                                                    />
+                                                    <button
+                                                        className="ui-action-btn btn-secondary"
+                                                        onClick={() => void handleJoinCluster()}
+                                                        disabled={clusterBusy || !joinCodeDraft.trim()}
+                                                    >
+                                                        {clusterBusy ? "..." : "Join"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {cloudAccount.signed_in && (
+                                            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                                                <div className="profile-row">
+                                                    <button
+                                                        className="ui-action-btn btn-secondary"
+                                                        onClick={() => void handleSyncNow()}
+                                                        disabled={syncingNow || !cloudIdentity?.cluster_id}
+                                                    >
+                                                        {syncingNow ? "Syncing…" : "Sync now"}
+                                                    </button>
+                                                    <span className="section-hint" style={{ alignSelf: "center" }}>
+                                                        {cloudIdentity?.cluster_id
+                                                            ? "Push recent memories to your team. Also runs automatically once a day."
+                                                            : "Join or create a workspace to enable team sync."}
+                                                    </span>
+                                                </div>
+                                                {syncNowMsg && <p className="section-hint">{syncNowMsg}</p>}
+                                            </div>
+                                        )}
+                                        {newJoinCode && (
+                                            <div className="storage-health-line" style={{ marginTop: 8 }}>
+                                                <span>Share code</span>
+                                                <span style={{ fontFamily: "monospace", letterSpacing: "0.15em" }}>
+                                                    {newJoinCode}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {clusterMsg && (
+                                            <p className="section-hint" style={{ marginTop: 8 }}>{clusterMsg}</p>
+                                        )}
                                         {cloudError && (
                                             <p className="section-hint" style={{ marginTop: 8 }}>{cloudError}</p>
                                         )}

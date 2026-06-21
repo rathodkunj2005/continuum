@@ -18,10 +18,12 @@
 //! - [`query`]        — `query-synthesize` cluster Q&A client.
 
 pub mod auth;
+pub mod clusters;
 pub mod config;
 pub mod dedup;
 pub mod descriptor;
 pub mod embed;
+pub mod manual_sync;
 pub mod query;
 pub mod session;
 pub mod share_policy;

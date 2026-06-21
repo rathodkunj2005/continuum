@@ -15,8 +15,46 @@
 //! (`query-synthesize`) must embed queries with the same local model + padding;
 //! until then this is coherent only across desktops using this adapter.
 
+use crate::cloud::descriptor::Descriptor;
+use crate::embedding::Embedder;
+
 /// Width of the shared cluster's embedding column (`VECTOR(1536)`).
 pub const CLOUD_EMBED_DIM: usize = 1536;
+
+/// The text embedded for a cloud node. Mirrors the server's `embedText`
+/// (`supabase/functions/_shared/ingest.ts`): `app | topic | concept[ | error]`.
+pub fn descriptor_embed_text(d: &Descriptor) -> String {
+    let mut s = format!("{} | {} | {}", d.app, d.topic, d.concept);
+    if let Some(err) = d.error_type.as_deref() {
+        if !err.is_empty() {
+            s.push_str(" | ");
+            s.push_str(err);
+        }
+    }
+    s
+}
+
+/// Embed a descriptor with a BGE-large (1024-d) embedder and project into the
+/// cluster's 1536-d space. Returns `None` on any failure so the caller falls
+/// back to the cheaper embedding already on the queued job.
+pub fn embed_descriptor_bge(embedder: &Embedder, descriptor: &Descriptor) -> Option<Vec<f32>> {
+    let text = descriptor_embed_text(descriptor);
+    match embedder.embed_batch(&[text]) {
+        Ok(mut vectors) if !vectors.is_empty() => {
+            let raw = std::mem::take(&mut vectors[0]);
+            if raw.is_empty() {
+                None
+            } else {
+                Some(to_cloud_embedding(&raw))
+            }
+        }
+        Ok(_) => None,
+        Err(e) => {
+            tracing::debug!(target: "continuum::cloud_sync", "BGE cloud embed failed: {e}");
+            None
+        }
+    }
+}
 
 /// Project a local embedding into the cluster's [`CLOUD_EMBED_DIM`] space.
 ///
@@ -75,5 +113,21 @@ mod tests {
     fn exact_width_unchanged() {
         let v = vec![0.1_f32; CLOUD_EMBED_DIM];
         assert_eq!(to_cloud_embedding(&v), v);
+    }
+
+    #[test]
+    fn descriptor_text_matches_server_format() {
+        let d = Descriptor {
+            app: "VS Code".to_string(),
+            topic: "rust".to_string(),
+            concept: "editing".to_string(),
+            error_type: None,
+        };
+        assert_eq!(descriptor_embed_text(&d), "VS Code | rust | editing");
+        let d2 = Descriptor {
+            error_type: Some("E0599".to_string()),
+            ..d
+        };
+        assert_eq!(descriptor_embed_text(&d2), "VS Code | rust | editing | E0599");
     }
 }

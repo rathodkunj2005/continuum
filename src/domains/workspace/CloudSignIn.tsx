@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cloudRequestOtp, cloudStatus, cloudVerifyOtp } from "@/shared/ipc/cloud";
+import {
+    cloudRequestOtp,
+    cloudStatus,
+    cloudVerifyMagicLink,
+    cloudVerifyOtp,
+} from "@/shared/ipc/cloud";
 
 type Phase = "loading" | "email" | "code" | "unavailable";
 
@@ -20,6 +25,7 @@ export function CloudSignIn({ onSignedIn, onUnavailable, unavailableLabel }: Clo
     const [phase, setPhase] = useState<Phase>("loading");
     const [email, setEmail] = useState("");
     const [code, setCode] = useState("");
+    const [link, setLink] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -96,6 +102,24 @@ export function CloudSignIn({ onSignedIn, onUnavailable, unavailableLabel }: Clo
         }
     }, [code, email, onSignedIn]);
 
+    const verifyLink = useCallback(async () => {
+        const trimmedLink = link.trim();
+        if (!trimmedLink) {
+            setError("Paste the sign-in link from your email.");
+            return;
+        }
+        setBusy(true);
+        setError(null);
+        try {
+            const status = await cloudVerifyMagicLink(trimmedLink);
+            onSignedIn(status.email);
+        } catch (e) {
+            setError(String(e));
+        } finally {
+            setBusy(false);
+        }
+    }, [link, onSignedIn]);
+
     if (phase === "loading") {
         return (
             <>
@@ -148,10 +172,27 @@ export function CloudSignIn({ onSignedIn, onUnavailable, unavailableLabel }: Clo
                 <button className="ob-btn-primary" onClick={verify} disabled={busy}>
                     {busy ? "Verifying…" : "Verify & continue"}
                 </button>
+                <p className="ob-subtitle" style={{ marginTop: 14 }}>
+                    Got a <strong>link</strong> instead of a code? Paste the whole link here:
+                </p>
+                <input
+                    className="ob-name-input"
+                    type="text"
+                    value={link}
+                    placeholder="https://…supabase.co/auth/v1/verify?token=…"
+                    onChange={(e) => setLink(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" && !busy) verifyLink();
+                    }}
+                />
+                <button className="ob-btn-primary" onClick={verifyLink} disabled={busy}>
+                    {busy ? "Signing in…" : "Sign in with link"}
+                </button>
                 <button
                     className="ob-btn-ghost"
                     onClick={() => {
                         setCode("");
+                        setLink("");
                         setError(null);
                         setPhase("email");
                     }}
