@@ -1,7 +1,7 @@
-# FNDR Companion API + Mobile
+# Continuum Companion API + Mobile
 
-The Companion API is the local-network HTTP surface that the FNDR iPhone
-and Apple Watch apps talk to. The Mac runs FNDR as usual; mobile clients
+The Companion API is the local-network HTTP surface that the Continuum iPhone
+and Apple Watch apps talk to. The Mac runs Continuum as usual; mobile clients
 ask, search, capture notes, and pause capture by calling `/v1/...` over
 local Wi-Fi.
 
@@ -31,13 +31,13 @@ cargo test --lib                    # full Rust suite
 npm run typecheck
 npx vitest run src/domains/companion
 
-# FNDRKit package checks (CLI-safe, no XCTest dependency)
-cd ../apps/ios/FNDRKit
-swift run FNDRKitCheck
+# ContinuumKit package checks (CLI-safe, no XCTest dependency)
+cd ../apps/ios/ContinuumKit
+swift run ContinuumKitCheck
 
 # End-to-end smoke
 cd ../../
 npm run tauri dev                   # the companion API starts on a random port
-cat ~/.fndr/companion.json          # discovery file with host/port
+cat ~/.continuum/companion.json          # discovery file with host/port
 # then follow api-contract.md's curl pack
 ```

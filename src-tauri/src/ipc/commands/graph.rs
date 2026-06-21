@@ -230,7 +230,7 @@ async fn commit_graph_updates_internal(
     let elapsed_ms = t0.elapsed().as_millis() as u64;
     runtime_metrics::record_ms("graph.commit_ms", elapsed_ms);
     tracing::info!(
-        target: "fndr::graph_commit",
+        target: "continuum::graph_commit",
         merged_nodes,
         merged_edges,
         low_conf_nodes,

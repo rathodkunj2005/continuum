@@ -493,7 +493,7 @@ unsafe fn ax_linked_label(element: AXUIElementRef) -> Option<String> {
 
 // ── Core public functions ─────────────────────────────────────────────────────
 
-/// Returns true if FNDR has accessibility permission.
+/// Returns true if Continuum has accessibility permission.
 pub fn has_accessibility_permission() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
@@ -502,10 +502,10 @@ pub fn has_accessibility_permission() -> bool {
 /// Stores the target PID for later use by `inject_text`.
 ///
 /// Must be called while the target field still has focus (i.e., in the hotkey handler
-/// before the FNDR window is raised).
+/// before the Continuum window is raised).
 pub fn capture_focused_context() -> Result<FieldContext, String> {
     if !has_accessibility_permission() {
-        return Err("Accessibility permission not granted. Enable FNDR in System Settings → Privacy → Accessibility.".to_string());
+        return Err("Accessibility permission not granted. Enable Continuum in System Settings → Privacy → Accessibility.".to_string());
     }
 
     unsafe {
@@ -623,7 +623,7 @@ pub fn capture_focused_context() -> Result<FieldContext, String> {
 
 /// Inject text into the field that was focused at trigger time.
 /// Prefers system-style typing when the target app is still frontmost, with an
-/// AX value-set fallback for cases where FNDR had to take focus for preview.
+/// AX value-set fallback for cases where Continuum had to take focus for preview.
 pub fn inject_text_into_field(text: &str, prefer_typed: bool) -> Result<(), String> {
     let target = AUTOFILL_TARGET
         .lock()

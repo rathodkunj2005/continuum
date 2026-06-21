@@ -140,7 +140,7 @@ export function EngineMetricsCard({ enabled, title }: EngineMetricsCardProps) {
 
                     {system && (
                         <>
-                            <h4>FNDR process</h4>
+                            <h4>Continuum process</h4>
                             <div className="pipeline-engine-kv pipeline-engine-kv--metrics">
                                 <span>CPU</span>
                                 <strong>

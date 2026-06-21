@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod agent_regression {
-    use fndr_lib::agent::{build_agent_context_pack, AgentContextRequest, AgentMode};
-    use fndr_lib::AppState;
+    use continuum_lib::agent::{build_agent_context_pack, AgentContextRequest, AgentMode};
+    use continuum_lib::AppState;
     use std::sync::Arc;
     use tokio::runtime::Runtime;
 
@@ -64,8 +64,8 @@ mod agent_regression {
 
 #[cfg(test)]
 mod action_policy {
-    use fndr_lib::agent::actions::{policy_for_action, AgentActionKind};
-    use fndr_lib::agent::policy::{AgentMode, RiskLevel};
+    use continuum_lib::agent::actions::{policy_for_action, AgentActionKind};
+    use continuum_lib::agent::policy::{AgentMode, RiskLevel};
 
     #[test]
     fn ask_mode_blocks_all_actions() {
@@ -118,10 +118,10 @@ mod action_policy {
 
 #[cfg(test)]
 mod audit_persistence {
-    use fndr_lib::agent::audit::{
+    use continuum_lib::agent::audit::{
         append_agent_audit_record, list_agent_audit_runs, AgentAuditRecord, AgentRunStatus,
     };
-    use fndr_lib::agent::policy::AgentMode;
+    use continuum_lib::agent::policy::AgentMode;
 
     fn make_record(run_id: &str, mode: AgentMode, status: AgentRunStatus) -> AgentAuditRecord {
         AgentAuditRecord {
@@ -226,7 +226,7 @@ mod audit_persistence {
 
 #[cfg(test)]
 mod command_validation {
-    use fndr_lib::agent::validate_command;
+    use continuum_lib::agent::validate_command;
 
     #[test]
     fn git_status_is_allowed() {

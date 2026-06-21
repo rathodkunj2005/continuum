@@ -60,13 +60,13 @@ pub async fn collect_evidence(hits: &[FusedHit], store: &Store) -> EvidencePack 
     };
 
     for _ in &pack.files {
-        runtime_metrics::bump("fndr.retrieval.evidence.file.count");
+        runtime_metrics::bump("continuum.retrieval.evidence.file.count");
     }
     for _ in &pack.decisions {
-        runtime_metrics::bump("fndr.retrieval.evidence.decision.count");
+        runtime_metrics::bump("continuum.retrieval.evidence.decision.count");
     }
     for _ in &pack.commands {
-        runtime_metrics::bump("fndr.retrieval.evidence.command.count");
+        runtime_metrics::bump("continuum.retrieval.evidence.command.count");
     }
 
     pack
@@ -133,8 +133,8 @@ mod tests {
             clean_text: text.to_string(),
             snippet: text.to_string(),
             app_name: "Terminal".to_string(),
-            window_title: format!("FNDR {id}"),
-            project: "FNDR".to_string(),
+            window_title: format!("Continuum {id}"),
+            project: "Continuum".to_string(),
             timestamp: ts,
             embedding: vec![0.0; EMBEDDING_DIM],
             snippet_embedding: vec![0.0; EMBEDDING_DIM],
@@ -145,7 +145,7 @@ mod tests {
         };
         let mut rec_a = make(
             "m-1",
-            "FNDR planner debounce fix landed in plan.ts after the alpha bug",
+            "Continuum planner debounce fix landed in plan.ts after the alpha bug",
             now,
             vec!["plan.ts".to_string()],
         );
@@ -153,7 +153,7 @@ mod tests {
         rec_a.decisions = vec!["use debounce".to_string()];
         let rec_b = make(
             "m-2",
-            "FNDR follow-up: refactor plan.ts and fix.ts with the new debounce semantics",
+            "Continuum follow-up: refactor plan.ts and fix.ts with the new debounce semantics",
             now + 1_000,
             vec!["plan.ts".to_string(), "fix.ts".to_string()],
         );

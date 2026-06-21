@@ -14,7 +14,7 @@ export function AppShell() {
 
     return (
         <>
-            <div className="fndr-wallpaper-layer" aria-hidden>
+            <div className="continuum-wallpaper-layer" aria-hidden>
                 <MotionWallpaper
                     wallpaperId={wallpaperId}
                     auroraBg={aurora.bg}
@@ -22,7 +22,7 @@ export function AppShell() {
                     aurAcc={aurora.acc}
                 />
             </div>
-            <div className="fndr-app-chrome">
+            <div className="continuum-app-chrome">
                 <WorkModeShell />
             </div>
         </>

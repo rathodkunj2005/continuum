@@ -26,7 +26,7 @@ function makeCard(overrides: Partial<MemoryCardData> = {}): MemoryCardData {
         title: "Compact layout stress test",
         summary: "Why we replaced BM25-only retrieval with hybrid semantic search.",
         action: "Reviewed retrieval design",
-        context: ["FNDR"],
+        context: ["Continuum"],
         timestamp: new Date("2026-05-20T10:30:00Z").getTime(),
         app_name: "VS Code",
         window_title: "src/retrieval/hybrid.rs",
@@ -71,7 +71,7 @@ describe("MemoryCard — compact variant (narrow container)", () => {
         renderCompact(makeCard());
         const card = screen.getByTestId("memory-card");
         // time element should contain *some* text (day + clock)
-        const timeEl = card.querySelector(".fndr-mc-c-time");
+        const timeEl = card.querySelector(".continuum-mc-c-time");
         expect(timeEl).not.toBeNull();
         expect((timeEl as HTMLElement).textContent?.trim().length).toBeGreaterThan(0);
     });
@@ -101,9 +101,9 @@ describe("MemoryCard — compact variant (narrow container)", () => {
         const article = container.querySelector("[data-testid='memory-card']") as HTMLElement;
         // Verify none of the key cells have display:none via inline style
         const criticalSelectors = [
-            ".fndr-mc-c-frame",
-            ".fndr-mc-c-main",
-            ".fndr-mc-c-time",
+            ".continuum-mc-c-frame",
+            ".continuum-mc-c-main",
+            ".continuum-mc-c-time",
         ];
         for (const selector of criticalSelectors) {
             const el = article.querySelector(selector) as HTMLElement | null;
@@ -138,7 +138,7 @@ describe("MemoryCard — compact variant (narrow container)", () => {
     });
 
     it("renders single file name chip (basename only) for one file", () => {
-        const card = makeCard({ files_touched: ["/Users/dev/fndr/src/retrieval/hybrid.rs"] });
+        const card = makeCard({ files_touched: ["/Users/dev/continuum/src/retrieval/hybrid.rs"] });
         renderCompact(card);
         // The chip shows just the basename
         expect(screen.getByText("hybrid.rs")).toBeTruthy();
@@ -157,7 +157,7 @@ describe("MemoryCard — compact variant (narrow container)", () => {
     it("does NOT render files chip when files_touched is empty", () => {
         const card = makeCard({ files_touched: [] });
         renderCompact(card);
-        const chips = document.querySelectorAll(".fndr-mc-c-chip--files");
+        const chips = document.querySelectorAll(".continuum-mc-c-chip--files");
         expect(chips.length).toBe(0);
     });
 

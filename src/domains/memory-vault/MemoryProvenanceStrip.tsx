@@ -10,7 +10,7 @@ export function MemoryProvenanceStrip({ card }: Props) {
     const d = new Date(card.timestamp);
     const stamp = provenanceStatusLabel(card);
     return (
-        <dl className="fndr-mc-provenance">
+        <dl className="continuum-mc-provenance">
             <div>
                 <dt>Captured</dt>
                 <dd>

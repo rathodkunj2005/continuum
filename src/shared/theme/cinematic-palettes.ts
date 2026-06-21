@@ -32,7 +32,7 @@ export const PALETTES = {
     film: {
         name: "Old Film",
         year: 2026,
-        director: "FNDR",
+        director: "Continuum",
         description: "Personal memory, processed like film. Amber halation over deep umber.",
         shades: ["#1a1410", "#221915", "#2a2018", "#352a20", "#a37a30", "#d4a04a", "#e8b85a"],
         dark: {
@@ -399,11 +399,11 @@ export const PALETTES = {
             light: { bg: [1.000, 1.000, 1.000], mid: [0.290, 0.227, 0.149], acc: [0.627, 0.094, 0.094] },
         },
     },
-    fndrDark: {
+    continuumDark: {
         name: "Nocturne",
         year: 2026,
         director: "Anurup",
-        description: "The original quiet dark FNDR interface palette",
+        description: "The original quiet dark Continuum interface palette",
         shades: ["#0a0a0a", "#111111", "#151515", "#232323", "#6b7280", "#a1a1aa", "#f3f3f1"],
         dark: {
             bg: "#0a0a0a",
@@ -436,11 +436,11 @@ export const PALETTES = {
             light: { bg: [0.039, 0.039, 0.039], mid: [0.471, 0.471, 0.510], acc: [0.953, 0.953, 0.945] },
         },
     },
-    fndrLight: {
+    continuumLight: {
         name: "Lumen",
         year: 2026,
         director: "Anurup",
-        description: "The original clean light FNDR interface palette",
+        description: "The original clean light Continuum interface palette",
         shades: ["#f5f5f7", "#ffffff", "#f0f0f2", "#d8d8dc", "#8e8e93", "#555560", "#1a1a1a"],
         dark: {
             bg: "#f5f5f7",

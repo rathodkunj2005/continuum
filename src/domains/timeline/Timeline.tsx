@@ -49,7 +49,7 @@ function isLowSignalPreview(summary: string, appName: string): boolean {
         return true;
     }
     const app = normalizePreview(appName);
-    if (normalized === app || normalized === "fndr" || normalized === "codex") {
+    if (normalized === app || normalized === "continuum" || normalized === "codex") {
         return true;
     }
     return normalized.split(" ").length <= 2;
@@ -88,7 +88,7 @@ export function Timeline({
             return (
                 <div className="timeline-state timeline-welcome">
                     <div className="welcome-icon">⌘</div>
-                    <h2>Welcome to FNDR</h2>
+                    <h2>Welcome to Continuum</h2>
                     <p>Your memories are being captured. Type a query and press Enter to search.</p>
                 </div>
             );

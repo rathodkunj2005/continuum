@@ -1,8 +1,8 @@
-# FNDR — shared context for agents
+# Continuum — shared context for agents
 
 Use this file with **`AGENTS.md`** and the portable skills under `.agent-skills/portable-engineering/`.
 
-## What FNDR is
+## What Continuum is
 
 A macOS Tauri application that builds a **searchable local memory** from screen context, meetings, tasks, downloads, and related signals. See `README.md` for product areas and user-facing capabilities.
 

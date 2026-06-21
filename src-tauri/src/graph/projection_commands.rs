@@ -94,13 +94,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_memory_graph_context_with_query() {
-        let result = get_memory_graph_context(None, Some("FNDR".to_string())).await;
+        let result = get_memory_graph_context(None, Some("Continuum".to_string())).await;
 
         assert!(result.is_ok());
         let graph = result.unwrap();
         assert_eq!(
             graph.active_focus.as_ref().unwrap().query,
-            Some("FNDR".to_string())
+            Some("Continuum".to_string())
         );
     }
 }

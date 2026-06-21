@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FNDR local transcription runner.
+"""Continuum local transcription runner.
 
 Transcription strategy (in priority order):
 1. NVIDIA NeMo Parakeet TDT 0.6B v3 (nvidia/parakeet-tdt-0.6b-v3) — best quality

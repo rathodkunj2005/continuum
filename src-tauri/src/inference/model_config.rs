@@ -1,4 +1,4 @@
-pub const FNDR_MODEL_PROFILE: &str = "m1_8gb_default";
+pub const CONTINUUM_MODEL_PROFILE: &str = "m1_8gb_default";
 
 pub const MULTIMODAL_MODEL_REPO: &str = "Qwen/Qwen3-VL-2B-Instruct-GGUF";
 pub const MULTIMODAL_MODEL_QUANT: &str = "Q4_K_M";

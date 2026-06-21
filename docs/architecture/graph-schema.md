@@ -1,4 +1,4 @@
-# FNDR insight knowledge graph (LanceDB)
+# Continuum insight knowledge graph (LanceDB)
 
 This document describes the **insight** graph persisted in LanceDB alongside memories. It is distinct from the **legacy** graph (`nodes` / `edges` tables with string IDs) used for timeline linking.
 

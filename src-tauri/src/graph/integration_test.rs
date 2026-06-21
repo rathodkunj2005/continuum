@@ -11,7 +11,7 @@ mod tests {
                 node_type: types::NodeType::Memory,
                 title: "Task 1: Implement graph backend".to_string(),
                 summary: Some("Building the Rust graph projection layer".to_string()),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 topic: Some("Work/Code".to_string()),
                 importance_score: Some(0.9),
                 confidence_score: Some(0.95),
@@ -23,7 +23,7 @@ mod tests {
                 node_type: types::NodeType::Memory,
                 title: "Task 2: Implement frontend rendering".to_string(),
                 summary: Some("Building the React/Three.js visualization".to_string()),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 topic: Some("Work/Code".to_string()),
                 importance_score: Some(0.8),
                 confidence_score: Some(0.95),
@@ -58,25 +58,25 @@ mod tests {
             "Communities should be derived"
         );
         assert!(
-            graph.communities.iter().any(|c| c.label.contains("FNDR")),
-            "FNDR community should exist"
+            graph.communities.iter().any(|c| c.label.contains("Continuum")),
+            "Continuum community should exist"
         );
 
         // Verify stable anchors
-        let fndr_community = graph
+        let continuum_community = graph
             .communities
             .iter()
-            .find(|c| c.label.contains("FNDR"))
+            .find(|c| c.label.contains("Continuum"))
             .unwrap();
-        let anchor1 = fndr_community.anchor.clone();
+        let anchor1 = continuum_community.anchor.clone();
 
         // Re-derive and verify same anchor (determinism)
         let communities2 = projection::derive_communities(&nodes);
-        let fndr_community2 = communities2
+        let continuum_community2 = communities2
             .iter()
-            .find(|c| c.label.contains("FNDR"))
+            .find(|c| c.label.contains("Continuum"))
             .unwrap();
-        let anchor2 = fndr_community2.anchor.clone();
+        let anchor2 = continuum_community2.anchor.clone();
 
         assert!(
             (anchor1.x - anchor2.x).abs() < 0.001,
@@ -129,20 +129,20 @@ mod tests {
         // Step 5: Compute relevance scores for a query
         let mut graph_context = graph.clone();
         for node in &mut graph_context.nodes {
-            node.relevance_score = Some(projection_scoring::compute_relevance_score(node, "FNDR"));
+            node.relevance_score = Some(projection_scoring::compute_relevance_score(node, "Continuum"));
         }
 
-        let fndr_nodes: Vec<_> = graph_context
+        let continuum_nodes: Vec<_> = graph_context
             .nodes
             .iter()
-            .filter(|n| n.project == Some("FNDR".to_string()))
+            .filter(|n| n.project == Some("Continuum".to_string()))
             .collect();
 
-        for node in fndr_nodes {
+        for node in continuum_nodes {
             let relevance = node.relevance_score.unwrap_or(0.0);
             assert!(
                 relevance > 0.0,
-                "FNDR nodes should have positive relevance for 'FNDR' query"
+                "Continuum nodes should have positive relevance for 'Continuum' query"
             );
         }
     }

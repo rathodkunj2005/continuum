@@ -1,11 +1,11 @@
 /* =============================================================
-   FNDR brand-only tokens layered on top of cinematic-palettes.ts.
+   Continuum brand-only tokens layered on top of cinematic-palettes.ts.
    The --cp-* vars (bg, accent, fg) come from applyPalette("film").
    Tokens here are brand atmospherics (halation, eases, fonts,
    font-family) and live in :root because they're palette-invariant.
 
    Immersive design system tokens (--bg/--fg/--accent semantic vars
-   and the type/spacing scale) are scoped to .fndr-immersive-root so
+   and the type/spacing scale) are scoped to .continuum-immersive-root so
    they do not collide with the existing app's --bg-primary/--accent
    tokens in app/styles/index.css.
    ============================================================= */
@@ -36,9 +36,9 @@
     --film-font-mono: "Cutive Mono", "Courier New", ui-monospace, monospace;
 
     /* Futuristic OS chrome — circular glass controls + pill inputs */
-    --fndr-os-glass-size: 44px;
-    --fndr-os-pill-height: 58px;
-    --fndr-os-pill-radius: 29px;
+    --continuum-os-glass-size: 44px;
+    --continuum-os-pill-height: 58px;
+    --continuum-os-pill-radius: 29px;
 
     /* Motion — easing */
     --film-ease-shutter: cubic-bezier(0.22, 1, 0.36, 1);
@@ -149,7 +149,7 @@
 }
 
 /* =============================================================
-   Semantic FNDR design-system tokens at :root.
+   Semantic Continuum design-system tokens at :root.
 
    --bg / --fg / --accent forward to the active cinematic palette
    (--cp-*), which applyPalette() injects on :root. The --film-* /
@@ -157,7 +157,7 @@
    palette definition and static helpers; they must not override
    user-selected palettes.
 
-   The .fndr-immersive-root block in ScrollModeShell.css repeats
+   The .continuum-immersive-root block in ScrollModeShell.css repeats
    this mapping for immersive isolation.
    ============================================================= */
 :root,
@@ -208,7 +208,7 @@
     --font-mono: var(--film-font-mono);
 }
 
-.fndr-immersive-root {
+.continuum-immersive-root {
     background: transparent;
     color: var(--fg);
     font-family: var(--font-body);
@@ -218,16 +218,16 @@
    does the JS-side disabling; this ensures CSS-only animations also
    respect the user's preference. */
 @media (prefers-reduced-motion: reduce) {
-    .fndr-immersive-root {
+    .continuum-immersive-root {
         --film-dur-fast: 0ms;
         --film-dur-base: 0ms;
         --film-dur-hover: 0ms;
         --film-dur-slow: 0ms;
         --film-dur-cinema: 0ms;
     }
-    .fndr-immersive-root *,
-    .fndr-immersive-root *::before,
-    .fndr-immersive-root *::after {
+    .continuum-immersive-root *,
+    .continuum-immersive-root *::before,
+    .continuum-immersive-root *::after {
         animation-duration: 0.001ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;

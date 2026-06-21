@@ -1,4 +1,4 @@
-//! POST /v1/ask — mobile Ask FNDR entrypoint.
+//! POST /v1/ask — mobile Ask Continuum entrypoint.
 //!
 //! Wraps the existing phase-3 query pipeline (`context_runtime::run_query`) and
 //! returns a mobile-shaped answer + source-card DTO bundle.

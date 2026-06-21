@@ -1,6 +1,6 @@
 //! Todo / task Tauri commands.
 
-use super::common::is_internal_fndr_result;
+use super::common::is_internal_continuum_result;
 use crate::storage::{MeetingSession, SearchResult, Task, TaskType};
 use crate::AppState;
 use std::collections::HashSet;
@@ -248,7 +248,7 @@ fn first_sentence(text: &str) -> String {
 }
 
 fn build_memory_task_candidate(memory: &SearchResult) -> Option<MemoryTaskCandidate> {
-    if is_internal_fndr_result(memory) {
+    if is_internal_continuum_result(memory) {
         return None;
     }
 

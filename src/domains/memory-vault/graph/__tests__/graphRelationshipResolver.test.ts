@@ -70,10 +70,10 @@ describe("explainEdge", () => {
     });
 
     it("appends shared project from both nodes' metadata", () => {
-        const source = mkNode({ id: "n1", label: "A", metadata: { project: "Work / FNDR" } });
-        const target = mkNode({ id: "n2", label: "B", metadata: { project: "Work / FNDR" } });
+        const source = mkNode({ id: "n1", label: "A", metadata: { project: "Work / Continuum" } });
+        const target = mkNode({ id: "n2", label: "B", metadata: { project: "Work / Continuum" } });
         const reasons = explainEdge(mkEdge({ edge_type: "PartOf" }), source, target);
-        expect(reasons.map((r) => r.text)).toContain("shared project · Work / FNDR");
+        expect(reasons.map((r) => r.text)).toContain("shared project · Work / Continuum");
     });
 
     it("appends shared topic from both nodes' metadata", () => {

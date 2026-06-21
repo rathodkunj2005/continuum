@@ -167,7 +167,7 @@ export function AutofillOverlay() {
     async function runResolution(context: FieldContext, nextQuery?: string) {
         const pendingLabel = (nextQuery ?? query ?? labelFromContext(context)).trim();
         if (!pendingLabel) {
-            showManual(context, "No field label was detected yet. Type what you want FNDR to find.");
+            showManual(context, "No field label was detected yet. Type what you want Continuum to find.");
             return;
         }
 
@@ -245,7 +245,7 @@ export function AutofillOverlay() {
                     ? {
                         kind: "searching",
                         label: "Preparing autofill",
-                        appName: "FNDR",
+                        appName: "Continuum",
                         windowTitle: "",
                         contextHint: "",
                     }
@@ -266,7 +266,7 @@ export function AutofillOverlay() {
                     ? {
                         kind: "searching",
                         label: payload.message || "Searching memories",
-                        appName: "FNDR",
+                        appName: "Continuum",
                         windowTitle: "",
                         contextHint: "",
                     }
@@ -450,7 +450,7 @@ export function AutofillOverlay() {
     const contextAppName =
         phase.kind === "manual" || phase.kind === "preview" || phase.kind === "searching"
             ? phase.appName
-            : contextRef.current?.app_name ?? "FNDR";
+            : contextRef.current?.app_name ?? "Continuum";
     const contextWindowTitle =
         phase.kind === "manual" || phase.kind === "preview" || phase.kind === "searching"
             ? phase.windowTitle
@@ -477,12 +477,12 @@ export function AutofillOverlay() {
     }
 
     return (
-        <div className="af-overlay" role="dialog" aria-modal="false" aria-label="FNDR Autofill">
+        <div className="af-overlay" role="dialog" aria-modal="false" aria-label="Continuum Autofill">
             {showSearchSurface && (
                 <div className={`af-card af-main-card ${phase.kind}`}>
                     <div className="af-header">
                         <div className="af-brand">
-                            <span className="af-brand-mark">FNDR</span>
+                            <span className="af-brand-mark">Continuum</span>
                             <span className="af-brand-state">
                                 {phase.kind === "preview"
                                     ? "Smart Fill"
@@ -528,7 +528,7 @@ export function AutofillOverlay() {
                     </form>
 
                     <div className="af-context-row">
-                        <span className="af-context-app">{contextAppName || "FNDR"}</span>
+                        <span className="af-context-app">{contextAppName || "Continuum"}</span>
                         <span className="af-context-window">{contextWindowTitle}</span>
                     </div>
 
@@ -554,7 +554,7 @@ export function AutofillOverlay() {
                                 </div>
                             )}
                             <div className="af-footer-hint">
-                                FNDR is using the active field plus nearby screen context to rank matches.
+                                Continuum is using the active field plus nearby screen context to rank matches.
                             </div>
                         </>
                     )}
@@ -564,7 +564,7 @@ export function AutofillOverlay() {
                             <div className="af-empty-state">
                                 <span className="af-empty-title">Search memory for this field</span>
                                 <span className="af-empty-copy">
-                                    FNDR needs a better search phrase for this form input. Edit the query and press Enter.
+                                    Continuum needs a better search phrase for this form input. Edit the query and press Enter.
                                 </span>
                             </div>
                             {phase.message && (
@@ -605,7 +605,7 @@ export function AutofillOverlay() {
 
                             {selectedCandidate.confidence < phase.resolution.auto_inject_threshold && (
                                 <div className="af-banner af-banner-warn">
-                                    Context was strong enough to rank this memory first, but FNDR wants confirmation before inserting it.
+                                    Context was strong enough to rank this memory first, but Continuum wants confirmation before inserting it.
                                 </div>
                             )}
 

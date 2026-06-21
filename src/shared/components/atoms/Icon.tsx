@@ -72,7 +72,7 @@ interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
 export function Icon({ name, size = 16, className, ...rest }: IconProps) {
     return (
         <svg
-            className={className ? `fndr-icon ${className}` : "fndr-icon"}
+            className={className ? `continuum-icon ${className}` : "continuum-icon"}
             viewBox="0 0 24 24"
             width={size}
             height={size}

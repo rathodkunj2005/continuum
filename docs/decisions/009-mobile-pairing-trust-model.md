@@ -1,6 +1,6 @@
 # 009: Mobile pairing trust model for Companion API
 
-FNDR mobile pairing must stay local-first, revocable, and simple enough to
+Continuum mobile pairing must stay local-first, revocable, and simple enough to
 operate without cloud identity.
 
 ## Decision

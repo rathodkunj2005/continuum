@@ -155,7 +155,7 @@ pub fn candidate_model_dirs(app_data_dir: Option<&Path>) -> Vec<PathBuf> {
     }
 
     if let Some(data_dir) = dirs::data_dir() {
-        dirs.push(data_dir.join("fndr/models"));
+        dirs.push(data_dir.join("continuum/models"));
     }
 
     let mut seen = HashSet::new();
@@ -210,7 +210,7 @@ mod tests {
     use super::*;
 
     fn make_temp_dir() -> PathBuf {
-        let path = std::env::temp_dir().join(format!("fndr-model-test-{}", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("continuum-model-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         path
     }

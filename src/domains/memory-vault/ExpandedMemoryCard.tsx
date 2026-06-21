@@ -3,7 +3,7 @@ import type {
     EvidencePack,
     MemoryCard as MemoryCardData,
 } from "../../shared/ipc/tauri";
-import { fndrGetMemorySubgraph, fndrGetRelatedMemories } from "../../shared/ipc/tauri";
+import { continuumGetMemorySubgraph, continuumGetRelatedMemories } from "../../shared/ipc/tauri";
 import { CopyForAgentButton } from "./CopyForAgentButton";
 import { SurfacingReason } from "./SurfacingReason";
 import { MemoryCard } from "./MemoryCard";
@@ -47,10 +47,10 @@ export function ExpandedMemoryCard({
 
     useEffect(() => {
         let cancelled = false;
-        void fndrGetRelatedMemories(card.id, 4).then((cards) => {
+        void continuumGetRelatedMemories(card.id, 4).then((cards) => {
             if (!cancelled) setRelated(cards);
         });
-        void fndrGetMemorySubgraph([card.id], 2).then((sub) => {
+        void continuumGetMemorySubgraph([card.id], 2).then((sub) => {
             if (!cancelled)
                 setSubgraph({ node_count: sub.node_count, edge_count: sub.edge_count });
         });
@@ -77,7 +77,7 @@ export function ExpandedMemoryCard({
     const evidenceNode =
         evidence ? (
             <section>
-                <h4 className="fndr-emc-section-heading">Evidence</h4>
+                <h4 className="continuum-emc-section-heading">Evidence</h4>
                 <EvidenceList label="Files" items={evidence.files.map((f) => f.path)} />
                 <EvidenceList
                     label="Decisions"
@@ -96,11 +96,11 @@ export function ExpandedMemoryCard({
     const chunkEvidenceNode =
         Array.isArray(card.chunk_evidence) && card.chunk_evidence.length > 0 ? (
             <section>
-                <h4 className="fndr-emc-section-heading">Matched chunks</h4>
-                <ul className="fndr-emc-chunks">
+                <h4 className="continuum-emc-section-heading">Matched chunks</h4>
+                <ul className="continuum-emc-chunks">
                     {card.chunk_evidence.slice(0, 3).map((chunk) => (
                         <li key={chunk.chunk_id}>
-                            <span className="fndr-emc-chunk-meta">
+                            <span className="continuum-emc-chunk-meta">
                                 Chunk {chunk.chunk_index + 1}
                                 {Number.isFinite(chunk.score)
                                     ? ` · ${(chunk.score * 100).toFixed(0)}%`
@@ -115,8 +115,8 @@ export function ExpandedMemoryCard({
 
     const subgraphNode = (
         <section>
-            <h4 className="fndr-emc-section-heading">Subgraph</h4>
-            <p className="fndr-emc-meta" data-testid="fndr-subgraph-summary">
+            <h4 className="continuum-emc-section-heading">Subgraph</h4>
+            <p className="continuum-emc-meta" data-testid="continuum-subgraph-summary">
                 {subgraph
                     ? `${subgraph.node_count} nodes · ${subgraph.edge_count} edges`
                     : "Loading subgraph…"}
@@ -127,8 +127,8 @@ export function ExpandedMemoryCard({
     const relatedNode =
         related.length > 0 ? (
             <section>
-                <h4 className="fndr-emc-section-heading">Related memories</h4>
-                <ul className="fndr-emc-related">
+                <h4 className="continuum-emc-section-heading">Related memories</h4>
+                <ul className="continuum-emc-related">
                     {related.map((r) => (
                         <li key={r.id}>{r.title}</li>
                     ))}
@@ -156,18 +156,18 @@ export function ExpandedMemoryCard({
         <div
             role="dialog"
             aria-label={`Expanded memory: ${card.title}`}
-            className="fndr-emc-overlay"
+            className="continuum-emc-overlay"
             onClick={onClose}
         >
             <div
-                className="fndr-emc-shell"
+                className="continuum-emc-shell"
                 onClick={(e) => e.stopPropagation()}
             >
                 <button
                     type="button"
                     onClick={onClose}
                     aria-label="Close"
-                    className="fndr-emc-close"
+                    className="continuum-emc-close"
                 >
                     ×
                 </button>
@@ -177,13 +177,13 @@ export function ExpandedMemoryCard({
                     insightsSlot={combinedInsights}
                     evidenceSlot={combinedEvidence}
                     relatedSlot={
-                        <div className="fndr-emc-extra-actions">
+                        <div className="continuum-emc-extra-actions">
                             <CopyForAgentButton query={card.title} />
                         </div>
                     }
                     footerSlot={
                         debugSlot || similarSlot ? (
-                            <div className="fndr-emc-drawers">
+                            <div className="continuum-emc-drawers">
                                 {debugSlot}
                                 {similarSlot}
                             </div>
@@ -202,11 +202,11 @@ export function ExpandedMemoryCard({
 function EvidenceList({ label, items }: { label: string; items: string[] }) {
     if (items.length === 0) return null;
     return (
-        <div className="fndr-emc-evidence-row">
+        <div className="continuum-emc-evidence-row">
             <strong>{label}:</strong>{" "}
             <span>{items.slice(0, 5).join(", ")}</span>
             {items.length > 5 && (
-                <span className="fndr-emc-evidence-more"> +{items.length - 5} more</span>
+                <span className="continuum-emc-evidence-more"> +{items.length - 5} more</span>
             )}
         </div>
     );

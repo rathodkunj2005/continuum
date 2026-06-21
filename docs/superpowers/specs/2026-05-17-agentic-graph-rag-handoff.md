@@ -4,7 +4,7 @@
 
 Branch/worktree:
 - Branch: `codex/agentic-graph-rag-phase0`
-- Worktree: `~/.config/superpowers/worktrees/fndr/codex-agentic-graph-rag-phase0`
+- Worktree: `~/.config/superpowers/worktrees/continuum/codex-agentic-graph-rag-phase0`
 - Plan: `docs/superpowers/plans/2026-05-17-agentic-graph-rag.md`
 
 What changed:
@@ -28,9 +28,9 @@ What changed:
 Verification run so far:
 - `npm install`
 - `npm run build` (needed because fresh worktree lacked `dist/` for Tauri macro)
-- Baseline before edits: `cargo test -p fndr memory::graph::` passed 11 graph tests after building `dist/`.
-- After edits: `cargo test -p fndr graph::` passed 20 tests, 1 ignored skeleton test.
-- After edits: `cargo test -p fndr capture::entity_extractor` passed 8 tests.
+- Baseline before edits: `cargo test -p continuum memory::graph::` passed 11 graph tests after building `dist/`.
+- After edits: `cargo test -p continuum graph::` passed 20 tests, 1 ignored skeleton test.
+- After edits: `cargo test -p continuum capture::entity_extractor` passed 8 tests.
 - `rg "memory::graph|storage::graph_store" src-tauri/src src-tauri/tests` returned no hits.
 - `npm test -- src/domains/memory-vault/MemoryCardsPanel.test.tsx` passed after updating a stale vault-only UI test that expected a removed "All memories" tab.
 - `make test` passed: TypeScript typecheck, 74 Vitest tests, full Rust `cargo test`, and doc tests.
@@ -66,7 +66,7 @@ Notes for future agents:
 
 Branch/worktree:
 - Branch: `codex/agentic-graph-rag-phase1`
-- Worktree: `~/.config/superpowers/worktrees/fndr/codex-agentic-graph-rag-phase1`
+- Worktree: `~/.config/superpowers/worktrees/continuum/codex-agentic-graph-rag-phase1`
 - Plan: `docs/superpowers/plans/2026-05-17-agentic-graph-rag.md`
 
 What changed:
@@ -74,15 +74,15 @@ What changed:
 - Added `src-tauri/src/context_runtime/graph_plan.rs` with per-intent graph seed kinds, allowed-edge whitelists, and max-hop rules.
 - Exposed the planner modules from `src-tauri/src/context_runtime/mod.rs`.
 - Promoted the existing hybrid-search `QueryProfile` / `QueryIntent` API for planner reuse and re-exported it through `src-tauri/src/search/query_processor.rs` and `src-tauri/src/search/mod.rs`.
-- Added `InferenceEngine::refine_query_plan(...)` with a 400ms-compatible timeout, strict JSON-object validation, and `fndr.retrieval.planner.llm.{success,timeout,fail}` counters.
+- Added `InferenceEngine::refine_query_plan(...)` with a 400ms-compatible timeout, strict JSON-object validation, and `continuum.retrieval.planner.llm.{success,timeout,fail}` counters.
 - Added `refine_plan_with_llm(...)` and `apply_refinement_json(...)` so optional LLM output can update only present fields in-place.
-- Added `fndr.retrieval.planner.ms` latency recording for the rule planner.
+- Added `continuum.retrieval.planner.ms` latency recording for the rule planner.
 - Added `src-tauri/tests/query_plan_rules.rs` with 10 planner-rule tests plus a model-skipping LLM smoke test.
 
 Verification run:
-- `cargo test -p fndr --test query_plan_rules` passed: 11 tests.
-- `cargo test -p fndr context_runtime::query_plan:: -- --nocapture` passed and printed 6 representative `QueryPlan` JSON fixtures.
-- `cargo test -p fndr context_runtime::graph_plan::` passed: 2 tests.
+- `cargo test -p continuum --test query_plan_rules` passed: 11 tests.
+- `cargo test -p continuum context_runtime::query_plan:: -- --nocapture` passed and printed 6 representative `QueryPlan` JSON fixtures.
+- `cargo test -p continuum context_runtime::graph_plan::` passed: 2 tests.
 
 Where to look next:
 - Phase 2 starts in `docs/superpowers/plans/2026-05-17-agentic-graph-rag.md` under "Phase 2 - Modular retrieval routes".

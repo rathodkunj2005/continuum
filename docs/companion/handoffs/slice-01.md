@@ -12,7 +12,7 @@
 - Endpoints live: `GET /`, `GET /v1/health`, `POST /v1/pair/start`,
   `POST /v1/pair/complete`, `GET /v1/status`, `POST /v1/capture/control`,
   `POST /v1/memories/manual`.
-- Discovery file: `~/.fndr/companion.json` (host, port, cert fingerprint,
+- Discovery file: `~/.continuum/companion.json` (host, port, cert fingerprint,
   Mac name, app version).
 - Tauri commands for the desktop UI: `companion_get_status`,
   `companion_get_endpoint`, `companion_start_server`, `companion_stop_server`,
@@ -66,14 +66,14 @@
   should treat them as a known baseline and not block on them, until that
   spawned task lands.
 - The Companion API spawns on Tauri app boot. It picks a random free port
-  (port=0). Look in `~/.fndr/companion.json` for the value; the React
+  (port=0). Look in `~/.continuum/companion.json` for the value; the React
   panel surfaces it via `companion_get_status`.
 
 ## Open seams for slice 2 (iOS shell + pairing)
 
 - `apps/ios/` does not exist yet. Create the Xcode project (iOS 17+,
   watchOS 10+ target) with a single SwiftUI app target. Make the shared
-  `FNDRKit` Swift package house the networking layer.
+  `ContinuumKit` Swift package house the networking layer.
 - The QR payload is already a JSON string (`pairing_code`, `host`, `port`,
   `tls`, `cert_fingerprint_sha256`). iOS needs only to scan + POST.
 - For TLS pinning, iOS should pin to `cert_fingerprint_sha256` (a sha256
@@ -90,7 +90,7 @@
 - Ask / search routes (slices 3 / 4).
 - mDNS, remote relay (P2).
 - Per-permission allowlist on tokens (P2).
-- Encrypted-at-rest token storage on the Mac (relies on `~/.fndr/`
+- Encrypted-at-rest token storage on the Mac (relies on `~/.continuum/`
   filesystem permissions today).
 - iOS Xcode project + SwiftUI code (slice 2).
 - TestFlight pipeline (slice 7).

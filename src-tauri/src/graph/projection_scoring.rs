@@ -100,11 +100,11 @@ mod tests {
         let node = GraphNode {
             id: "test".to_string(),
             node_type: crate::graph::types::NodeType::Memory,
-            title: "FNDR Graph Implementation".to_string(),
+            title: "Continuum Graph Implementation".to_string(),
             ..Default::default()
         };
 
-        let score = compute_relevance_score(&node, "FNDR");
+        let score = compute_relevance_score(&node, "Continuum");
         assert!(score > 0.5);
 
         let score = compute_relevance_score(&node, "unrelated");

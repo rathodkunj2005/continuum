@@ -1,19 +1,19 @@
 [package]
-name = "fndr"
+name = "continuum"
 version = "0.2.11"
 edition = "2021"
-description = "FNDR - Privacy-first local memory search"
-authors = ["FNDR Team"]
+description = "Continuum - Privacy-first local memory search"
+authors = ["Continuum Team"]
 license = "MIT"
 repository = ""
-default-run = "fndr"
+default-run = "continuum"
 
 [lib]
-name = "fndr_lib"
+name = "continuum_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "fndr"
+name = "continuum"
 path = "src/main.rs"
 
 [build-dependencies]

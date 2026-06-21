@@ -74,7 +74,7 @@ export function FocusModePanel({ isVisible, onClose }: FocusModePanelProps) {
             <header className="fm-header">
                 <div>
                     <h2>Focus Mode</h2>
-                    <p>Semantic drift detection — FNDR alerts you when your screen activity drifts from your goal</p>
+                    <p>Semantic drift detection — Continuum alerts you when your screen activity drifts from your goal</p>
                 </div>
                 <button className="ui-action-btn fm-close-btn" onClick={onClose}>X</button>
             </header>
@@ -106,7 +106,7 @@ export function FocusModePanel({ isVisible, onClose }: FocusModePanelProps) {
                 <div className="fm-explainer">
                     <p>
                         Each screen capture is embedded and compared to your focus task. After
-                        3 consecutive off-task captures FNDR notifies you to refocus.
+                        3 consecutive off-task captures Continuum notifies you to refocus.
                     </p>
                 </div>
 
@@ -153,7 +153,7 @@ export function FocusModePanel({ isVisible, onClose }: FocusModePanelProps) {
                 {/* Drift history placeholder */}
                 <div className="fm-tips">
                     <div className="fm-tip">Keep your task description specific — e.g. "debug the login flow" works better than "coding".</div>
-                    <div className="fm-tip">FNDR uses the same embedding model as search to compare screen context vs your task.</div>
+                    <div className="fm-tip">Continuum uses the same embedding model as search to compare screen context vs your task.</div>
                     <div className="fm-tip">Drift alerts won't fire if the AI model isn't loaded yet.</div>
                 </div>
             </div>

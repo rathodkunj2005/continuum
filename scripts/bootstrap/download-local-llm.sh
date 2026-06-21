@@ -3,7 +3,7 @@
 # Advanced users can instead download Qwen3-VL 4B from the in-app model picker.
 set -euo pipefail
 
-MODEL_DIR="${1:-$HOME/Library/Application Support/com.fndr.app/models}"
+MODEL_DIR="${1:-$HOME/Library/Application Support/com.continuum.app/models}"
 mkdir -p "$MODEL_DIR"
 
 LLM_URL="https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"

@@ -442,7 +442,7 @@ pub async fn build_context_pack(
         });
     let do_not_do = vec![
         "Do not store or request raw screenshots by default.".to_string(),
-        "Do not treat FNDR context as permission to mutate memory directly.".to_string(),
+        "Do not treat Continuum context as permission to mutate memory directly.".to_string(),
     ];
     let included = build_included_reasons(
         &events,
@@ -890,7 +890,7 @@ pub fn render_pack_markdown(pack: &ContextPack) -> String {
     };
 
     format!(
-        "# FNDR Context Pack\n\n\
+        "# Continuum Context Pack\n\n\
 Project: {}\n\
 Agent type: {}\n\
 Tokens used: {}/{}\n\n\
@@ -2753,7 +2753,7 @@ fn build_pack_summary(project: Option<&str>, events: &[ActivityEvent], query: &s
             events.len()
         );
     }
-    "FNDR does not have enough runtime context yet.".to_string()
+    "Continuum does not have enough runtime context yet.".to_string()
 }
 
 fn apply_section_budgets(pack: &mut ContextPack) {
@@ -3186,8 +3186,8 @@ mod tests {
         let mut memory = record();
         memory.project = "Atlas".to_string();
         memory.files_touched =
-            vec!["/Users/anurupkumar/fndr/src-tauri/src/search/hybrid.rs".to_string()];
-        memory.url = Some("https://github.com/openai/fndr/issues/52".to_string());
+            vec!["/Users/anurupkumar/continuum/src-tauri/src/search/hybrid.rs".to_string()];
+        memory.url = Some("https://github.com/openai/continuum/issues/52".to_string());
 
         assert_eq!(detect_project_for_record(&memory).as_deref(), Some("Atlas"));
         assert_eq!(detect_repo_for_record(&memory).as_deref(), Some("atlas"));
@@ -3197,13 +3197,13 @@ mod tests {
     fn file_paths_infer_project_before_window_or_url() {
         let mut memory = record();
         memory.files_touched = vec![
-            "/Users/anurupkumar/fndr/src-tauri/src/search/hybrid.rs".to_string(),
-            "/Users/anurupkumar/fndr/src/domains/workspace/AgentPanel.tsx".to_string(),
+            "/Users/anurupkumar/continuum/src-tauri/src/search/hybrid.rs".to_string(),
+            "/Users/anurupkumar/continuum/src/domains/workspace/AgentPanel.tsx".to_string(),
         ];
         memory.url = Some("https://github.com/example/other-repo/issues/1".to_string());
 
-        assert_eq!(detect_project_for_record(&memory).as_deref(), Some("FNDR"));
-        assert_eq!(detect_repo_for_record(&memory).as_deref(), Some("fndr"));
+        assert_eq!(detect_project_for_record(&memory).as_deref(), Some("Continuum"));
+        assert_eq!(detect_repo_for_record(&memory).as_deref(), Some("continuum"));
     }
 
     #[test]
@@ -3212,10 +3212,10 @@ mod tests {
         memory.files_touched.clear();
         memory.window_title = "Issue 52 - browser".to_string();
         memory.app_name = "Google Chrome".to_string();
-        memory.url = Some("https://github.com/openai/fndr/pull/52".to_string());
+        memory.url = Some("https://github.com/openai/continuum/pull/52".to_string());
 
-        assert_eq!(detect_project_for_record(&memory).as_deref(), Some("FNDR"));
-        assert_eq!(detect_repo_for_record(&memory).as_deref(), Some("fndr"));
+        assert_eq!(detect_project_for_record(&memory).as_deref(), Some("Continuum"));
+        assert_eq!(detect_repo_for_record(&memory).as_deref(), Some("continuum"));
     }
 
     #[test]

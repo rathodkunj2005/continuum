@@ -6,7 +6,7 @@ Accepted — design documented; implementation split across Subagents 6, 7, 8.
 
 ## Decision
 
-FNDR will evolve its retrieval pipeline to a **parent-child chunk RAG** model: each screen-capture memory is the **parent** (`MemoryRecord`), and the text it contains is split into overlapping **child chunks** (`MemoryChunkRecord`, added by Subagent 7). At query time the chunk index is searched first for precision; the matched chunk's parent record is then fetched for full-context card synthesis. This replaces the current single-record vector search, which embeds the entire memory text as one vector and loses fine-grained signal on long or dense OCR captures.
+Continuum will evolve its retrieval pipeline to a **parent-child chunk RAG** model: each screen-capture memory is the **parent** (`MemoryRecord`), and the text it contains is split into overlapping **child chunks** (`MemoryChunkRecord`, added by Subagent 7). At query time the chunk index is searched first for precision; the matched chunk's parent record is then fetched for full-context card synthesis. This replaces the current single-record vector search, which embeds the entire memory text as one vector and loses fine-grained signal on long or dense OCR captures.
 
 ---
 
@@ -89,7 +89,7 @@ Both tables share the same model and dimension contract so a single ONNX model s
 
 Child chunks are derived exclusively from `clean_text` — the sanitized OCR output that has already passed through the app-aware noise filter, blocklist exclusion, and privacy gating defined in ADR 004. Specifically:
 
-- Blocked apps, internal FNDR windows, blocked URLs, and sensitive-context screens are excluded **before** OCR runs; no chunk is ever written for a suppressed capture.
+- Blocked apps, internal Continuum windows, blocked URLs, and sensitive-context screens are excluded **before** OCR runs; no chunk is ever written for a suppressed capture.
 - Chunks contain text only. No pixel data, no screenshot path, no raw image bytes — consistent with the no-screenshot-persistence contract in ADR 004 and the CLIP-vector-only update in that ADR.
 - Chunk text is shorter than the full parent `clean_text`; it does not introduce additional sensitive surface area beyond what the parent already stores.
 - The chunk blocklist/exclusion rules are identical to the parent's: no separate privacy layer is needed for chunks.

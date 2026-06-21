@@ -691,8 +691,8 @@
 }
 
 .app-main.search-centered .search-bar {
-    height: var(--fndr-os-pill-height, 58px);
-    border-radius: var(--fndr-os-pill-radius, 29px);
+    height: var(--continuum-os-pill-height, 58px);
+    border-radius: var(--continuum-os-pill-radius, 29px);
     padding: 0 7px 0 20px;
     gap: 8px;
     background: color-mix(in srgb, var(--cp-dominant-2, var(--cp-surface)) 78%, transparent);
@@ -812,7 +812,7 @@
     box-shadow: 0 4px 12px var(--shadow-color);
 }
 
-/* ===== Sidebar brand — FNDR mark =====
+/* ===== Sidebar brand — Continuum mark =====
    Amber dot + Cormorant wordmark per the handoff spec.
    Replaces the empty .sidebar-brand placeholder div. */
 .sidebar-brand {
@@ -834,7 +834,7 @@
 }
 
 .sidebar-brand::after {
-    content: "FNDR";
+    content: "Continuum";
     font-family: var(--font-display);
     font-weight: 600;
     font-size: 15px;

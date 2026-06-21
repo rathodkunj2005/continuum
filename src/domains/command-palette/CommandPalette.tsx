@@ -1,5 +1,5 @@
 // Inspired by CC's BashTool permission gating + command dispatch pattern.
-// A global Cmd+K palette that surfaces every action in FNDR with fuzzy search,
+// A global Cmd+K palette that surfaces every action in Continuum with fuzzy search,
 // keyboard navigation, and a confirmation gate for destructive operations.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -135,7 +135,7 @@ const COMMANDS: Command[] = [
     {
         id: "focus-mode",
         label: "Focus Mode",
-        description: "Set a focus task — FNDR alerts you when you drift",
+        description: "Set a focus task — Continuum alerts you when you drift",
         category: "smart",
         keywords: ["focus", "drift", "distraction", "task", "goal"],
         run: ({ onOpenPanel }) => onOpenPanel("focusMode"),
@@ -237,7 +237,7 @@ const COMMANDS: Command[] = [
         category: "capture",
         keywords: ["pause", "stop", "privacy", "incognito"],
         requiresConfirm: true,
-        confirmMessage: "Pause screen capture? FNDR will stop recording until you resume.",
+        confirmMessage: "Pause screen capture? Continuum will stop recording until you resume.",
         run: async () => { await pauseCapture(); },
     },
     {
@@ -328,7 +328,7 @@ const COMMANDS: Command[] = [
     {
         id: "delete-memory",
         label: "Delete this memory",
-        description: "Permanently remove from FNDR",
+        description: "Permanently remove from Continuum",
         category: "destructive",
         memoryOnly: true,
         requiresConfirm: true,

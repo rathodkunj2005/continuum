@@ -55,11 +55,11 @@ pub async fn get_status(
 }
 
 pub fn mac_display_name() -> String {
-    std::env::var("FNDR_MAC_NAME")
+    std::env::var("CONTINUUM_MAC_NAME")
         .ok()
         .filter(|s| !s.is_empty())
         .or_else(hostname_lookup)
-        .unwrap_or_else(|| "FNDR Mac".to_string())
+        .unwrap_or_else(|| "Continuum Mac".to_string())
 }
 
 fn hostname_lookup() -> Option<String> {

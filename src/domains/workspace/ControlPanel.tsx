@@ -34,7 +34,7 @@ import {
     reclaimMemoryStorage,
     getPrivacyAlerts,
     cleanDevBuildCache,
-    fndrQualityStatus,
+    continuumQualityStatus,
 } from "@/shared/ipc/tauri";
 import {
     ModelInfo,
@@ -166,7 +166,7 @@ export function ControlPanel({
                     getOnboardingState(),
                     getStorageHealth(),
                     getAutofillSettings(),
-                    fndrQualityStatus(),
+                    continuumQualityStatus(),
                 ]);
                 setBlocklistState(bl);
                 setRetentionDaysState(ret);
@@ -186,7 +186,7 @@ export function ControlPanel({
                     getOnboardingState(),
                     getStorageHealth(),
                     getAutofillSettings(),
-                    fndrQualityStatus(),
+                    continuumQualityStatus(),
                 ]);
                 setBlocklistState(bl);
                 setRetentionDaysState(ret);
@@ -298,7 +298,7 @@ export function ControlPanel({
         setTheme(nextTheme);
         if (nextWallpaper) setWallpaperId(nextWallpaper);
         window.dispatchEvent(
-            new CustomEvent("fndr-appearance-changed", {
+            new CustomEvent("continuum-appearance-changed", {
                 detail: {
                     palette: nextPalette,
                     mode: nextTheme,
@@ -312,7 +312,7 @@ export function ControlPanel({
         setWallpaperId(nextWallpaper);
         localStorage.setItem(STORAGE_KEYS.wallpaper, nextWallpaper);
         window.dispatchEvent(
-            new CustomEvent("fndr-appearance-changed", {
+            new CustomEvent("continuum-appearance-changed", {
                 detail: { palette: paletteKey, mode: theme, wallpaper: nextWallpaper },
             })
         );
@@ -343,12 +343,12 @@ export function ControlPanel({
                 const runtime = await refreshAiModels();
                 if (!runtime.ai_model_available && !cancelled) {
                     setModelError(
-                        `Model download finished, but FNDR still cannot see the files at ${downloadStatus.destination_path ?? "disk"}.`,
+                        `Model download finished, but Continuum still cannot see the files at ${downloadStatus.destination_path ?? "disk"}.`,
                     );
                 }
             } catch (refreshError) {
                 if (!cancelled) {
-                    setModelError(`Model downloaded, but FNDR failed to refresh the runtime: ${String(refreshError)}`);
+                    setModelError(`Model downloaded, but Continuum failed to refresh the runtime: ${String(refreshError)}`);
                 }
             } finally {
                 if (!cancelled) {
@@ -372,7 +372,7 @@ export function ControlPanel({
             try {
                 const runtime = await refreshAiModels();
                 if (!runtime.ai_model_available) {
-                    setModelError("The model file should be on disk, but FNDR could not find it in the models folder.");
+                    setModelError("The model file should be on disk, but Continuum could not find it in the models folder.");
                 }
             } catch (e) {
                 setModelError(String(e));
@@ -608,7 +608,7 @@ export function ControlPanel({
             setProfileName(normalized);
             setProfileDraft(normalized);
             window.dispatchEvent(
-                new CustomEvent("fndr-profile-updated", {
+                new CustomEvent("continuum-profile-updated", {
                     detail: { displayName: normalized || null },
                 })
             );
@@ -645,10 +645,10 @@ export function ControlPanel({
 
     return (
         <div className="control-panel-container">
-            <div className="control-panel-actions fndr-os-chrome-row">
+            <div className="control-panel-actions continuum-os-chrome-row">
                 <button
                     type="button"
-                    className="fndr-os-chrome-btn"
+                    className="continuum-os-chrome-btn"
                     onClick={() => {
                         setIsOpen(false);
                         setIsAppearanceOpen(!isAppearanceOpen);
@@ -662,7 +662,7 @@ export function ControlPanel({
                 </button>
                 <button
                     type="button"
-                    className="fndr-os-chrome-btn control-panel-settings-btn"
+                    className="continuum-os-chrome-btn control-panel-settings-btn"
                     onClick={() => {
                         setIsAppearanceOpen(false);
                         setIsOpen(!isOpen);
@@ -690,7 +690,7 @@ export function ControlPanel({
             <aside className={`settings-panel ${isOpen ? "open" : ""}`}>
                 <header className="panel-header">
                     <div>
-                        <h2>FNDR Settings</h2>
+                        <h2>Continuum Settings</h2>
                         <p className="panel-subtitle">Private, local, always in your control.</p>
                     </div>
                     <button className="ui-action-btn panel-close" onClick={() => setIsOpen(false)} aria-label="Close">X</button>
@@ -724,7 +724,7 @@ export function ControlPanel({
                             <section className="panel-section">
                                 <h3>Profile</h3>
                                 <p className="section-hint">
-                                    FNDR uses this name in your greeting.
+                                    Continuum uses this name in your greeting.
                                 </p>
                                 <div className="profile-row">
                                     <input
@@ -827,7 +827,7 @@ export function ControlPanel({
                             <section className="panel-section">
                                 <h3>Screen Auto-Fill</h3>
                                 <p className="section-hint">
-                                    Use FNDR&apos;s local memory to fill the active field with <strong>⌥F</strong> (Option+F).
+                                    Use Continuum&apos;s local memory to fill the active field with <strong>⌥F</strong> (Option+F).
                                 </p>
                                 <div className="autofill-grid">
                                     <label className="autofill-field">
@@ -922,7 +922,7 @@ export function ControlPanel({
                                             }))
                                         }
                                     />
-                                    Offer quick-pick choices when FNDR finds multiple strong matches
+                                    Offer quick-pick choices when Continuum finds multiple strong matches
                                 </label>
                                 <p className="autofill-help">
                                     Shortcut uses the Tauri format: <code>Alt+F</code> = ⌥F, <code>Shift+Alt+F</code> = ⇧⌥F, <code>Super+Shift+F</code> = ⌘⇧F.
@@ -943,7 +943,7 @@ export function ControlPanel({
                                 <section className="panel-section">
                                     <h3>MCP Server</h3>
                                     <p className="section-hint">
-                                        Connect FNDR to external tools via Model Context Protocol.
+                                        Connect Continuum to external tools via Model Context Protocol.
                                     </p>
                                     <div className="mcp-status-row">
                                         <span className={`mcp-pill ${mcpStatus?.running ? "running" : "stopped"}`}>
@@ -1275,7 +1275,7 @@ export function ControlPanel({
                         <div className="theme-choice-row" role="radiogroup" aria-label="Theme selection">
                             <button
                                 type="button"
-                                className={`fndr-os-glass-btn theme-choice ${theme === "dark" ? "active" : ""}`}
+                                className={`continuum-os-glass-btn theme-choice ${theme === "dark" ? "active" : ""}`}
                                 onClick={() => selectAppearance(paletteKey, "dark")}
                                 aria-pressed={theme === "dark"}
                             >
@@ -1284,7 +1284,7 @@ export function ControlPanel({
                             </button>
                             <button
                                 type="button"
-                                className={`fndr-os-glass-btn theme-choice ${theme === "light" ? "active" : ""}`}
+                                className={`continuum-os-glass-btn theme-choice ${theme === "light" ? "active" : ""}`}
                                 onClick={() => selectAppearance(paletteKey, "light")}
                                 aria-pressed={theme === "light"}
                             >
@@ -1332,11 +1332,11 @@ export function ControlPanel({
                                         type="button"
                                         className={`palette-choice ${active ? "active" : ""}`}
                                         onClick={() => {
-                                            if (key === "fndrDark") {
+                                            if (key === "continuumDark") {
                                                 selectAppearance(key, "dark");
                                                 return;
                                             }
-                                            if (key === "fndrLight") {
+                                            if (key === "continuumLight") {
                                                 selectAppearance(key, "light");
                                                 return;
                                             }
@@ -1386,7 +1386,7 @@ function CapturePipelineSummary({ status }: { status: CaptureStatus | null }) {
         );
     }
     const reasons: Array<{ key: string; label: string; value: number }> = [
-        { key: "self_app", label: "this app (FNDR)", value: pipeline.skipped_self_app ?? 0 },
+        { key: "self_app", label: "this app (Continuum)", value: pipeline.skipped_self_app ?? 0 },
         { key: "perceptual_dup", label: "dedup (image)", value: pipeline.skipped_perceptual_dup },
         { key: "semantic_dup", label: "dedup (text)", value: pipeline.skipped_semantic_dup },
         { key: "low_signal_text", label: "low signal", value: pipeline.skipped_low_signal_text },
@@ -1407,7 +1407,7 @@ function CapturePipelineSummary({ status }: { status: CaptureStatus | null }) {
     const selfSkipHint =
         (pipeline.skipped_self_app ?? 0) > 0 ? (
             <p className="capture-stats-hint">
-                FNDR never records its own window. Focus Cursor, Chrome, or another app to build memories
+                Continuum never records its own window. Focus Cursor, Chrome, or another app to build memories
                 while this panel is open.
             </p>
         ) : null;

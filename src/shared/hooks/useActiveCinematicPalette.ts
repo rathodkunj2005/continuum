@@ -23,8 +23,8 @@ export function useActiveCinematicPalette() {
             if (detail?.palette && isPaletteKey(detail.palette)) setPaletteKey(detail.palette);
             if (detail?.mode === "light" || detail?.mode === "dark") setMode(detail.mode);
         };
-        window.addEventListener("fndr-appearance-changed", handler);
-        return () => window.removeEventListener("fndr-appearance-changed", handler);
+        window.addEventListener("continuum-appearance-changed", handler);
+        return () => window.removeEventListener("continuum-appearance-changed", handler);
     }, []);
 
     return { paletteKey, mode, aurora: getWallpaperAuroraColors(paletteKey, mode) };

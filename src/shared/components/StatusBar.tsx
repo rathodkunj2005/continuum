@@ -22,38 +22,38 @@ export function StatusBar({ status }: StatusBarProps) {
     const indexing = (status?.is_capturing ?? false) && !(status?.is_paused ?? false);
 
     return (
-        <footer className="fndr-status-bar" role="status" aria-live="polite">
-            <div className="fndr-status-left">
+        <footer className="continuum-status-bar" role="status" aria-live="polite">
+            <div className="continuum-status-left">
                 <span
-                    className={`fndr-status-dot ${indexing ? "is-active" : "is-idle"}`}
+                    className={`continuum-status-dot ${indexing ? "is-active" : "is-idle"}`}
                     aria-hidden="true"
                 />
-                <span className="fndr-status-text">
+                <span className="continuum-status-text">
                     {indexing ? "INDEXING" : status?.is_paused ? "PAUSED" : "IDLE"}
                 </span>
-                <span className="fndr-status-sep" aria-hidden="true">
+                <span className="continuum-status-sep" aria-hidden="true">
                     ·
                 </span>
-                <span className="fndr-status-text">REEL {reelDate}</span>
-                <span className="fndr-status-sep" aria-hidden="true">
+                <span className="continuum-status-text">REEL {reelDate}</span>
+                <span className="continuum-status-sep" aria-hidden="true">
                     ·
                 </span>
-                <span className="fndr-status-text">
+                <span className="continuum-status-text">
                     {frameCount.toLocaleString()} FRAMES
                 </span>
                 {status && status.frames_dropped > 0 && (
                     <>
-                        <span className="fndr-status-sep" aria-hidden="true">
+                        <span className="continuum-status-sep" aria-hidden="true">
                             ·
                         </span>
-                        <span className="fndr-status-text fndr-status-text-muted">
+                        <span className="continuum-status-text continuum-status-text-muted">
                             {status.frames_dropped.toLocaleString()} DROPPED
                         </span>
                     </>
                 )}
             </div>
-            <div className="fndr-status-right">
-                <span className="fndr-status-local">LOCAL ONLY</span>
+            <div className="continuum-status-right">
+                <span className="continuum-status-local">LOCAL ONLY</span>
             </div>
         </footer>
     );

@@ -6,19 +6,19 @@
 
 ## What shipped
 
-- Added durable offline queue in FNDRKit:
-  - `apps/ios/FNDRKit/Sources/FNDRKit/OfflineCaptureQueue.swift`
+- Added durable offline queue in ContinuumKit:
+  - `apps/ios/ContinuumKit/Sources/ContinuumKit/OfflineCaptureQueue.swift`
   - enqueue durability, retry, and idempotent `client_event_id` behavior.
 - Added capture UI wiring:
-  - `apps/ios/FNDR/Capture/CaptureViewModel.swift`
-  - `apps/ios/FNDR/Capture/CaptureView.swift`
+  - `apps/ios/Continuum/Capture/CaptureViewModel.swift`
+  - `apps/ios/Continuum/Capture/CaptureView.swift`
   - direct save → queue fallback → manual flush action.
 - Extended session boundary with queue helpers:
-  - `apps/ios/FNDR/App/CompanionSession.swift`
+  - `apps/ios/Continuum/App/CompanionSession.swift`
 
 ## Verification
 
-- `swift run FNDRKitCheck` suite includes `OfflineCaptureQueue` tests ✅
+- `swift run ContinuumKitCheck` suite includes `OfflineCaptureQueue` tests ✅
   - durable reload across restart
   - success flush drains queue
   - failed flush increments attempts

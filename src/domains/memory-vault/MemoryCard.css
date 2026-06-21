@@ -5,7 +5,7 @@
    film-paper.css.
    ============================================================= */
 
-.fndr-mc {
+.continuum-mc {
     position: relative;
     background: var(--bg-3);
     color: var(--fg);
@@ -17,7 +17,7 @@
 }
 
 /* ── shared sub-elements (preview / expanded / immersive) ───── */
-.fndr-mc-strip {
+.continuum-mc-strip {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -25,7 +25,7 @@
     flex-wrap: wrap;
 }
 
-.fndr-mc-frame-no {
+.continuum-mc-frame-no {
     font-family: var(--font-mono);
     font-size: var(--t-micro);
     line-height: 1;
@@ -34,7 +34,7 @@
     text-transform: uppercase;
 }
 
-.fndr-mc-ts {
+.continuum-mc-ts {
     margin-left: auto;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
@@ -44,7 +44,7 @@
     text-transform: uppercase;
 }
 
-.fndr-mc-title {
+.continuum-mc-title {
     font-family: var(--font-display);
     font-weight: 500;
     font-size: 22px;
@@ -54,7 +54,7 @@
     margin: 0 0 8px 0;
 }
 
-.fndr-mc-preview {
+.continuum-mc-preview {
     font-family: var(--font-body);
     font-style: italic;
     font-weight: 400;
@@ -65,7 +65,7 @@
     max-width: 64ch;
 }
 
-.fndr-mc-source {
+.continuum-mc-source {
     font-family: var(--font-body);
     font-style: italic;
     font-size: 11px;
@@ -73,7 +73,7 @@
     margin-top: 8px;
 }
 
-.fndr-mc-threads {
+.continuum-mc-threads {
     list-style: none;
     margin: 14px 0 0;
     padding: 0;
@@ -82,7 +82,7 @@
     gap: 6px;
 }
 
-.fndr-mc-threads li {
+.continuum-mc-threads li {
     font-family: var(--font-mono);
     font-weight: 500;
     font-size: 9px;
@@ -97,7 +97,7 @@
 }
 
 /* ── PREVIEW variant ──────────────────────────────────────── */
-.fndr-mc--preview {
+.continuum-mc--preview {
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-medium);
@@ -105,20 +105,20 @@
     cursor: pointer;
 }
 
-.fndr-mc--preview .fndr-mc-preview {
+.continuum-mc--preview .continuum-mc-preview {
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
-.fndr-mc--preview:hover {
+.continuum-mc--preview:hover {
     border-color: var(--hairline-strong);
     box-shadow: var(--shadow-medium), var(--halation-soft);
     transform: translateY(-1px);
 }
 
-.fndr-mc--preview:focus-visible {
+.continuum-mc--preview:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
@@ -127,7 +127,7 @@
 /* Wide layout (default):
    grid-template-areas: "frame main  source time route threads"
    Grid columns: FRAME · TITLE/PREVIEW · SOURCE · TIME · ROUTE · THREADS */
-.fndr-mc--compact {
+.continuum-mc--compact {
     display: grid;
     grid-template-columns: 78px minmax(0, 1fr) minmax(0, 220px) 110px 22px 36px;
     grid-template-rows: auto;
@@ -147,11 +147,11 @@
    fallback for cases where container queries are not supported, and for the
    intermediate 560–960px range where source still crowds the title). */
 @media (max-width: 960px) {
-    .fndr-mc--compact {
+    .continuum-mc--compact {
         grid-template-columns: 78px minmax(0, 1fr) 0 110px 22px 36px;
         gap: 10px;
     }
-    .fndr-mc--compact .fndr-mc-c-source {
+    .continuum-mc--compact .continuum-mc-c-source {
         display: none;
     }
 }
@@ -162,7 +162,7 @@
    row 2: source · route · threads (+ activity/files chips)
    Source is revealed again in row 2 where it has dedicated space. */
 @container memory-stream (max-width: 560px) {
-    .fndr-mc--compact {
+    .continuum-mc--compact {
         grid-template-columns: 78px minmax(0, 1fr) 88px;
         grid-template-rows: auto auto;
         grid-template-areas:
@@ -174,22 +174,22 @@
         align-items: start;
     }
     /* In two-row layout, align the bar along both rows */
-    .fndr-mc--compact .fndr-mc-bar {
+    .continuum-mc--compact .continuum-mc-bar {
         top: 6px;
         bottom: 6px;
     }
     /* row 2 items align center within their cells */
-    .fndr-mc--compact .fndr-mc-c-source,
-    .fndr-mc--compact .fndr-mc-c-route,
-    .fndr-mc--compact .fndr-mc-c-threads {
+    .continuum-mc--compact .continuum-mc-c-source,
+    .continuum-mc--compact .continuum-mc-c-route,
+    .continuum-mc--compact .continuum-mc-c-threads {
         align-self: center;
     }
     /* source visible in row 2 — overrides the @media hide above */
-    .fndr-mc--compact .fndr-mc-c-source {
+    .continuum-mc--compact .continuum-mc-c-source {
         display: flex;
     }
     /* time stacks at top-right in row 1 */
-    .fndr-mc--compact .fndr-mc-c-time {
+    .continuum-mc--compact .continuum-mc-c-time {
         align-self: start;
         text-align: right;
     }
@@ -197,7 +197,7 @@
 
 /* Surfacing-reason glyph — one-letter signal for *why* this row came back.
    Empty span reserves the grid slot so rows align even when reason is absent. */
-.fndr-mc-c-route {
+.continuum-mc-c-route {
     grid-area: route;
     font-family: var(--font-mono);
     font-size: 10px;
@@ -216,42 +216,42 @@
         color var(--film-dur-fast) var(--film-ease-shutter);
     cursor: help;
 }
-.fndr-mc-c-route:empty {
+.continuum-mc-c-route:empty {
     border-color: transparent;
     cursor: default;
 }
-.fndr-mc-c-route[data-route="BM25"],
-.fndr-mc-c-route[data-route="bm25"] {
+.continuum-mc-c-route[data-route="BM25"],
+.continuum-mc-c-route[data-route="bm25"] {
     color: var(--fg-2);
     border-color: var(--hairline-strong);
 }
-.fndr-mc-c-route[data-route="semantic"] {
+.continuum-mc-c-route[data-route="semantic"] {
     color: var(--accent);
     border-color: var(--accent);
 }
-.fndr-mc-c-route[data-route="Chunk"],
-.fndr-mc-c-route[data-route="chunk"] {
+.continuum-mc-c-route[data-route="Chunk"],
+.continuum-mc-c-route[data-route="chunk"] {
     color: var(--accent);
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.fndr-mc-c-route[data-route="entity_link"],
-.fndr-mc-c-route[data-route="entity"] {
+.continuum-mc-c-route[data-route="entity_link"],
+.continuum-mc-c-route[data-route="entity"] {
     color: var(--accent-2, var(--accent));
     border-color: var(--accent-2, var(--accent));
 }
-.fndr-mc-c-route[data-route="recency"] {
+.continuum-mc-c-route[data-route="recency"] {
     color: var(--accent);
     border-color: var(--accent);
     opacity: 0.7;
 }
-.fndr-mc-c-route[data-route="synthesis"] {
+.continuum-mc-c-route[data-route="synthesis"] {
     color: var(--accent);
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.fndr-mc--compact .fndr-mc-bar {
+.continuum-mc--compact .continuum-mc-bar {
     position: absolute;
     left: 0;
     top: 8px;
@@ -264,19 +264,19 @@
         box-shadow var(--film-dur-fast) var(--film-ease-shutter);
 }
 
-.fndr-mc--compact:hover,
-.fndr-mc--compact:focus-visible {
+.continuum-mc--compact:hover,
+.continuum-mc--compact:focus-visible {
     background: var(--bg-3);
     outline: none;
 }
 
-.fndr-mc--compact:hover .fndr-mc-bar,
-.fndr-mc--compact:focus-visible .fndr-mc-bar {
+.continuum-mc--compact:hover .continuum-mc-bar,
+.continuum-mc--compact:focus-visible .continuum-mc-bar {
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent);
 }
 
-.fndr-mc-c-frame {
+.continuum-mc-c-frame {
     grid-area: frame;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
@@ -287,7 +287,7 @@
     min-width: 0;
 }
 
-.fndr-mc-c-main {
+.continuum-mc-c-main {
     grid-area: main;
     display: flex;
     flex-direction: column;
@@ -296,7 +296,7 @@
     overflow: hidden;
 }
 
-.fndr-mc-c-title {
+.continuum-mc-c-title {
     font-family: var(--font-display);
     font-weight: 500;
     font-size: 15px;
@@ -308,7 +308,7 @@
     min-width: 0;
 }
 
-.fndr-mc-c-preview {
+.continuum-mc-c-preview {
     font-family: var(--font-body);
     font-style: italic;
     font-size: 11px;
@@ -320,7 +320,7 @@
     min-width: 0;
 }
 
-.fndr-mc-c-source {
+.continuum-mc-c-source {
     grid-area: source;
     display: flex;
     align-items: center;
@@ -330,7 +330,7 @@
     min-width: 0;
 }
 
-.fndr-mc-c-source-app {
+.continuum-mc-c-source-app {
     font-family: var(--font-body);
     font-style: italic;
     font-size: 11px;
@@ -343,7 +343,7 @@
 }
 
 /* Activity-type and files-touched chips in the compact source cell */
-.fndr-mc-c-chip {
+.continuum-mc-c-chip {
     font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 500;
@@ -359,13 +359,13 @@
     flex-shrink: 0;
 }
 
-.fndr-mc-c-chip--activity {
+.continuum-mc-c-chip--activity {
     color: var(--fg-2);
     background: var(--hairline);
     border: 1px solid var(--hairline-2);
 }
 
-.fndr-mc-c-chip--files {
+.continuum-mc-c-chip--files {
     color: var(--fg-3);
     background: transparent;
     border: 1px solid var(--hairline-strong);
@@ -374,7 +374,7 @@
     flex-shrink: 1;
 }
 
-.fndr-mc-c-time {
+.continuum-mc-c-time {
     grid-area: time;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
@@ -390,15 +390,15 @@
     line-height: 1.1;
     min-width: 0;
 }
-.fndr-mc-c-day {
+.continuum-mc-c-day {
     font-weight: 500;
 }
-.fndr-mc-c-clock {
+.continuum-mc-c-clock {
     color: var(--fg-4, var(--fg-3));
     opacity: 0.7;
 }
 
-.fndr-mc-c-threads {
+.continuum-mc-c-threads {
     grid-area: threads;
     font-family: var(--font-mono);
     font-size: var(--t-micro);
@@ -413,7 +413,7 @@
 }
 
 /* ── EXPANDED variant ──────────────────────────────────────── */
-.fndr-mc--expanded {
+.continuum-mc--expanded {
     background: var(--bg-3);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
@@ -422,25 +422,25 @@
     cursor: default;
 }
 
-.fndr-mc--expanded .fndr-mc-preview {
+.continuum-mc--expanded .continuum-mc-preview {
     font-size: 14px;
     max-width: 78ch;
 }
 
-.fndr-mc-meta-row {
+.continuum-mc-meta-row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     margin: 14px 0 0;
 }
 
-.fndr-mc-slot {
+.continuum-mc-slot {
     margin-top: 22px;
     padding-top: 18px;
     border-top: 1px solid var(--hairline);
 }
 
-.fndr-mc-actions {
+.continuum-mc-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -451,49 +451,49 @@
 }
 /* Danger zone — Delete is pushed to the far right and visually muted so it
    can't be mistaken for a navigation action like "See in graph". */
-.fndr-mc-actions-danger {
+.continuum-mc-actions-danger {
     margin-left: auto;
     padding-left: 14px;
     border-left: 1px solid var(--hairline);
 }
-.fndr-mc-actions-danger .fndr-button {
+.continuum-mc-actions-danger .continuum-button {
     color: var(--fg-3);
 }
-.fndr-mc-actions-danger .fndr-button:hover {
+.continuum-mc-actions-danger .continuum-button:hover {
     color: var(--alarm);
     background: color-mix(in srgb, var(--alarm) 10%, transparent);
 }
 
 /* ── IMMERSIVE variant (scroll hero) ───────────────────────── */
-.fndr-mc--immersive {
+.continuum-mc--immersive {
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
     padding: 36px 40px;
     background: color-mix(in srgb, var(--bg-3) 85%, transparent);
     box-shadow: var(--shadow-strong), var(--halation-soft);
-    animation: fndrMcDrift 7s ease-in-out infinite alternate;
+    animation: continuumMcDrift 7s ease-in-out infinite alternate;
 }
 
-.fndr-mc--immersive .fndr-mc-title {
+.continuum-mc--immersive .continuum-mc-title {
     font-size: var(--t-h1);
     line-height: 1.05;
     letter-spacing: -0.01em;
     margin-bottom: 14px;
 }
 
-.fndr-mc--immersive .fndr-mc-preview {
+.continuum-mc--immersive .continuum-mc-preview {
     font-size: var(--t-body-lg);
     max-width: 72ch;
 }
 
-@keyframes fndrMcDrift {
+@keyframes continuumMcDrift {
     0%   { transform: translate(0, 0); }
     50%  { transform: translate(1px, -1px); }
     100% { transform: translate(0, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .fndr-mc--immersive {
+    .continuum-mc--immersive {
         animation: none;
     }
 }

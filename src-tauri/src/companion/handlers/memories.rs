@@ -1,5 +1,5 @@
 //! POST /v1/memories/manual — accept a mobile-origin text memory and route
-//! it into the standard FNDR storage pipeline.
+//! it into the standard Continuum storage pipeline.
 //!
 //! Provenance is set from the authenticated [`MobileDevice`] so a stolen iOS
 //! token cannot impersonate, say, a desktop capture. Idempotency is provided
@@ -165,7 +165,7 @@ pub(crate) fn build_manual_record(
         timestamp_start: now_ms,
         timestamp_end: now_ms,
         day_bucket,
-        app_name: format!("FNDR Mobile ({})", device_name),
+        app_name: format!("Continuum Mobile ({})", device_name),
         bundle_id: None,
         window_title: capture_type
             .map(|c| format!("Manual {}", c))
@@ -244,19 +244,19 @@ mod tests {
     fn build_manual_record_sets_provenance_and_idempotency() {
         let rec = build_manual_record(
             "test-id",
-            "Hello FNDR",
+            "Hello Continuum",
             "iphone_manual_capture",
             Some("idea"),
-            Some("FNDR"),
+            Some("Continuum"),
             None,
             "Anurup's iPhone",
         );
         assert_eq!(rec.id, "test-id");
         assert_eq!(rec.source_type, "iphone_manual_capture");
         assert_eq!(rec.activity_type, "idea");
-        assert_eq!(rec.project, "FNDR");
+        assert_eq!(rec.project, "Continuum");
         assert!(rec.app_name.contains("Anurup's iPhone"));
-        assert!(rec.text.contains("Hello FNDR"));
+        assert!(rec.text.contains("Hello Continuum"));
         assert_eq!(rec.storage_outcome, "manual_capture");
     }
 

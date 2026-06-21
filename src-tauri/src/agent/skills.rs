@@ -60,7 +60,7 @@ pub fn propose_skill_from_audit(record: &AgentAuditRecord) -> Result<AgentSkillC
     } else {
         RiskLevel::Medium
     };
-    let name = format!("fndr-{}", slugify(&record.user_goal));
+    let name = format!("continuum-{}", slugify(&record.user_goal));
     let evidence = record
         .selected_memories
         .iter()
@@ -72,7 +72,7 @@ pub fn propose_skill_from_audit(record: &AgentAuditRecord) -> Result<AgentSkillC
         draft_id: format!("skill_draft_{}", uuid::Uuid::new_v4().simple()),
         name,
         category,
-        source: "fndr-observed-workflow".to_string(),
+        source: "continuum-observed-workflow".to_string(),
         created_from_memories: record.memories_used.clone(),
         risk_level,
         requires_approval: true,
@@ -82,7 +82,7 @@ pub fn propose_skill_from_audit(record: &AgentAuditRecord) -> Result<AgentSkillC
             record.user_goal
         ),
         required_context: vec![
-            "Recent FNDR AgentContextPack for the task".to_string(),
+            "Recent Continuum AgentContextPack for the task".to_string(),
             "Cited memories and retrieval explanation".to_string(),
             "Current privacy status before using context".to_string(),
         ],
@@ -93,7 +93,7 @@ pub fn propose_skill_from_audit(record: &AgentAuditRecord) -> Result<AgentSkillC
             "Ask for approval before any Act-mode tool use.".to_string(),
         ],
         verification: if evidence.is_empty() {
-            vec!["Verify the answer cites at least one FNDR memory.".to_string()]
+            vec!["Verify the answer cites at least one Continuum memory.".to_string()]
         } else {
             evidence
         },
@@ -216,7 +216,7 @@ mod tests {
         let draft = propose_skill_from_audit(&record).expect("skill draft");
 
         assert!(draft.name.contains("tauri"));
-        assert_eq!(draft.source, "fndr-observed-workflow");
+        assert_eq!(draft.source, "continuum-observed-workflow");
         assert!(draft.requires_approval);
     }
 }

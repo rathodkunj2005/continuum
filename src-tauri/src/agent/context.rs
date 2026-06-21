@@ -197,7 +197,7 @@ async fn build_from_context_pack(
             ) {
                 disallowed_context.push(RedactionNote {
                     id: memory.id.clone(),
-                    reason: "excluded by FNDR privacy blocklist or sensitive-context policy"
+                    reason: "excluded by Continuum privacy blocklist or sensitive-context policy"
                         .to_string(),
                 });
                 continue;
@@ -399,7 +399,7 @@ fn included_reason_for(pack: &ContextPack, id: &str) -> String {
         .iter()
         .find(|reason| reason.id == id)
         .map(|reason| reason.reason.clone())
-        .unwrap_or_else(|| "selected by FNDR retrieval context pack".to_string())
+        .unwrap_or_else(|| "selected by Continuum retrieval context pack".to_string())
 }
 
 fn collect_urls(cards: &[AgentMemoryCard], evidence: &[EvidenceRef]) -> Vec<UrlRef> {
@@ -490,7 +490,7 @@ fn starts_like_command(value: &str) -> bool {
 
 fn evidence_summary(pack: &ContextPack, memory_count: usize, redaction_count: usize) -> String {
     let mut parts = vec![format!(
-        "{} memories selected from FNDR context pack {}",
+        "{} memories selected from Continuum context pack {}",
         memory_count, pack.id
     )];
     if !pack.summary.trim().is_empty() {
@@ -530,7 +530,7 @@ fn deterministic_response(pack: &AgentContextPack) -> String {
             lines.join("\n")
         }
         AgentMode::Act => {
-            "Act mode is policy-gated. FNDR built context, but no action runs without approval."
+            "Act mode is policy-gated. Continuum built context, but no action runs without approval."
                 .to_string()
         }
         AgentMode::Learn => {
@@ -569,7 +569,7 @@ fn first_non_empty(values: &[&str]) -> String {
         .iter()
         .map(|value| value.trim())
         .find(|value| !value.is_empty())
-        .unwrap_or("FNDR memory")
+        .unwrap_or("Continuum memory")
         .to_string()
 }
 

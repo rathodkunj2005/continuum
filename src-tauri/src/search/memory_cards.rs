@@ -1809,7 +1809,7 @@ mod tests {
             snippet: "Refined memory card synthesis fallback behavior".to_string(),
             summary_source: "fallback".to_string(),
             noise_score: 0.08,
-            session_key: "vscode:fndr:memory_cards".to_string(),
+            session_key: "vscode:continuum:memory_cards".to_string(),
             lexical_shadow: String::new(),
             score: 0.84,
             screenshot_path: None,

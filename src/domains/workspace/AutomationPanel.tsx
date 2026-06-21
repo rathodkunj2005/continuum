@@ -45,7 +45,7 @@ const AUTOMATIONS: AutomationDefinition[] = [
     {
         id: "daily-summary",
         label: "Morning Briefing",
-        description: "Generate a daily activity summary every morning and surface it when you open FNDR.",
+        description: "Generate a daily activity summary every morning and surface it when you open Continuum.",
         frequency: "daily",
         defaultHour: 8,
         run: async () => {
@@ -389,7 +389,7 @@ export function AutomationPanel({ isVisible, onClose }: AutomationPanelProps) {
                 })}
 
                 <p className="auto-footnote">
-                    Automations run while FNDR is open. Results are available instantly in the relevant panels.
+                    Automations run while Continuum is open. Results are available instantly in the relevant panels.
                 </p>
             </div>
         </div>

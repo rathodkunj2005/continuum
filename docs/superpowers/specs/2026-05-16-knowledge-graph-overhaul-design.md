@@ -4,7 +4,7 @@
 **Owner:** anurupkumar18
 **Status:** approved (Session 1 in progress)
 **Skill route (AGENTS.md):** zoom-out → grill-with-docs → this spec → writing-plans → tdd
-**Source brief:** in-conversation prompt + `https://api.anthropic.com/v1/design/h/LS25rLsJo2KKHJm_UmY_7w` (Claude Design bundle: "FNDR Design System")
+**Source brief:** in-conversation prompt + `https://api.anthropic.com/v1/design/h/LS25rLsJo2KKHJm_UmY_7w` (Claude Design bundle: "Continuum Design System")
 
 ---
 
@@ -12,7 +12,7 @@
 
 Replace the placeholder D3 layout in `src/domains/memory-vault/KnowledgeGraph.tsx` with a production-quality, interactive memory graph that:
 
-- Renders **real** FNDR insight-graph data (`graph_nodes` / `graph_edges` via existing IPC).
+- Renders **real** Continuum insight-graph data (`graph_nodes` / `graph_edges` via existing IPC).
 - Lets users explore memories, projects, topics, themes, entities with smooth pan/zoom, hover inspection, and a contextual side panel.
 - Adopts the **Old Film / Archival Paper** cinematic 60-30-10 palette from the Claude Design bundle as new options in the existing `cinematic-palettes.ts` system.
 - Ships in three vertical-slice sessions to keep `origin/main` shippable between handoffs.
@@ -30,7 +30,7 @@ Non-negotiables: cinematic palette, light/dark, 60-30-10. No memory text printed
 | Current graph hook | `src/domains/memory-vault/useGraph.ts` |
 | IPC surface | `src/shared/ipc/tauri.ts` (`getFullGraph`, `getGraphForProject`, `getNodeDetail`, `findGraphPath`, `getGodNodes`, `searchGraph`) |
 | Theme system | `src/shared/theme/cinematic-palettes.ts` (`PALETTES`, `applyPalette`, `PaletteKey`) |
-| Design bundle (read-only ref) | `/tmp/fndr-design/fndr-design-system/` — tokens in `project/colors_and_type.css`, mock in `project/ui_kits/macos/Graph.jsx` |
+| Design bundle (read-only ref) | `/tmp/continuum-design/continuum-design-system/` — tokens in `project/colors_and_type.css`, mock in `project/ui_kits/macos/Graph.jsx` |
 | Engineering rules | `AGENTS.md`, `.agent-skills/portable-engineering/engineering/grill-with-docs/SKILL.md` |
 
 ---
@@ -164,7 +164,7 @@ Add **one** new palette key to `PALETTES` in `src/shared/theme/cinematic-palette
 film: {
   name: "Old Film",
   year: 2026,
-  director: "FNDR",
+  director: "Continuum",
   description: "Personal memory, processed like film. Amber halation over deep umber.",
   shades: ["#1a1410", "#221915", "#2a2018", "#352a20", "#a37a30", "#d4a04a", "#e8b85a"],
   dark:  { /* maps the 'Old Film' tokens from colors_and_type.css */ },
@@ -303,7 +303,7 @@ Run after each meaningful edit (AGENTS.md verification rule): `npm run typecheck
 
 ## 12. Acceptance (S1)
 
-- Graph renders only real FNDR memories from `getFullGraph`.
+- Graph renders only real Continuum memories from `getFullGraph`.
 - No memory text on individual circles.
 - Hover dims unrelated nodes and edges within 220ms; selection persists.
 - Click opens the vertical right-side card; card shows real metadata + at least one `RelationshipReason` per connection.

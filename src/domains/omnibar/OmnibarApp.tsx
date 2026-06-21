@@ -6,7 +6,7 @@ import {
     OMNIBAR_FOCUS_EVENT,
     copyClipboardEntry,
     dismissOmnibar,
-    fndrAnswer,
+    continuumAnswer,
     getClipboardHistory,
     omnibarOpenMemory,
     pasteClipboardEntry,
@@ -179,7 +179,7 @@ export function OmnibarApp() {
         searchSeq.current += 1;
         setSearching(false);
         setMode({ kind: "asking" });
-        fndrAnswer(trimmed)
+        continuumAnswer(trimmed)
             .then((answer) => setMode({ kind: "answer", answer }))
             .catch(() => setMode({ kind: "search" }));
     }, [query]);

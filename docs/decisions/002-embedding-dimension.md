@@ -2,7 +2,7 @@
 
 > **Status (2026-05-20): amended for staged v5.**
 
-FNDR treats text embedding dimension as an application contract, not a runtime preference. Model identity, ONNX filename, tokenizer filename, vector dimension, and LanceDB table name must move together.
+Continuum treats text embedding dimension as an application contract, not a runtime preference. Model identity, ONNX filename, tokenizer filename, vector dimension, and LanceDB table name must move together.
 
 ## Current And Target Contracts
 
@@ -18,7 +18,7 @@ Source of truth lives in `src-tauri/src/inference/model_config.rs`. The default 
 - v4 config validation rejects non-384 defaults for the live path.
 - v5 reindex validation requires BGE model assets and a 1024-d ONNX output.
 - v4 and v5 Lance tables have separate fixed-size vector schemas.
-- FNDR never silently falls back across dimensions. A 384-d MiniLM vector is refused by the v5 writer, and a 1024-d BGE vector is not written into the v4 schema.
+- Continuum never silently falls back across dimensions. A 384-d MiniLM vector is refused by the v5 writer, and a 1024-d BGE vector is not written into the v4 schema.
 - Existing v4 rows are not deleted or reset during v5 reindexing.
 
 ## Migration Policy

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>FNDR</string>
+    <string>Continuum</string>
     <key>CFBundleDisplayName</key>
-    <string>FNDR</string>
+    <string>Continuum</string>
     <key>CFBundleIdentifier</key>
-    <string>com.fndr.app</string>
+    <string>com.continuum.app</string>
     <key>CFBundleVersion</key>
     <string>0.2.11</string>
     <key>CFBundleShortVersionString</key>
@@ -17,15 +17,15 @@
     
     <!-- Screen Recording Permission -->
     <key>NSScreenCaptureUsageDescription</key>
-    <string>FNDR needs screen recording access to capture and index your screen content for intelligent search.</string>
+    <string>Continuum needs screen recording access to capture and index your screen content for intelligent search.</string>
     
     <!-- Accessibility Permission -->
     <key>NSAccessibilityUsageDescription</key>
-    <string>FNDR needs accessibility access to detect focused fields and type local auto-fill results into apps you use.</string>
+    <string>Continuum needs accessibility access to detect focused fields and type local auto-fill results into apps you use.</string>
 
     <!-- Microphone Permission -->
     <key>NSMicrophoneUsageDescription</key>
-    <string>FNDR needs microphone access for voice search and meeting transcription.</string>
+    <string>Continuum needs microphone access for voice search and meeting transcription.</string>
     
     <!-- Run as background agent (menu bar app) -->
     <key>LSUIElement</key>

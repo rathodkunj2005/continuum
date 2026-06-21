@@ -2,7 +2,7 @@
    Cosmic palette for the 3D Knowledge Graph.
 
    Scoped under `.graph3d-root` so it doesn't bleed into the rest of
-   FNDR. Inherits spacing / type / easing primitives from
+   Continuum. Inherits spacing / type / easing primitives from
    `film-paper.css`; defines its own colors so the 3D view reads as
    "deep space" instead of "warm film paper".
 ------------------------------------------------------------------ */
@@ -684,7 +684,7 @@
    Mode switch in MemoryCardsPanel (2D / 3D segmented control).
 
    Lives outside .graph3d-root so it shows in both modes; uses film
-   tokens so it blends with the rest of FNDR.
+   tokens so it blends with the rest of Continuum.
 ------------------------------------------------------------------ */
 
 .mg-mode-segmented {

@@ -2176,7 +2176,7 @@ pub(super) async fn ensure_memory_table_vector_dim(
             };
             return Err(lancedb::Error::Schema {
                 message: format!(
-                    "LanceDB table '{}' column '{}' has vector dimension {:?}, but FNDR expects {}. \
+                    "LanceDB table '{}' column '{}' has vector dimension {:?}, but Continuum expects {}. \
                      Text vectors, image vectors, and BGE chunk vectors are separate contracts and are never interchangeable.",
                     table_name,
                     column,

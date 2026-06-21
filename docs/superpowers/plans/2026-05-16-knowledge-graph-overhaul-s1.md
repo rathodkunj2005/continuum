@@ -92,7 +92,7 @@ Insert as the **first** entry in `PALETTES` (so it lands at the top of selectabl
     film: {
         name: "Old Film",
         year: 2026,
-        director: "FNDR",
+        director: "Continuum",
         description: "Personal memory, processed like film. Amber halation over deep umber.",
         shades: ["#1a1410", "#221915", "#2a2018", "#352a20", "#a37a30", "#d4a04a", "#e8b85a"],
         dark: {
@@ -139,7 +139,7 @@ git add src/shared/theme/cinematic-palettes.ts
 git commit -m "$(cat <<'EOF'
 feat(theme): add 'film' (Old Film / Archival Paper) cinematic palette
 
-Adds the FNDR brand 60-30-10 palette from the Claude Design bundle.
+Adds the Continuum brand 60-30-10 palette from the Claude Design bundle.
 Dark mode = Old Film (umber + amber halation); light mode = Archival Paper.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
@@ -161,7 +161,7 @@ Write to `src/shared/theme/film-paper.css`:
 
 ```css
 /* =============================================================
-   FNDR brand-only tokens layered on top of cinematic-palettes.ts.
+   Continuum brand-only tokens layered on top of cinematic-palettes.ts.
    The --cp-* vars (bg, accent, fg) come from applyPalette("film").
    Tokens here are brand atmospherics (halation, eases, fonts,
    font-family) and live in :root because they're palette-invariant.
@@ -298,7 +298,7 @@ git add src/app/main.tsx
 git commit -m "$(cat <<'EOF'
 feat(theme): default to 'film' palette when none stored
 
-First-run users now boot into the FNDR Old Film palette. Existing
+First-run users now boot into the Continuum Old Film palette. Existing
 users keep whatever they had in localStorage.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
@@ -474,7 +474,7 @@ Create `src/domains/memory-vault/graph/graphPalette.ts`:
  * Deterministic, palette-aware community coloring.
  *
  * Hues are picked from an amber-leaning slice of the wheel (15–60° + wrap)
- * so colors stay in the FNDR brand neighborhood regardless of community id.
+ * so colors stay in the Continuum brand neighborhood regardless of community id.
  * Saturation and lightness are constants tuned to read on both Old Film
  * (dark) and Archival Paper (light) backgrounds.
  */
@@ -516,7 +516,7 @@ git commit -m "$(cat <<'EOF'
 feat(graph): deterministic community palette in the amber band
 
 colorForCommunity returns a stable HSL string per community id,
-biased into FNDR's amber wedge (~30° centerpoint). Null communities
+biased into Continuum's amber wedge (~30° centerpoint). Null communities
 fall back to --cp-accent-muted so the active palette still governs.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
@@ -609,10 +609,10 @@ describe("explainEdge", () => {
     });
 
     it("appends shared project from both nodes' metadata", () => {
-        const source = mkNode({ id: "n1", label: "A", metadata: { project: "Work / FNDR" } });
-        const target = mkNode({ id: "n2", label: "B", metadata: { project: "Work / FNDR" } });
+        const source = mkNode({ id: "n1", label: "A", metadata: { project: "Work / Continuum" } });
+        const target = mkNode({ id: "n2", label: "B", metadata: { project: "Work / Continuum" } });
         const reasons = explainEdge(mkEdge({ edge_type: "PartOf" }), source, target);
-        expect(reasons.map((r) => r.text)).toContain("shared project · Work / FNDR");
+        expect(reasons.map((r) => r.text)).toContain("shared project · Work / Continuum");
     });
 
     it("appends shared topic from both nodes' metadata", () => {

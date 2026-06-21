@@ -1,17 +1,17 @@
-# Upgrade FNDR into an Agentic Graph RAG System
+# Upgrade Continuum into an Agentic Graph RAG System
 
 ## Context
 
-FNDR today is a local-first macOS memory app with **hybrid (vector + keyword) search** over OCR-derived memories, an **insight knowledge graph** in LanceDB (`graph_nodes` / `graph_edges`), and a `context_runtime` that fuses search hits with activity events into a `ContextPack`. The graph is populated by `capture/entity_extractor.rs` from finalized memories. MCP exposes `memory.*` and `agent.*` tools.
+Continuum today is a local-first macOS memory app with **hybrid (vector + keyword) search** over OCR-derived memories, an **insight knowledge graph** in LanceDB (`graph_nodes` / `graph_edges`), and a `context_runtime` that fuses search hits with activity events into a `ContextPack`. The graph is populated by `capture/entity_extractor.rs` from finalized memories. MCP exposes `memory.*` and `agent.*` tools.
 
 The graph is currently a passive byproduct of capture. Retrieval is a monolithic `HybridSearcher` that blends only vector + snippet + keyword branches. There is no query planner, no graph route, no temporal route, no entity route, no fusion module, no evidence pack, no verifier, and no composer. The UI shows synthesis-time `insight_why_mattered` text but cannot answer *why* a memory surfaced for a specific query.
 
-We are upgrading FNDR to be an **Agentic Graph RAG** system: NL query → typed `QueryPlan` → parallel retrieval routes (vector + keyword + temporal + entity + graph) → fusion → evidence pack → verification → grounded answer / cards / context pack. The graph becomes a **retrieval substrate**, not a visualization. The UI shows a per-card "Why this surfaced" reason, an expanded card with evidence + linked subgraph + before/after timeline, a query-scoped subgraph view (no all-memory hairball), and a "Copy for Agent" action that exposes the new pipeline through MCP.
+We are upgrading Continuum to be an **Agentic Graph RAG** system: NL query → typed `QueryPlan` → parallel retrieval routes (vector + keyword + temporal + entity + graph) → fusion → evidence pack → verification → grounded answer / cards / context pack. The graph becomes a **retrieval substrate**, not a visualization. The UI shows a per-card "Why this surfaced" reason, an expanded card with evidence + linked subgraph + before/after timeline, a query-scoped subgraph view (no all-memory hairball), and a "Copy for Agent" action that exposes the new pipeline through MCP.
 
 ## Locked-in architectural decisions
 
 1. **File layout: strict spec.** Move existing `src-tauri/src/memory/graph/` → `src-tauri/src/graph/` and `src-tauri/src/storage/graph_store.rs` → `src-tauri/src/graph/graph_store.rs`. Add retrieval modules inside `src-tauri/src/context_runtime/`. Update all import sites.
-2. **Rollout: additive.** New IPC commands `fndr_*` and new MCP tools `fndr.*`. Existing `searchMemoryCards`, `buildAgentContextPack`, `memory.*`, and `agent.*` keep working as thin shims over the new pipeline.
+2. **Rollout: additive.** New IPC commands `continuum_*` and new MCP tools `continuum.*`. Existing `searchMemoryCards`, `buildAgentContextPack`, `memory.*`, and `agent.*` keep working as thin shims over the new pipeline.
 3. **Query planner: rule-based v1 + optional LLM refinement** (400ms timeout, merge-if-parses).
 4. **Edge migration: additive aliases.** Add 4 genuinely new edge variants (`OccurredInSession`, `BelongsToProject`, `UsedApp`, `SameTaskAs`, `EvidencedBy`); alias the rest of the spec names (`HasTopic`, `CausedError`, `ResolvedError`, `MadeDecision`, `CreatedTodo`, `RelatedTo`, `Before`, `After`, `VisitedUrl`, `UsesFile`, `MentionsEntity`) to existing variants via a translation table. Persisted Lance data is untouched.
 5. **Node-type mapping:** keep `Concept` (=Topic), `Task` (=Todo), `File` (=Artifact). Add `Window`, `App`, `Command`. Drop `Entity` (too generic — use `Concept` with `metadata.entity_class`).
@@ -32,7 +32,7 @@ We are upgrading FNDR to be an **Agentic Graph RAG** system: NL query → typed 
 - `src-tauri/src/context_runtime/mod.rs` (becomes public façade over new pipeline)
 - `src-tauri/src/inference/mod.rs` (add `refine_query_plan` helper)
 - `src-tauri/src/agent/context.rs` (`build_agent_context_pack` calls new pipeline)
-- `src-tauri/src/mcp/mod.rs` (add `fndr.*` tools alongside existing)
+- `src-tauri/src/mcp/mod.rs` (add `continuum.*` tools alongside existing)
 - `src-tauri/src/ipc/commands/` (add `retrieval.rs`)
 - `src-tauri/src/lib.rs` (register new module + IPC commands)
 - `src/shared/ipc/tauri.ts` (new IPC bindings + `surfacing_reason` field)
@@ -139,7 +139,7 @@ Find-and-replace import sites (script + manual verify):
   - `Memory --BelongsToProject--> Project` when `record.project.is_some()`.
   - `Memory --OccurredInSession--> Session` when `record.session_id.is_some()`.
   Use the existing confidence formula. Cap edges per record (existing limit is 8 nodes; raise edge cap symmetrically if needed).
-- [x] **0.15: Run `cargo test -p fndr graph::`** (formerly `memory::graph::`). Update test paths. All graph tests pass.
+- [x] **0.15: Run `cargo test -p continuum graph::`** (formerly `memory::graph::`). Update test paths. All graph tests pass.
 - [x] **0.16: Run `make test`.** Expected: green.
 - [x] **0.17: Commit.**
   ```bash
@@ -150,14 +150,14 @@ Find-and-replace import sites (script + manual verify):
 ### Verification
 
 - `rg "memory::graph|storage::graph_store"` → 0 hits.
-- `cargo test -p fndr graph::` passes.
-- `cargo test -p fndr capture::entity_extractor` passes; new edges are produced for memories with project+session.
+- `cargo test -p continuum graph::` passes.
+- `cargo test -p continuum capture::entity_extractor` passes; new edges are produced for memories with project+session.
 - A fixture test re-opens an existing LanceDB and reads old `graph_nodes` / `graph_edges` rows successfully (string literals unchanged).
 - `make test` green.
 
 ### Smallest demoable outcome
 
-A unit test in `capture/entity_extractor.rs` that constructs a `MemoryRecord` with `project="FNDR"` and `session_id="sess-1"` and asserts the resulting `ExtractionResult.edges` includes exactly one `BelongsToProject` and one `OccurredInSession` edge.
+A unit test in `capture/entity_extractor.rs` that constructs a `MemoryRecord` with `project="Continuum"` and `session_id="sess-1"` and asserts the resulting `ExtractionResult.edges` includes exactly one `BelongsToProject` and one `OccurredInSession` edge.
 
 ---
 
@@ -240,7 +240,7 @@ pub struct GraphExpansion {
   400ms timeout via `tokio::time::timeout`. On parse-fail return `None`.
 - [x] **1.7: `refine_plan_with_llm`** races the LLM call against the timeout, merges the parsed JSON into the plan in-place (only fields present override), and is safe to call concurrently.
 - [x] **1.8: Integration test.** With a real `InferenceEngine` (skipped if model missing), confirm refinement parses on 3 fixture queries.
-- [x] **1.9: Telemetry.** Add `fndr.retrieval.planner.ms` histogram and `fndr.retrieval.planner.llm.{success,timeout,fail}` counters.
+- [x] **1.9: Telemetry.** Add `continuum.retrieval.planner.ms` histogram and `continuum.retrieval.planner.llm.{success,timeout,fail}` counters.
 - [x] **1.10: Commit.**
   ```bash
   git commit -m "feat(query_plan): rule-based planner + optional LLM refinement"
@@ -248,7 +248,7 @@ pub struct GraphExpansion {
 
 ### Verification
 
-- `cargo test -p fndr context_runtime::query_plan::` passes.
+- `cargo test -p continuum context_runtime::query_plan::` passes.
 - Snapshot fixture: log `QueryPlan` JSON for 6 representative queries; eyeball plans look sensible.
 - LLM refinement on a known model returns success on ≥2/3 fixtures and times out cleanly otherwise.
 
@@ -284,7 +284,7 @@ Modify:
 - [ ] **2.2: Define `RetrievalRoute` trait** and `RouteRunner::dispatch` using `futures::future::join_all` over the requested routes.
 - [ ] **2.3: Move semantic branch.** Cut `semantic_branch` + `snippet_branch` from `hybrid.rs` into `vector_route.rs::VectorRoute::run`. Update `hybrid.rs` to call them via the route trait.
 - [ ] **2.4: Move keyword branch** similarly into `keyword_route.rs::KeywordRoute::run`.
-- [ ] **2.5: Run existing search tests** — `cargo test -p fndr search::` must pass identically (regression gate).
+- [ ] **2.5: Run existing search tests** — `cargo test -p continuum search::` must pass identically (regression gate).
 - [ ] **2.6: Build `TemporalRoute`** with `apply_recency_decay(now_ms, event_ms) -> f32`. Test on a fixture DB.
 - [ ] **2.7: Build `EntityRoute`** matching against `graph_nodes` and de-duping memory hits.
 - [ ] **2.8: Build `GraphRoute`** with seed-node selection (top 5 vector hits + top 5 keyword hits + all entity hits). Path is built incrementally during BFS in `GraphIndex::neighbors`. Cap returned paths at 25.
@@ -293,12 +293,12 @@ Modify:
 - [ ] **2.11: Unit tests per route file** (one happy-path test, one empty-result test).
 - [ ] **2.12: Integration test** that runs all 5 routes on a fixture DB and asserts each returns ≥1 hit and the graph route produces a non-empty `graph_path` on at least one hit.
 - [ ] **2.13: Performance budget.** p50 per route ≤ 80ms on a 10k-memory DB; runner total p50 ≤ 200ms with `tokio::join!`.
-- [ ] **2.14: Telemetry.** `fndr.retrieval.route.{name}.ms` histograms; `fndr.retrieval.route.{name}.hits` counters.
+- [ ] **2.14: Telemetry.** `continuum.retrieval.route.{name}.ms` histograms; `continuum.retrieval.route.{name}.hits` counters.
 - [ ] **2.15: Commit.**
 
 ### Verification
 
-- All existing `cargo test -p fndr search::` tests pass unchanged (regression gate).
+- All existing `cargo test -p continuum search::` tests pass unchanged (regression gate).
 - New route tests pass.
 - `make test` green.
 
@@ -360,13 +360,13 @@ Per intent, `FusionWeights::for_intent(intent)` returns tuned weights (e.g., `De
 - [ ] **3.6: Implement `composer::compose_cards`** — emits `Vec<MemoryCard>` with `surfacing_reason` populated; sorts by fused score; caps at 12.
 - [ ] **3.7: Implement `composer::compose_answer`** — builds a context string from top fused hits + evidence pack; calls existing `InferenceEngine::answer(question, context_str)`; runs a post-hoc cite check (every file/command/decision mentioned in the answer must appear in `evidence`). On failure, fall back to `compose_partial_answer` which says what we have without inventing the rest.
 - [ ] **3.8: Rewire `context_runtime::build_context_pack`** to the new pipeline. Keep the same public return shape; new optional fields `verify_outcome` and `surfacing_reasons` are appended.
-- [ ] **3.9: Integration test** `tests/end_to_end_fndr_query.rs` with fixture DB: `run_query("how did we fix the planner bug")` → returns a `ComposedAnswer` where every cited file in `answer` also appears in `evidence.files` (verifier guarantee).
-- [ ] **3.10: Telemetry.** `fndr.retrieval.fusion.ms`, `fndr.retrieval.evidence.{file,decision,command}.count`, `fndr.retrieval.verify.{grounded,partial,no_evidence}`.
+- [ ] **3.9: Integration test** `tests/end_to_end_continuum_query.rs` with fixture DB: `run_query("how did we fix the planner bug")` → returns a `ComposedAnswer` where every cited file in `answer` also appears in `evidence.files` (verifier guarantee).
+- [ ] **3.10: Telemetry.** `continuum.retrieval.fusion.ms`, `continuum.retrieval.evidence.{file,decision,command}.count`, `continuum.retrieval.verify.{grounded,partial,no_evidence}`.
 - [ ] **3.11: Commit.**
 
 ### Verification
 
-- `cargo test -p fndr context_runtime::` passes (existing + new tests).
+- `cargo test -p continuum context_runtime::` passes (existing + new tests).
 - `make test` green.
 - Fixture query produces a cited answer with verifier `Grounded` outcome.
 
@@ -376,34 +376,34 @@ Per intent, `FusionWeights::for_intent(intent)` returns tuned weights (e.g., `De
 
 ---
 
-## Phase 4 — MCP `fndr.*` namespace + new IPC
+## Phase 4 — MCP `continuum.*` namespace + new IPC
 
 **Goal:** Expose the new pipeline through MCP and Tauri IPC without breaking existing tools.
 
 ### Files
 
 Create:
-- `src-tauri/src/ipc/commands/retrieval.rs` — Tauri commands `fndr_search`, `fndr_answer`, `fndr_build_context_pack`, `fndr_get_memory_subgraph`, `fndr_get_related_memories`, `fndr_quality_status`, `fndr_open_target`, `fndr_privacy_status`, `fndr_timeline`. Each is a 5–20 line wrapper.
+- `src-tauri/src/ipc/commands/retrieval.rs` — Tauri commands `continuum_search`, `continuum_answer`, `continuum_build_context_pack`, `continuum_get_memory_subgraph`, `continuum_get_related_memories`, `continuum_quality_status`, `continuum_open_target`, `continuum_privacy_status`, `continuum_timeline`. Each is a 5–20 line wrapper.
 
 Modify:
 - `src-tauri/src/ipc/commands/mod.rs` — `pub mod retrieval;`.
 - `src-tauri/src/lib.rs` — register new commands in `tauri::generate_handler!`.
-- `src-tauri/src/mcp/mod.rs` — register `fndr.*` tools in the `tools/list` JSON payload and add dispatch arms in `tools/call`.
+- `src-tauri/src/mcp/mod.rs` — register `continuum.*` tools in the `tools/list` JSON payload and add dispatch arms in `tools/call`.
 - `src-tauri/src/agent/context.rs` — `build_agent_context_pack` calls `retrieval::run_query` under the hood (delivers the same `AgentContextPack` shape).
 
 ### MCP tools to add
 
 | Tool | Wraps |
 |---|---|
-| `fndr.search` | `retrieval::run_query` with `compose: "cards"` |
-| `fndr.answer` | `retrieval::run_query` with `compose: "answer"` |
-| `fndr.build_context_pack` | existing `context_runtime::build_context_pack` (upgraded under the hood) |
-| `fndr.get_related_memories` | seed from `memory_id`, run only `Graph` route |
-| `fndr.get_memory_subgraph` | `GraphIndex::neighbors(seed_ids, max_hops, allowed_edges)` |
-| `fndr.timeline` | wraps `memory.timeline` |
-| `fndr.open_target` | wraps existing `reopen_memory` |
-| `fndr.privacy_status` | wraps existing `agent.privacy_status` |
-| `fndr.quality_status` | aggregates `memory_quality::classify_storage_outcome` counts |
+| `continuum.search` | `retrieval::run_query` with `compose: "cards"` |
+| `continuum.answer` | `retrieval::run_query` with `compose: "answer"` |
+| `continuum.build_context_pack` | existing `context_runtime::build_context_pack` (upgraded under the hood) |
+| `continuum.get_related_memories` | seed from `memory_id`, run only `Graph` route |
+| `continuum.get_memory_subgraph` | `GraphIndex::neighbors(seed_ids, max_hops, allowed_edges)` |
+| `continuum.timeline` | wraps `memory.timeline` |
+| `continuum.open_target` | wraps existing `reopen_memory` |
+| `continuum.privacy_status` | wraps existing `agent.privacy_status` |
+| `continuum.quality_status` | aggregates `memory_quality::classify_storage_outcome` counts |
 
 ### Tasks
 
@@ -414,17 +414,17 @@ Modify:
 - [ ] **4.5: Keep all existing `memory.*` and `agent.*` MCP tools registered.** Their handlers continue to work because the back-compat shim in `hybrid.rs` calls the new pipeline.
 - [ ] **4.6: Refactor `agent::context::build_agent_context_pack`** to call `retrieval::run_query` and translate `ComposedAnswer` → `AgentContextPack`. Existing callers unchanged.
 - [ ] **4.7: Integration test per new MCP tool** hitting the JSON-RPC endpoint via the test harness in `mcp/`.
-- [ ] **4.8: Telemetry.** `fndr.mcp.{tool}.calls`, `fndr.mcp.{tool}.ms`.
+- [ ] **4.8: Telemetry.** `continuum.mcp.{tool}.calls`, `continuum.mcp.{tool}.ms`.
 - [ ] **4.9: Commit.**
 
 ### Verification
 
-- `cargo test -p fndr mcp::` passes.
-- Manual smoke: launch the app, `curl POST http://127.0.0.1:<port>/mcp -d '{"method":"tools/call","params":{"name":"fndr.answer","arguments":{"query":"..."}}}'` returns a JSON object with `answer`, `evidence`, `surfacing_reasons[]`.
+- `cargo test -p continuum mcp::` passes.
+- Manual smoke: launch the app, `curl POST http://127.0.0.1:<port>/mcp -d '{"method":"tools/call","params":{"name":"continuum.answer","arguments":{"query":"..."}}}'` returns a JSON object with `answer`, `evidence`, `surfacing_reasons[]`.
 
 ### Smallest demoable outcome
 
-A unit + integration test pair: `cargo test mcp::fndr_answer_smoke` runs the MCP endpoint locally and asserts a fixture query returns a grounded answer.
+A unit + integration test pair: `cargo test mcp::continuum_answer_smoke` runs the MCP endpoint locally and asserts a fixture query returns a grounded answer.
 
 ---
 
@@ -437,29 +437,29 @@ A unit + integration test pair: `cargo test mcp::fndr_answer_smoke` runs the MCP
 Create:
 - `src/domains/memory-vault/SurfacingReason.tsx` — single-line chip showing `surfacing_reason.headline`; tooltip on hover shows `routes` + `graph_path`.
 - `src/domains/memory-vault/ExpandedMemoryCard.tsx` — modal/sheet on card click: evidence list (files, decisions, commands, errors, todos) + subgraph thumbnail + before/after timeline strip + actions (Open, Evidence, Related, Copy for Agent).
-- `src/domains/memory-vault/QueryScopedGraph.tsx` — thin wrapper over `KnowledgeGraphCanvas` that takes `seedIds: string[]` + `maxHops: number` and renders the subgraph returned by `fndr_get_memory_subgraph`.
-- `src/domains/memory-vault/CopyForAgentButton.tsx` — calls `fndr_build_context_pack({ query, mode: "agent" })`, renders the markdown into the clipboard, shows a toast.
-- `src/shared/hooks/useFndrAnswer.ts` — debounced wrapper calling `fndr_answer`.
+- `src/domains/memory-vault/QueryScopedGraph.tsx` — thin wrapper over `KnowledgeGraphCanvas` that takes `seedIds: string[]` + `maxHops: number` and renders the subgraph returned by `continuum_get_memory_subgraph`.
+- `src/domains/memory-vault/CopyForAgentButton.tsx` — calls `continuum_build_context_pack({ query, mode: "agent" })`, renders the markdown into the clipboard, shows a toast.
+- `src/shared/hooks/useContinuumAnswer.ts` — debounced wrapper calling `continuum_answer`.
 
 Modify:
 - `src/shared/ipc/tauri.ts` — add typed wrappers for each new IPC; add `MemoryCard.surfacing_reason?: SurfacingReason`; add `SurfacingReason`, `EvidencePack`, `VerifyOutcome` types matching specta-generated Rust types.
 - `src/domains/memory-vault/MemoryCardsPanel.tsx` — render `<SurfacingReason>` chip under each card title when `card.surfacing_reason` is present; clicking the card opens `<ExpandedMemoryCard>`.
 - `src/domains/memory-vault/KnowledgeGraphTopBar.tsx` — add `viewMode` selector: `all | project | session | decision | error | agent_context | query`.
-- `src/domains/memory-vault/KnowledgeGraph.tsx` — when `viewMode === "query"`, source nodes/edges from `fndr_get_memory_subgraph({seed_ids: lastQueryMemoryIds, max_hops: 2})` instead of the all-memory builder. For other modes, filter the existing canvas data.
+- `src/domains/memory-vault/KnowledgeGraph.tsx` — when `viewMode === "query"`, source nodes/edges from `continuum_get_memory_subgraph({seed_ids: lastQueryMemoryIds, max_hops: 2})` instead of the all-memory builder. For other modes, filter the existing canvas data.
 - `src/domains/memory-vault/graph/graphDataBuilder.ts` — accept an optional `seedIds` prefilter for query mode.
-- `src/domains/search/SearchBar.tsx` — call `fndr_search` (new path) by default; gate behind a setting `useAgenticGraphRag` (default `true`).
+- `src/domains/search/SearchBar.tsx` — call `continuum_search` (new path) by default; gate behind a setting `useAgenticGraphRag` (default `true`).
 
 ### Tasks
 
 - [ ] **5.1: Add specta-generated types** for `SurfacingReason`, `EvidencePack`, `VerifyOutcome`, `FusionSignals`, `RouteHit`, `GraphPathStep`. Confirm `npm run typecheck` passes.
-- [ ] **5.2: Add IPC wrappers** in `tauri.ts` for each `fndr_*` command with proper TypeScript types.
+- [ ] **5.2: Add IPC wrappers** in `tauri.ts` for each `continuum_*` command with proper TypeScript types.
 - [ ] **5.3: Build `SurfacingReason`** with tailwind-equivalent styling matching the existing warm palette (`#FAF9F6` / `#3E2723` / `#E65100`).
 - [ ] **5.4: Build `ExpandedMemoryCard`** by lifting evidence layout from `InsightLayers.tsx` and adding a graph subgraph thumbnail (16:9 mini-canvas).
 - [ ] **5.5: Build `QueryScopedGraph`** reusing `graphLayoutEngine.ts` and `KnowledgeGraphCanvas`. Hairball test: ensure default node count ≤ 25 on a typical query.
 - [ ] **5.6: Add `viewMode` state** to `KnowledgeGraphTopBar`; wire to `KnowledgeGraph` data-source switch.
 - [ ] **5.7: Update `MemoryCardsPanel`** to render the chip + open expanded card on click. Preserve existing list/graph/project browse modes.
 - [ ] **5.8: Add "Copy for Agent" button** in `ExpandedMemoryCard`. Render copied content as a markdown agent context pack.
-- [ ] **5.9: Switch `SearchBar.onSubmit`** to call `fndr_search` by default. Keep `searchMemoryCards` callable behind the setting toggle.
+- [ ] **5.9: Switch `SearchBar.onSubmit`** to call `continuum_search` by default. Keep `searchMemoryCards` callable behind the setting toggle.
 - [ ] **5.10: Vitest coverage.**
   - `MemoryCardsPanel.test.tsx` renders `surfacing_reason` when present and not when absent.
   - `QueryScopedGraph.test.tsx` snapshots a fixture subgraph and asserts node count ≤ 25.
@@ -525,7 +525,7 @@ Modify:
 
 A scripted demo:
 1. A pre-existing query returns the same top result as before the refactor.
-2. A new vague query "what was I doing with the FNDR knowledge graph?" returns a grounded answer citing a specific decision + file, plus 3 cards with "Why this surfaced".
+2. A new vague query "what was I doing with the Continuum knowledge graph?" returns a grounded answer citing a specific decision + file, plus 3 cards with "Why this surfaced".
 3. The graph view in `query` mode shows the relevant 6-node subgraph instead of the all-memory hairball.
 4. "Copy for Agent" produces a markdown context pack ready to paste into Claude Code.
 
@@ -534,9 +534,9 @@ A scripted demo:
 ## End-to-end verification checklist
 
 - [ ] `make test` green.
-- [ ] `cargo test -p fndr graph::` passes (Phase 0).
-- [ ] `cargo test -p fndr context_runtime::` passes (Phases 1–3).
-- [ ] `cargo test -p fndr mcp::fndr_` passes (Phase 4).
+- [ ] `cargo test -p continuum graph::` passes (Phase 0).
+- [ ] `cargo test -p continuum context_runtime::` passes (Phases 1–3).
+- [ ] `cargo test -p continuum mcp::continuum_` passes (Phase 4).
 - [ ] `npm test` + `npm run typecheck` green (Phase 5).
 - [ ] Legacy IPC: `searchMemoryCards`, `buildAgentContextPack` return identical-or-better results.
 - [ ] Legacy MCP: `memory.search_full_context`, `agent.build_context_pack`, `memory.graph_context` validate against existing schemas.

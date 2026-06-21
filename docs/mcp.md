@@ -1,6 +1,6 @@
-# FNDR MCP
+# Continuum MCP
 
-FNDR MCP exposes local memory to external agents over MCP while preserving local-first privacy defaults.
+Continuum MCP exposes local memory to external agents over MCP while preserving local-first privacy defaults.
 
 ## Modes
 
@@ -10,11 +10,11 @@ FNDR MCP exposes local memory to external agents over MCP while preserving local
 
 Configuration is documented in `README.md`:
 
-- `FNDR_MCP_MODE`
-- `FNDR_MCP_REQUIRE_AUTH`
-- `FNDR_MCP_ALLOW_LOOPBACK_AUTH_BYPASS`
-- `FNDR_MCP_ALLOWED_ORIGINS`
-- `FNDR_MCP_PUBLIC_BASE_URL`
+- `CONTINUUM_MCP_MODE`
+- `CONTINUUM_MCP_REQUIRE_AUTH`
+- `CONTINUUM_MCP_ALLOW_LOOPBACK_AUTH_BYPASS`
+- `CONTINUUM_MCP_ALLOWED_ORIGINS`
+- `CONTINUUM_MCP_PUBLIC_BASE_URL`
 
 ## Agent Tools Added In This Slice
 
@@ -23,7 +23,7 @@ Configuration is documented in `README.md`:
 - `agent.privacy_status`: reports MCP/Agent privacy posture, auth mode, raw-evidence defaults, blocklist count, redaction setting, and dangerous-action policy.
 - `agent.explain_retrieval`: explains selected memories, qualitative ranking signals, dropped context, redactions, policy reasons, and limitations.
 - `agent.rate_result`: logs retrieval feedback (`useful`, `irrelevant`, `wrong`, `stale`, `missing_context`) without mutating ranking.
-- `agent.list_prompts`: lists FNDR-specific prompt templates.
+- `agent.list_prompts`: lists Continuum-specific prompt templates.
 - `agent.get_prompt`: returns one prompt template.
 
 Existing memory tools remain available, including `memory.search_full_context`, `memory.get_context_pack`, `memory.agent_brief`, `memory.timeline`, `memory.project_context`, `memory.decisions`, `memory.todos`, and graph/context tools.
@@ -32,9 +32,9 @@ Existing memory tools remain available, including `memory.search_full_context`, 
 
 The MCP server now supports basic read-only resources:
 
-- `fndr://privacy/settings`
-- `fndr://todo/open`
-- `fndr://decision/recent`
+- `continuum://privacy/settings`
+- `continuum://todo/open`
+- `continuum://decision/recent`
 
 They are discoverable through `resources/list` and readable through `resources/read`.
 
@@ -50,7 +50,7 @@ The MCP server now supports `prompts/list` and `prompts/get` for:
 - `explain_my_thinking`
 - `turn_workflow_into_skill`
 
-Each prompt tells the external agent to call FNDR tools first, cite evidence, respect `agent.privacy_status`, explain uncertainty, and avoid actions without approval.
+Each prompt tells the external agent to call Continuum tools first, cite evidence, respect `agent.privacy_status`, explain uncertainty, and avoid actions without approval.
 
 ## Security Model
 

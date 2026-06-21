@@ -92,8 +92,8 @@ mod tests {
         assert_eq!(normalized_filter(None), None);
         assert_eq!(normalized_filter(Some("   ")), None);
         assert_eq!(
-            normalized_filter(Some("  project-fndr  ")),
-            Some("project-fndr".to_string())
+            normalized_filter(Some("  project-continuum  ")),
+            Some("project-continuum".to_string())
         );
     }
 }

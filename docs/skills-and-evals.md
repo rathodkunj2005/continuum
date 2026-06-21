@@ -1,6 +1,6 @@
-# FNDR Skills And Evals
+# Continuum Skills And Evals
 
-FNDR's learning loop is intentionally user-reviewed. The current implementation adds typed shapes, deterministic draft generation, and local draft persistence; it does not silently activate skills or mutate high-risk behavior.
+Continuum's learning loop is intentionally user-reviewed. The current implementation adds typed shapes, deterministic draft generation, and local draft persistence; it does not silently activate skills or mutate high-risk behavior.
 
 ## Skill Lifecycle
 

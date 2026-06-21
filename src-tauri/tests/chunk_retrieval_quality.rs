@@ -18,10 +18,10 @@
 //! Everything here avoids the real BGE model: vectors are synthesized from
 //! concept tags so CI never has to download model assets.
 
-use fndr_lib::config::{ChunkingConfig, DEFAULT_IMAGE_EMBEDDING_DIM};
-use fndr_lib::embedding::TextChunker;
-use fndr_lib::inference::model_config::BGE_V5_DIMENSIONS;
-use fndr_lib::storage::{MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, Store};
+use continuum_lib::config::{ChunkingConfig, DEFAULT_IMAGE_EMBEDDING_DIM};
+use continuum_lib::embedding::TextChunker;
+use continuum_lib::inference::model_config::BGE_V5_DIMENSIONS;
+use continuum_lib::storage::{MemoryChunkRecord, MemoryChunkSearchResult, MemoryRecord, Store};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -131,7 +131,7 @@ fn chunking_fixture_url_lines_anchor_url_kind_chunks() {
     // URL boundary contract from `test_url_line_starts_new_chunk_after_min_size`:
     // a chunk dominated by URL content gets `LineKind::Url`. The long-page
     // fixture contains three URLs, so at least one chunk must carry that kind.
-    use fndr_lib::embedding::LineKind;
+    use continuum_lib::embedding::LineKind;
     let chunker = TextChunker::from_config(&ChunkingConfig::default());
     let fx = load_fixture("long_page_with_urls");
     let chunks = chunker.chunk_ocr_text_with_metadata(&fx.app_name, &fx.window_title, &fx.raw_text);

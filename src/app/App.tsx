@@ -22,14 +22,14 @@ import {
     CAPTURE_STATUS_EVENT,
     CaptureStatus,
     OMNIBAR_OPEN_MEMORY_EVENT,
-    type FndrNotificationPayload,
+    type ContinuumNotificationPayload,
     MeetingRecorderStatus,
     MemoryCard,
     deleteMemory,
     getAppNames,
     getMeetingStatus,
     onMeetingStatus,
-    onFndrNotification,
+    onContinuumNotification,
     onProactiveSuggestion,
     getStatus,
     getFunGreeting,
@@ -39,7 +39,7 @@ import { EVAL_UI } from "@/shared/utils/eval-ui";
 import "./styles/App.css";
 
 function nextToastId(): string {
-    return createClientId("fndr-toast");
+    return createClientId("continuum-toast");
 }
 
 const SIDEBAR_GROUPS = [
@@ -150,7 +150,7 @@ function App() {
     // Fetch the fun animated greeting anytime they log in or the name changes
     useEffect(() => {
         getFunGreeting(displayName).then(setHomeGreeting).catch(() => {
-            setHomeGreeting("Welcome back to FNDR.");
+            setHomeGreeting("Welcome back to Continuum.");
         });
     }, [displayName]);
 
@@ -227,9 +227,9 @@ function App() {
             const customEvent = event as CustomEvent<{ displayName: string | null }>;
             setDisplayName(customEvent.detail?.displayName ?? null);
         };
-        window.addEventListener("fndr-profile-updated", handleProfileUpdated as EventListener);
+        window.addEventListener("continuum-profile-updated", handleProfileUpdated as EventListener);
         return () =>
-            window.removeEventListener("fndr-profile-updated", handleProfileUpdated as EventListener);
+            window.removeEventListener("continuum-profile-updated", handleProfileUpdated as EventListener);
     }, []);
 
     useEffect(() => {
@@ -399,7 +399,7 @@ function App() {
         let mounted = true;
 
         const actionForNotification = (
-            notification: FndrNotificationPayload
+            notification: ContinuumNotificationPayload
         ): Pick<AppToast, "actionLabel" | "targetPanel"> => {
             switch (notification.kind) {
                 case "briefing":
@@ -415,7 +415,7 @@ function App() {
 
         const subscribe = async () => {
             try {
-                const fn = await onFndrNotification((notification) => {
+                const fn = await onContinuumNotification((notification) => {
                     const action = actionForNotification(notification);
                     enqueueToast({
                         title: notification.title,
@@ -431,7 +431,7 @@ function App() {
                     fn();
                 }
             } catch (error) {
-                console.error("Failed to subscribe to FNDR notifications:", error);
+                console.error("Failed to subscribe to Continuum notifications:", error);
             }
         };
 
@@ -521,7 +521,7 @@ function App() {
             {!EVAL_UI && (
                 <button
                     type="button"
-                    className="fndr-os-chrome-btn sidebar-toggle"
+                    className="continuum-os-chrome-btn sidebar-toggle"
                     onClick={() => setIsSidebarOpen((prev) => !prev)}
                     aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
                 >

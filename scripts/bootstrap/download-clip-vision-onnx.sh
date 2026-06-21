@@ -3,7 +3,7 @@
 # Output: clip-vit-base-patch32-vision_q4.onnx in the target models directory (~64 MB).
 set -euo pipefail
 
-TARGET_DIR_DEFAULT="$HOME/Library/Application Support/com.fndr.app/models"
+TARGET_DIR_DEFAULT="$HOME/Library/Application Support/com.continuum.app/models"
 TARGET_DIR="${1:-$TARGET_DIR_DEFAULT}"
 OUT_NAME="clip-vit-base-patch32-vision_q4.onnx"
 CLIP_URL="https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model_q4.onnx"

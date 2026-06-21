@@ -171,7 +171,7 @@ pub async fn run_daily_memory_review(
         // that enforces "inference engine must be loaded".
         if !daily_pipeline_gate_open(state) {
             tracing::info!(
-                target: "fndr::memory_review::daily",
+                target: "continuum::memory_review::daily",
                 processed = summary.changed + summary.would_change + summary.failed,
                 remaining = scanned
                     .saturating_sub(summary.changed + summary.would_change + summary.failed),
@@ -361,7 +361,7 @@ pub fn spawn_daily_scheduler(state: Arc<AppState>) {
             match outcome {
                 Ok(summary) => {
                     tracing::info!(
-                        target: "fndr::memory_review::daily",
+                        target: "continuum::memory_review::daily",
                         day = %summary.day,
                         scanned = summary.scanned,
                         changed = summary.changed,

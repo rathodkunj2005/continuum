@@ -1,6 +1,6 @@
 /* StatusBar — fixed bottom 26px archival strip. */
 
-.fndr-status-bar {
+.continuum-status-bar {
     position: fixed;
     left: 0;
     right: 0;
@@ -24,14 +24,14 @@
     pointer-events: none; /* never block clicks on content above */
 }
 
-.fndr-status-left,
-.fndr-status-right {
+.continuum-status-left,
+.continuum-status-right {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.fndr-status-dot {
+.continuum-status-dot {
     width: 6px;
     height: 6px;
     border-radius: 999px;
@@ -40,17 +40,17 @@
     transition: background var(--film-dur-base) var(--film-ease-shutter);
 }
 
-.fndr-status-dot.is-active {
+.continuum-status-dot.is-active {
     background: var(--accent);
     box-shadow: 0 0 6px rgba(212, 160, 74, 0.55), 0 0 14px rgba(212, 160, 74, 0.32);
-    animation: fndrStatusPulse 2.4s ease-in-out infinite;
+    animation: continuumStatusPulse 2.4s ease-in-out infinite;
 }
 
-.fndr-status-dot.is-idle {
+.continuum-status-dot.is-idle {
     opacity: 0.4;
 }
 
-@keyframes fndrStatusPulse {
+@keyframes continuumStatusPulse {
     0%, 100% {
         box-shadow: 0 0 6px rgba(212, 160, 74, 0.45), 0 0 14px rgba(212, 160, 74, 0.22);
         opacity: 0.85;
@@ -61,27 +61,27 @@
     }
 }
 
-.fndr-status-text {
+.continuum-status-text {
     color: var(--fg-3);
     white-space: nowrap;
 }
 
-.fndr-status-text-muted {
+.continuum-status-text-muted {
     color: var(--fg-4);
 }
 
-.fndr-status-sep {
+.continuum-status-sep {
     color: var(--fg-4);
     opacity: 0.6;
 }
 
-.fndr-status-local {
+.continuum-status-local {
     color: var(--accent);
     text-shadow: 0 0 6px rgba(212, 160, 74, 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .fndr-status-dot.is-active {
+    .continuum-status-dot.is-active {
         animation: none;
     }
 }

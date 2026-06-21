@@ -1,8 +1,8 @@
 //! Integration coverage for browsing many memories without vector/LLM work.
 
-use fndr_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
-use fndr_lib::embedding::EMBEDDING_DIM;
-use fndr_lib::storage::{MemoryRecord, Store};
+use continuum_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
+use continuum_lib::embedding::EMBEDDING_DIM;
+use continuum_lib::storage::{MemoryRecord, Store};
 
 fn record(index: usize, now_ms: i64) -> MemoryRecord {
     MemoryRecord {

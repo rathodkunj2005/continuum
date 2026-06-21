@@ -4,7 +4,7 @@
 use std::sync::OnceLock;
 use std::time::Duration;
 
-const USER_AGENT: &str = "FNDR/1.0";
+const USER_AGENT: &str = "Continuum/1.0";
 
 /// Health and tag-list probes to local services (Ollama, Hermes gateway).
 /// Cached: rebuilding a `Client` per call would discard its connection pool.

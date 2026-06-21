@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Install and pair the FNDR iOS + Watch app on a physical iPhone and its paired Apple Watch, connected to the Mac Companion API over LAN Wi-Fi, with a repeatable runbook.
+**Goal:** Install and pair the Continuum iOS + Watch app on a physical iPhone and its paired Apple Watch, connected to the Mac Companion API over LAN Wi-Fi, with a repeatable runbook.
 
 **Architecture:** The Mac Companion server (Axum/Rust, TLS) gains a `mobile_pairing_enabled` toggle (default `true` — LAN binding already active on this branch) and a `mode` field that flows through the QR payload to iOS. iOS `PairingFlow` validates the mode/host before accepting a pairing and probes `/v1/status` with the new token before writing to the Keychain. The ControlPanel in the desktop React app gains a "Paired Devices" tab that surfaces the diagnostic strip and toggle. The iOS Xcode project is updated so any developer can supply their own signing identity via a gitignored `Local.xcconfig`.
 
@@ -30,10 +30,10 @@ The companion server on this branch already binds to `0.0.0.0` by default (`LAN_
 | `src/domains/companion/CompanionDevicesPanel.tsx` | Modify | Add diagnostic strip + mobile-pairing toggle |
 | `src/domains/companion/__tests__/CompanionDevicesPanel.test.tsx` | Modify | Add test for mode diagnostic strip |
 | `src/domains/workspace/ControlPanel.tsx` | Modify | Add `"companion"` tab; import + render `CompanionDevicesPanel` |
-| `apps/ios/FNDRKit/Sources/FNDRKit/DTOs.swift` | Modify | Add `mode: String?` to `QRPayload` |
-| `apps/ios/FNDRKit/Sources/FNDRKit/PairingFlow.swift` | Modify | Add `isSimulator: Bool` param; loopback + mode validation; connection probe |
-| `apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift` | Modify | Add 3 new test cases |
-| `apps/ios/FNDRKit/Tests/FNDRKitTests/PairingFlowTests.swift` | Modify | Add same 3 cases as XCTest |
+| `apps/ios/ContinuumKit/Sources/ContinuumKit/DTOs.swift` | Modify | Add `mode: String?` to `QRPayload` |
+| `apps/ios/ContinuumKit/Sources/ContinuumKit/PairingFlow.swift` | Modify | Add `isSimulator: Bool` param; loopback + mode validation; connection probe |
+| `apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift` | Modify | Add 3 new test cases |
+| `apps/ios/ContinuumKit/Tests/ContinuumKitTests/PairingFlowTests.swift` | Modify | Add same 3 cases as XCTest |
 | `apps/ios/project.yml` | Modify | Fix Watch target type; add `configFiles`; derive bundle IDs from `BUNDLE_ID_PREFIX` |
 | `apps/ios/Local.xcconfig.example` | Create | Committed template; the real `Local.xcconfig` is gitignored |
 | `Makefile` | Modify | Add `ios-bootstrap` target |
@@ -795,7 +795,7 @@ function DiagnosticStrip({
             </div>
             {status.mode === "lan" && (
                 <div style={{ color: "#f59e0b", marginBottom: 6, fontSize: 11 }}>
-                    ⚠ FNDR is reachable on your Wi-Fi. TLS + token-protected.
+                    ⚠ Continuum is reachable on your Wi-Fi. TLS + token-protected.
                 </div>
             )}
             {status.mode === "lan_unavailable" && (
@@ -891,12 +891,12 @@ git commit -m "feat(companion): mount CompanionDevicesPanel in ControlPanel + di
 ## Task 6: iOS Swift — add `mode` field to `QRPayload`
 
 **Files:**
-- Modify: `apps/ios/FNDRKit/Sources/FNDRKit/DTOs.swift`
-- Modify: `apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift`
+- Modify: `apps/ios/ContinuumKit/Sources/ContinuumKit/DTOs.swift`
+- Modify: `apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift`
 
 - [ ] **Step 1: Write a failing test**
 
-In `apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift`, add at the top of the `pairingFlowSuite` array:
+In `apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift`, add at the top of the `pairingFlowSuite` array:
 
 ```swift
 TestCase("QRPayload decodes mode field when present") {
@@ -938,14 +938,14 @@ TestCase("QRPayload mode defaults to nil when absent") {
 - [ ] **Step 2: Run — expect FAIL**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -20
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -20
 ```
 
 Expected: compile error — `QRPayload` has no `mode` field.
 
 - [ ] **Step 3: Add `mode` to `QRPayload` in `DTOs.swift`**
 
-In `apps/ios/FNDRKit/Sources/FNDRKit/DTOs.swift`, update the `QRPayload` struct:
+In `apps/ios/ContinuumKit/Sources/ContinuumKit/DTOs.swift`, update the `QRPayload` struct:
 
 ```swift
 public struct QRPayload: Codable, Equatable, Sendable {
@@ -976,7 +976,7 @@ public struct QRPayload: Codable, Equatable, Sendable {
 - [ ] **Step 4: Run — expect PASS**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -20
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -20
 ```
 
 Expected: all tests pass including the two new `QRPayload` mode tests.
@@ -984,8 +984,8 @@ Expected: all tests pass including the two new `QRPayload` mode tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/ios/FNDRKit/Sources/FNDRKit/DTOs.swift \
-        apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift
+git add apps/ios/ContinuumKit/Sources/ContinuumKit/DTOs.swift \
+        apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift
 git commit -m "feat(ios): add mode field to QRPayload DTO"
 ```
 
@@ -994,8 +994,8 @@ git commit -m "feat(ios): add mode field to QRPayload DTO"
 ## Task 7: iOS Swift — `PairingFlow` loopback rejection + mode validation
 
 **Files:**
-- Modify: `apps/ios/FNDRKit/Sources/FNDRKit/PairingFlow.swift`
-- Modify: `apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift`
+- Modify: `apps/ios/ContinuumKit/Sources/ContinuumKit/PairingFlow.swift`
+- Modify: `apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1056,14 +1056,14 @@ TestCase("accept allows loopback host in simulator environment") {
 - [ ] **Step 2: Run — expect FAIL**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -20
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -20
 ```
 
 Expected: compile error — `PairingFlow.init` has no `isSimulator` parameter.
 
 - [ ] **Step 3: Add `isSimulator` to `PairingFlow` and implement the new validation rules**
 
-In `apps/ios/FNDRKit/Sources/FNDRKit/PairingFlow.swift`, update the actor:
+In `apps/ios/ContinuumKit/Sources/ContinuumKit/PairingFlow.swift`, update the actor:
 
 ```swift
 public actor PairingFlow {
@@ -1115,10 +1115,10 @@ public func accept(payload: QRPayload) -> PairingState {
         state = .failed(message: "Pairing payload has no host.")
     } else if payload.mode == "loopback_only" {
         // Mode-field check: applies on any environment.
-        state = .failed(message: "This pairing code is for simulator only — enable mobile pairing in FNDR Mac Settings, then paste a new code.")
+        state = .failed(message: "This pairing code is for simulator only — enable mobile pairing in Continuum Mac Settings, then paste a new code.")
     } else if !isSimulator && ["127.0.0.1", "::1", "localhost"].contains(payload.host) {
         // Loopback host on a physical device.
-        state = .failed(message: "This pairing code is for simulator only — enable mobile pairing in FNDR Mac Settings, then paste a new code.")
+        state = .failed(message: "This pairing code is for simulator only — enable mobile pairing in Continuum Mac Settings, then paste a new code.")
     } else {
         state = .ready(payload)
     }
@@ -1129,7 +1129,7 @@ public func accept(payload: QRPayload) -> PairingState {
 - [ ] **Step 4: Run — expect PASS**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -20
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -20
 ```
 
 Expected: all tests pass including the 3 new pairing validation cases.
@@ -1137,8 +1137,8 @@ Expected: all tests pass including the 3 new pairing validation cases.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/ios/FNDRKit/Sources/FNDRKit/PairingFlow.swift \
-        apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift
+git add apps/ios/ContinuumKit/Sources/ContinuumKit/PairingFlow.swift \
+        apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift
 git commit -m "feat(ios): PairingFlow rejects loopback host and loopback_only mode on physical device"
 ```
 
@@ -1147,8 +1147,8 @@ git commit -m "feat(ios): PairingFlow rejects loopback host and loopback_only mo
 ## Task 8: iOS Swift — connection probe before Keychain persist
 
 **Files:**
-- Modify: `apps/ios/FNDRKit/Sources/FNDRKit/PairingFlow.swift`
-- Modify: `apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift`
+- Modify: `apps/ios/ContinuumKit/Sources/ContinuumKit/PairingFlow.swift`
+- Modify: `apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1215,7 +1215,7 @@ TestCase("complete does not persist token when status probe fails") {
 - [ ] **Step 2: Run — expect FAIL**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -20
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -20
 ```
 
 Expected: test fails — current code writes the keychain before probing.
@@ -1313,7 +1313,7 @@ public func status() async throws -> StatusResponse {
 - [ ] **Step 4: Run — expect PASS**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -20
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -20
 ```
 
 Expected: all tests pass including the new connection-probe test.
@@ -1321,8 +1321,8 @@ Expected: all tests pass including the new connection-probe test.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/ios/FNDRKit/Sources/FNDRKit/PairingFlow.swift \
-        apps/ios/FNDRKit/Sources/FNDRKitCheck/PairingFlowSuite.swift
+git add apps/ios/ContinuumKit/Sources/ContinuumKit/PairingFlow.swift \
+        apps/ios/ContinuumKit/Sources/ContinuumKitCheck/PairingFlowSuite.swift
 git commit -m "feat(ios): probe /v1/status before persisting pairing token to Keychain"
 ```
 
@@ -1340,17 +1340,17 @@ This task has no TDD cycle (XcodeGen is not unit-testable). Verification is by r
 
 - [ ] **Step 1: Fix the Watch target type in `project.yml`**
 
-Open `apps/ios/project.yml`. Find the `FNDR Watch:` target. Change:
+Open `apps/ios/project.yml`. Find the `Continuum Watch:` target. Change:
 
 ```yaml
-  FNDR Watch:
+  Continuum Watch:
     type: application.watchapp2    # ← old
 ```
 
 to:
 
 ```yaml
-  FNDR Watch:
+  Continuum Watch:
     type: application              # ← modern single-target watchOS app
     platform: watchOS
 ```
@@ -1364,53 +1364,53 @@ Confirm these keys remain in the Watch target's `settings.base` block:
 
 - [ ] **Step 2: Add `configFiles` and bundle ID variables to both targets**
 
-Replace the hardcoded `com.fndr.ios` values and add `configFiles`. The full updated `project.yml` targets section:
+Replace the hardcoded `com.continuum.ios` values and add `configFiles`. The full updated `project.yml` targets section:
 
 ```yaml
 targets:
-  FNDR:
+  Continuum:
     type: application
     platform: iOS
     deploymentTarget: '17.0'
     sources:
-      - path: FNDR
+      - path: Continuum
     dependencies:
-      - package: FNDRKit
-        product: FNDRKit
-      - target: FNDR Watch
+      - package: ContinuumKit
+        product: ContinuumKit
+      - target: Continuum Watch
         embed: true
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
     settings:
       base:
-        INFOPLIST_KEY_CFBundleDisplayName: FNDR
+        INFOPLIST_KEY_CFBundleDisplayName: Continuum
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleDefault
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: FNDR needs local network access to connect to your Mac companion runtime.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Continuum needs local network access to connect to your Mac companion runtime.
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).ios
         # DEVELOPMENT_TEAM comes from Local.xcconfig
 
-  FNDR Watch:
+  Continuum Watch:
     type: application
     platform: watchOS
     deploymentTarget: '10.0'
     sources:
-      - path: "FNDR Watch"
+      - path: "Continuum Watch"
     dependencies:
-      - package: FNDRKit
-        product: FNDRKit
+      - package: ContinuumKit
+        product: ContinuumKit
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).ios.watchkitapp
-        INFOPLIST_KEY_CFBundleDisplayName: FNDR Watch
+        INFOPLIST_KEY_CFBundleDisplayName: Continuum Watch
         INFOPLIST_KEY_WKCompanionAppBundleIdentifier: $(BUNDLE_ID_PREFIX).ios
         INFOPLIST_KEY_WKApplication: YES
         CODE_SIGN_STYLE: Automatic
@@ -1446,14 +1446,14 @@ Add after the existing `install:` target:
 
 ```makefile
 ios-bootstrap:
-	@echo "=== FNDR iOS local signing setup ==="
+	@echo "=== Continuum iOS local signing setup ==="
 	@read -p "Apple Developer Team ID (10 chars from developer.apple.com/account): " team; \
 	 read -p "Bundle ID prefix (e.g. com.yourname): " prefix; \
 	 printf "DEVELOPMENT_TEAM = %s\nBUNDLE_ID_PREFIX = %s\n" "$$team" "$$prefix" \
 	   > apps/ios/Local.xcconfig; \
 	 echo "Written apps/ios/Local.xcconfig (gitignored)."
 	xcodegen generate --spec apps/ios/project.yml --project apps/ios
-	@echo "Done. Open apps/ios/FNDR.xcodeproj in Xcode."
+	@echo "Done. Open apps/ios/Continuum.xcodeproj in Xcode."
 ```
 
 Ensure this is under `.PHONY`:
@@ -1510,7 +1510,7 @@ git commit -m "feat(ios): fix Watch target type, add Local.xcconfig signing over
 
 ```bash
 cat > docs/companion/real-device-runbook.md << 'RUNBOOK'
-# FNDR — Real-Device iPhone + Apple Watch Install Runbook
+# Continuum — Real-Device iPhone + Apple Watch Install Runbook
 
 Personal-device install using free Apple ID signing. Certificate lifetime: 7 days.
 
@@ -1523,7 +1523,7 @@ Personal-device install using free Apple ID signing. Certificate lifetime: 7 day
 - **Apple ID** (free personal team is sufficient). Find your Team ID at developer.apple.com → Account → Membership (10-char alphanumeric string).
 - **Apple Watch** paired to the iPhone you're targeting, running watchOS 10+.
 - **Mac and iPhone** on the same home Wi-Fi network. Router must not have client isolation (devices can reach each other).
-- **FNDR repo** cloned and on `companion/slice-2-ios-shell` or a branch that contains these changes.
+- **Continuum repo** cloned and on `companion/slice-2-ios-shell` or a branch that contains these changes.
 
 ---
 
@@ -1543,7 +1543,7 @@ This prompts for your Team ID and bundle prefix, writes `apps/ios/Local.xcconfig
 npm run tauri dev
 ```
 
-1. Open FNDR → click the ⚙️ Settings icon → **Paired Devices** tab.
+1. Open Continuum → click the ⚙️ Settings icon → **Paired Devices** tab.
 2. Look at the diagnostic strip:
    - **Mode: Loopback only** → click **Enable mobile pairing**. Wait ~2 s for the server to restart.
    - **Mode: LAN** → you're ready. The advertised host should be a `192.168.x.y` address, not `127.0.0.1`.
@@ -1555,8 +1555,8 @@ npm run tauri dev
 ## iPhone First Install
 
 1. Plug the iPhone into the Mac with a USB cable.
-2. Open `apps/ios/FNDR.xcodeproj` in Xcode.
-3. Select the **FNDR** scheme and your physical iPhone as the destination.
+2. Open `apps/ios/Continuum.xcodeproj` in Xcode.
+3. Select the **Continuum** scheme and your physical iPhone as the destination.
 4. Press **Run** (▶). Xcode allocates a provisioning profile automatically using your Team ID.
 5. First launch: iOS shows **"Untrusted Developer."** Go to:
    **Settings → VPN & Device Management → Developer App → [your Apple ID] → Trust**
@@ -1566,7 +1566,7 @@ npm run tauri dev
 
 ## Pair the iPhone
 
-1. In the FNDR app tap the **Pair** option (on the pairing screen or Settings tab).
+1. In the Continuum app tap the **Pair** option (on the pairing screen or Settings tab).
 2. Paste the QR JSON you copied from the Mac.
 3. Tap **Validate payload**. You should see no error. If you see "simulator only" → go back to the Mac, verify mobile pairing is ON and the advertised host is a LAN IP, regenerate the code.
 4. Tap **Complete pairing**. The app calls the Mac, probes `/v1/status`, and saves the token.
@@ -1578,10 +1578,10 @@ npm run tauri dev
 
 The iPhone app must be installed first.
 
-1. In Xcode, switch the scheme to **FNDR Watch**.
+1. In Xcode, switch the scheme to **Continuum Watch**.
 2. Set the destination to your paired Apple Watch.
 3. Press **Run**. Xcode installs the Watch app via the paired iPhone.
-4. If the Watch app does not appear: open the **Watch app on iPhone** → **My Watch** tab → scroll to FNDR → tap **Install**.
+4. If the Watch app does not appear: open the **Watch app on iPhone** → **My Watch** tab → scroll to Continuum → tap **Install**.
 
 ---
 
@@ -1597,8 +1597,8 @@ Run these and record pass/fail in the PR description.
 - [ ] Settings → "Clear pairing" → app returns to pairing screen.
 
 **Watch:**
-- [ ] FNDR Watch → Status screen shows data (via WCSession → iPhone → Mac).
-- [ ] FNDR Watch → Remember screen: enter a note → it appears in the Mac's vault.
+- [ ] Continuum Watch → Status screen shows data (via WCSession → iPhone → Mac).
+- [ ] Continuum Watch → Remember screen: enter a note → it appears in the Mac's vault.
 
 **Mac diagnostics:**
 - [ ] Mobile pairing OFF → strip shows "Loopback only," generate button active (code works in simulator only).
@@ -1618,11 +1618,11 @@ Run these and record pass/fail in the PR description.
 | "Unable to Verify App" on launch | 7-day free-signing cert expired | Re-deploy from Xcode (build & run to the device). No re-pairing needed unless you also revoked the device. |
 | Pairing rejected: "simulator only" | QR has loopback host or `mode: loopback_only` | Enable mobile pairing on Mac → verify diagnostic strip shows LAN IP → regenerate code |
 | "Mac didn't respond" after pairing | Status probe failed — different Wi-Fi or wrong IP | Ensure Mac and iPhone are on the same network; check the Mac's diagnostic strip for the current IP |
-| Watch app missing from Watch | iPhone target not installed first | Install FNDR on iPhone first; then install Watch scheme |
+| Watch app missing from Watch | iPhone target not installed first | Install Continuum on iPhone first; then install Watch scheme |
 | Status tab stuck "unreachable" after Wi-Fi change | Mac's DHCP IP changed | Tap "Clear pairing" on iPhone → re-pair with a new code (Mac's current IP is in the diagnostic strip) |
 | TLS fingerprint mismatch | Mac cert regenerated since last pairing | Clear pairing → re-pair; the new QR carries the new fingerprint |
-| Diagnostic strip shows wrong IP | Auto-resolver picked a VPN/Ethernet interface | Verify you're on Wi-Fi, not Ethernet; if needed, run `make ios-bootstrap` again (no effect) or restart FNDR on Mac |
-| `xcodegen generate` warns: duplicate targets | Old `application.watchapp2` target type | Confirm `project.yml` FNDR Watch uses `type: application` (Task 9) |
+| Diagnostic strip shows wrong IP | Auto-resolver picked a VPN/Ethernet interface | Verify you're on Wi-Fi, not Ethernet; if needed, run `make ios-bootstrap` again (no effect) or restart Continuum on Mac |
+| `xcodegen generate` warns: duplicate targets | Old `application.watchapp2` target type | Confirm `project.yml` Continuum Watch uses `type: application` (Task 9) |
 
 ---
 
@@ -1631,9 +1631,9 @@ Run these and record pass/fail in the PR description.
 Free-signing certificates expire after 7 days. When iOS shows "Unable to Verify App":
 
 1. Plug iPhone into Mac.
-2. Open Xcode → select `FNDR` scheme + iPhone destination → Run (▶).
+2. Open Xcode → select `Continuum` scheme + iPhone destination → Run (▶).
 3. Xcode renews the cert automatically. Trust in Settings if prompted.
-4. Repeat for `FNDR Watch` scheme if the Watch app also expired.
+4. Repeat for `Continuum Watch` scheme if the Watch app also expired.
 
 No re-pairing required (Keychain token survives re-deploy) unless you also revoked the device from Mac Settings.
 RUNBOOK
@@ -1667,7 +1667,7 @@ Expected: no output.
 - [ ] **Step 2: Run Swift tests**
 
 ```bash
-cd apps/ios/FNDRKit && swift run FNDRKitCheck 2>&1 | tail -30
+cd apps/ios/ContinuumKit && swift run ContinuumKitCheck 2>&1 | tail -30
 ```
 
 Expected: all suites pass, zero failures.

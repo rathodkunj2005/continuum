@@ -39,8 +39,8 @@ pub fn evaluate(
 
     if let Some(id) = bundle_id {
         let id_lower = id.to_ascii_lowercase();
-        if (id_lower.starts_with("com.fndr") || id_lower.contains(".fndr."))
-            && !app.contains("fndr meeting") {
+        if (id_lower.starts_with("com.continuum") || id_lower.contains(".continuum."))
+            && !app.contains("continuum meeting") {
                 return SafetyDecision::SkipStorage;
             }
     }

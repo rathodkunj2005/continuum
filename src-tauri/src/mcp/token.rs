@@ -1,7 +1,7 @@
 //! Persistent MCP API token.
 //!
 //! On first launch, generates a UUID v4 bearer token and writes it to
-//! `~/.fndr/mcp_token` (mode 0o600). Subsequent calls return the cached token.
+//! `~/.continuum/mcp_token` (mode 0o600). Subsequent calls return the cached token.
 //! The token is used to authenticate all MCP HTTP requests.
 
 use std::fs;
@@ -13,7 +13,7 @@ static TOKEN: OnceLock<String> = OnceLock::new();
 fn token_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".fndr")
+        .join(".continuum")
         .join("mcp_token")
 }
 
@@ -38,7 +38,7 @@ pub fn load_or_create() -> String {
             // Ensure directory exists
             if let Some(parent) = path.parent() {
                 if let Err(e) = fs::create_dir_all(parent) {
-                    tracing::warn!("Failed to create ~/.fndr dir: {}", e);
+                    tracing::warn!("Failed to create ~/.continuum dir: {}", e);
                 }
             }
 

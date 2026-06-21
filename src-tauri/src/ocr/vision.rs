@@ -823,9 +823,9 @@ mod tests {
 
     #[test]
     fn test_custom_patterns() {
-        let filter = NoiseFilter::new(false, vec!["FNDR".to_string(), "CustomApp".to_string()]);
+        let filter = NoiseFilter::new(false, vec!["Continuum".to_string(), "CustomApp".to_string()]);
 
-        assert!(filter.is_noise("FNDR Dashboard"));
+        assert!(filter.is_noise("Continuum Dashboard"));
         assert!(filter.is_noise("CustomApp Settings"));
         assert!(!filter.is_noise("Regular text"));
     }

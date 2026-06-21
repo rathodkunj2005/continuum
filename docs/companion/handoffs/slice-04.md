@@ -11,17 +11,17 @@
   - `GET /v1/memories/:memory_id` (`get_memory` in `handlers/memories.rs`)
 - Added DTOs:
   - `MemorySearchRequest`, `MemorySearchResponse`, `MemoryDetailResponse`
-- Added FNDRKit client methods:
+- Added ContinuumKit client methods:
   - `searchMemories(request:)`, `memoryDetail(memoryId:)`
 - Implemented Memories tab flow:
-  - `apps/ios/FNDR/Memories/MemoriesViewModel.swift`
-  - `apps/ios/FNDR/Memories/MemoriesView.swift`
+  - `apps/ios/Continuum/Memories/MemoriesViewModel.swift`
+  - `apps/ios/Continuum/Memories/MemoriesView.swift`
   - filters + result list + detail sheet.
 
 ## Verification
 
 - `cd src-tauri && cargo test companion:: -- --nocapture` ✅
-- `cd apps/ios/FNDRKit && swift run FNDRKitCheck` ✅
+- `cd apps/ios/ContinuumKit && swift run ContinuumKitCheck` ✅
 
 ## Remaining validation gap
 

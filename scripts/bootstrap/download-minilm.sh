@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET_DIR_DEFAULT="$HOME/Library/Application Support/com.fndr.app/models"
+TARGET_DIR_DEFAULT="$HOME/Library/Application Support/com.continuum.app/models"
 TARGET_DIR="${1:-$TARGET_DIR_DEFAULT}"
 MODEL_PATH="$TARGET_DIR/all-MiniLM-L6-v2.onnx"
 TOKENIZER_PATH="$TARGET_DIR/tokenizer.json"
@@ -10,7 +10,7 @@ mkdir -p "$TARGET_DIR"
 
 echo "🔄 Downloading All-MiniLM-L6-v2 to: $TARGET_DIR"
 
-export FNDR_MODEL_TARGET_DIR="$TARGET_DIR"
+export CONTINUUM_MODEL_TARGET_DIR="$TARGET_DIR"
 
 python3 << 'PYEOF'
 from huggingface_hub import hf_hub_download
@@ -18,9 +18,9 @@ import os
 import shutil
 import sys
 
-target_dir = os.path.expanduser(os.environ.get("FNDR_MODEL_TARGET_DIR", ""))
+target_dir = os.path.expanduser(os.environ.get("CONTINUUM_MODEL_TARGET_DIR", ""))
 if not target_dir:
-    print("❌ FNDR_MODEL_TARGET_DIR is not set")
+    print("❌ CONTINUUM_MODEL_TARGET_DIR is not set")
     sys.exit(1)
 os.makedirs(target_dir, exist_ok=True)
 

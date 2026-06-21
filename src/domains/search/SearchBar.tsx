@@ -281,7 +281,7 @@ export function SearchBar({
             const key = event.key.toLowerCase();
             if ((event.metaKey || event.ctrlKey) && key === "k") {
                 event.preventDefault();
-                const input = document.getElementById("fndr-search-input") as HTMLElement | null;
+                const input = document.getElementById("continuum-search-input") as HTMLElement | null;
                 input?.focus();
                 return;
             }
@@ -494,7 +494,7 @@ export function SearchBar({
 
                     <div className="search-input-wrap">
                         <textarea
-                            id="fndr-search-input"
+                            id="continuum-search-input"
                             ref={inputRef}
                             rows={1}
                             wrap="off"
@@ -534,7 +534,7 @@ export function SearchBar({
 
                     <button
                         type="button"
-                        className={`fndr-os-chrome-btn voice-btn ${isRecording ? "recording" : ""}`}
+                        className={`continuum-os-chrome-btn voice-btn ${isRecording ? "recording" : ""}`}
                         onClick={() => void handleVoiceToggle()}
                         aria-label={isRecording ? "Stop voice recording" : "Start voice recording"}
                         title={isRecording ? "Stop voice recording" : "Speak"}

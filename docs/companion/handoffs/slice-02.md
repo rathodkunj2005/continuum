@@ -7,8 +7,8 @@
 ## Slice-2 scope now enforced
 
 Kept in this branch:
-- `apps/ios/` project scaffold (`FNDR.xcodeproj`, `project.yml`, SwiftUI shell)
-- `FNDRKit` pairing/client foundations
+- `apps/ios/` project scaffold (`Continuum.xcodeproj`, `project.yml`, SwiftUI shell)
+- `ContinuumKit` pairing/client foundations
 - Pairing flow (`PairingFlow`) with Keychain token persistence
 - Status-tab connectivity (`/v1/status`, `/v1/capture/control`)
 
@@ -21,7 +21,7 @@ Explicitly peeled out of runtime surface for this slice:
 
 ## Companion API smoke evidence (desktop live service)
 
-Executed against live `npm run tauri dev` endpoint from `~/.fndr/companion.json`:
+Executed against live `npm run tauri dev` endpoint from `~/.continuum/companion.json`:
 - `GET /v1/health` ✅
 - `POST /v1/pair/start` ✅
 - `POST /v1/pair/complete` ✅
@@ -45,7 +45,7 @@ Durable fixes made during smoke:
 
 ## Remaining to close slice-2 acceptance on device/simulator
 
-1. Build and run `apps/ios/FNDR` in Xcode on simulator/device.
+1. Build and run `apps/ios/Continuum` in Xcode on simulator/device.
 2. Complete pairing from pasted/scanned QR payload and confirm Keychain persistence across app relaunch.
 3. Verify Status tab refresh and pause/resume against a live desktop companion endpoint.
 

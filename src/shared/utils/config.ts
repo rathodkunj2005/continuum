@@ -4,14 +4,14 @@
 
 /** localStorage keys used across the frontend. */
 export const STORAGE_KEYS = {
-    theme: "fndr-theme",
-    palette: "fndr-palette",
+    theme: "continuum-theme",
+    palette: "continuum-palette",
     /** Interactive motion shader background id (see wallpaper-registry). */
-    wallpaper: "fndr-wallpaper",
-    automations: "fndr-automations",
-    searchHistory: "fndr-search-history",
+    wallpaper: "continuum-wallpaper",
+    automations: "continuum-automations",
+    searchHistory: "continuum-search-history",
     /** Selected top-level shell mode: "immersive" (scroll experience) or "work" (productive). */
-    appMode: "fndr_app_mode",
+    appMode: "continuum_app_mode",
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

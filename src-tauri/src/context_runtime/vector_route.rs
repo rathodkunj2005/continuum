@@ -172,7 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_route_returns_seeded_semantic_hits() {
-        std::env::set_var("FNDR_ALLOW_MOCK_EMBEDDER", "1");
+        std::env::set_var("CONTINUUM_ALLOW_MOCK_EMBEDDER", "1");
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().to_path_buf();
         let store = tokio::task::spawn_blocking(move || Store::new(&path).expect("store"))

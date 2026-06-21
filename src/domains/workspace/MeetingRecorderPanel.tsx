@@ -335,7 +335,7 @@ const WEAK_TITLES = new Set([
     "join meeting",
     "login",
     "detected meeting",
-    "fndr",
+    "continuum",
     "meeting",
     "untitled meeting",
     "untitled",

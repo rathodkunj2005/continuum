@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-FNDR now writes several local retrieval vectors from the capture-to-storage pipeline:
+Continuum now writes several local retrieval vectors from the capture-to-storage pipeline:
 
 - MiniLM 384-d text vectors for the live memory table.
 - BGE 1024-d vectors for the explicit v5 parent/chunk reindex path.
@@ -17,7 +17,7 @@ These vector spaces must stay separate, but search needs one typed contract that
 
 ## Decision
 
-FNDR composes retrieval source text through `src-tauri/src/memory_embedding_document.rs`.
+Continuum composes retrieval source text through `src-tauri/src/memory_embedding_document.rs`.
 
 The canonical document owns the primary/search text, snippet text, support texts, chunk source text, visual semantic text, and graph-node text. Capture, import, merge, storage normalization, graph commit, and explicit BGE reindex use this same composer instead of rebuilding embedding text independently.
 

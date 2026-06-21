@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fndrBuildContextPack } from "../../shared/ipc/tauri";
+import { continuumBuildContextPack } from "../../shared/ipc/tauri";
 
 interface Props {
     query: string;
@@ -7,7 +7,7 @@ interface Props {
 }
 
 /**
- * Phase 5 — "Copy for Agent" button. Calls fndrBuildContextPack and writes
+ * Phase 5 — "Copy for Agent" button. Calls continuumBuildContextPack and writes
  * a markdown-rendered ContextPack to the clipboard. Shows a transient
  * "Copied" toast so the user knows the action succeeded.
  */
@@ -17,7 +17,7 @@ export function CopyForAgentButton({ query, project }: Props) {
     async function handleClick() {
         setStatus("copying");
         try {
-            const pack = await fndrBuildContextPack({ query, project });
+            const pack = await continuumBuildContextPack({ query, project });
             const md = renderContextPackMarkdown(pack);
             await navigator.clipboard.writeText(md);
             setStatus("copied");
@@ -34,7 +34,7 @@ export function CopyForAgentButton({ query, project }: Props) {
             type="button"
             onClick={handleClick}
             disabled={status === "copying"}
-            data-testid="fndr-copy-for-agent"
+            data-testid="continuum-copy-for-agent"
             style={{
                 padding: "8px 14px",
                 background: status === "copied" ? "#388E3C" : "#3E2723",
@@ -60,7 +60,7 @@ function renderContextPackMarkdown(pack: unknown): string {
     if (typeof pack !== "object" || pack === null) return String(pack);
     const p = pack as Record<string, unknown>;
     const lines: string[] = [];
-    if (typeof p.query === "string") lines.push(`# FNDR context: ${p.query}`);
+    if (typeof p.query === "string") lines.push(`# Continuum context: ${p.query}`);
     if (typeof p.summary === "string" && p.summary.trim().length > 0) {
         lines.push("", p.summary);
     }

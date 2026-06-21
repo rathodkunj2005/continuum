@@ -1,7 +1,7 @@
-use fndr_lib::context_runtime::query_plan::{
+use continuum_lib::context_runtime::query_plan::{
     apply_refinement_json, plan, EntityAliasHint, EntityHintKind, PlanHints, PlannerIntent, Route,
 };
-use fndr_lib::graph::schema::{GraphEdgeType, GraphNodeType};
+use continuum_lib::graph::schema::{GraphEdgeType, GraphNodeType};
 
 fn route_names(plan_routes: &[Route]) -> Vec<Route> {
     plan_routes.to_vec()
@@ -42,7 +42,7 @@ fn debug_query_requests_error_context() {
 #[test]
 fn resume_work_query_uses_session_and_project_edges() {
     let plan = plan(
-        "what was I working on yesterday in FNDR",
+        "what was I working on yesterday in Continuum",
         &PlanHints::default(),
     );
 
@@ -117,17 +117,17 @@ fn related_query_uses_similarity_edges() {
 fn project_alias_hints_select_target_project() {
     let hints = PlanHints {
         entity_aliases: vec![EntityAliasHint {
-            alias: "fndr".to_string(),
-            canonical_name: "FNDR".to_string(),
+            alias: "continuum".to_string(),
+            canonical_name: "Continuum".to_string(),
             entity_type: "project".to_string(),
-            project: Some("FNDR".to_string()),
+            project: Some("Continuum".to_string()),
         }],
         ..PlanHints::default()
     };
 
-    let plan = plan("resume work on FNDR", &hints);
+    let plan = plan("resume work on Continuum", &hints);
 
-    assert_eq!(plan.target_project.as_deref(), Some("FNDR"));
+    assert_eq!(plan.target_project.as_deref(), Some("Continuum"));
     assert!(plan.retrieval_routes.contains(&Route::Entity));
     assert!(plan
         .graph_expansion
@@ -158,24 +158,24 @@ fn refinement_json_merges_only_present_fields() {
 
     let changed = apply_refinement_json(
         &mut query_plan,
-        r#"{"target_project":"FNDR","target_topics":["graph rerank"],"graph_max_hops":2}"#,
+        r#"{"target_project":"Continuum","target_topics":["graph rerank"],"graph_max_hops":2}"#,
     );
 
     assert!(changed);
-    assert_eq!(query_plan.target_project.as_deref(), Some("FNDR"));
+    assert_eq!(query_plan.target_project.as_deref(), Some("Continuum"));
     assert_eq!(query_plan.target_topics, vec!["graph rerank"]);
     assert_eq!(query_plan.graph_expansion.max_hops, 2);
 }
 
 #[tokio::test]
 async fn llm_refinement_smoke_skips_when_model_missing() {
-    let Ok(engine) = fndr_lib::inference::InferenceEngine::new(None, None).await else {
+    let Ok(engine) = continuum_lib::inference::InferenceEngine::new(None, None).await else {
         return;
     };
 
     let mut successes = 0;
     for query in [
-        "resume work on FNDR",
+        "resume work on Continuum",
         "why is the graph rerank timeout 400ms",
         "related memories for LanceDB schema migration",
     ] {

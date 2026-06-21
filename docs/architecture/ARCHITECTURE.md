@@ -1,6 +1,6 @@
-# FNDR Architecture
+# Continuum Architecture
 
-FNDR is a local-first macOS memory pipeline. The stable product path is text-first:
+Continuum is a local-first macOS memory pipeline. The stable product path is text-first:
 
 ```text
 capture -> OCR -> chunking -> embedding -> LanceDB storage -> hybrid search -> MemoryCards / Memory Vault -> UI

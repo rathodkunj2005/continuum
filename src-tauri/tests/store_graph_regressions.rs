@@ -1,7 +1,7 @@
-use fndr_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
-use fndr_lib::embedding::EMBEDDING_DIM;
-use fndr_lib::graph::GraphStore;
-use fndr_lib::storage::{
+use continuum_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
+use continuum_lib::embedding::EMBEDDING_DIM;
+use continuum_lib::graph::GraphStore;
+use continuum_lib::storage::{
     EdgeType, GraphEdge, GraphNode, MemoryRecord, NodeType, Store, Task, TaskType,
 };
 use std::collections::HashSet;

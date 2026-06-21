@@ -86,7 +86,7 @@ mod tests {
 
     fn temp_quality_dir(label: &str) -> PathBuf {
         let base = std::env::temp_dir().join(format!(
-            "fndr-quality-logger-{label}-{}",
+            "continuum-quality-logger-{label}-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .expect("system time")

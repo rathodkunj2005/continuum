@@ -31,7 +31,7 @@ Companion to [`2026-05-16-knowledge-graph-overhaul-design.md`](2026-05-16-knowle
 
 - `npm run typecheck` — PASS.
 - `npm test` — 10 files / 56 tests pass. One pre-existing failure remains in `src/domains/memory-vault/MemoryCardsPanel.test.tsx:76` ("All Memories" tab); same as the S1 baseline, unrelated to graph work.
-- `cargo test` — pre-existing build error in `src-tauri/tests/agent_regression.rs:180` (`fndr_lib::agent::validate_command` not yet wired up by the in-flight agent epic). Unchanged by S1; this session touched zero Rust files.
+- `cargo test` — pre-existing build error in `src-tauri/tests/agent_regression.rs:180` (`continuum_lib::agent::validate_command` not yet wired up by the in-flight agent epic). Unchanged by S1; this session touched zero Rust files.
 
 **Deliberately NOT done (S2):**
 

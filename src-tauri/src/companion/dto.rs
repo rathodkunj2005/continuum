@@ -1,6 +1,6 @@
 //! Request and response DTOs for the Companion API.
 //!
-//! Shapes match `fndr_ios_watch_mvp_prd.md` §13. Field names are stable —
+//! Shapes match `continuum_ios_watch_mvp_prd.md` §13. Field names are stable —
 //! treat any change as a versioned API change (bump path prefix from /v1 to /v2).
 
 use serde::{Deserialize, Serialize};
@@ -293,7 +293,7 @@ impl From<&MobileDevice> for DeviceListEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Endpoint metadata (also written to ~/.fndr/companion.json)
+// Endpoint metadata (also written to ~/.continuum/companion.json)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -361,7 +361,7 @@ mod tests {
             text: "Remember this".to_string(),
             client_event_id: "evt_1".to_string(),
             capture_type: Some("idea".to_string()),
-            project: Some("FNDR".to_string()),
+            project: Some("Continuum".to_string()),
             topic: None,
             source_override: None,
         };
@@ -392,12 +392,12 @@ mod tests {
             limit: Some(10),
             time_filter: Some("today".to_string()),
             app_filter: Some("Cursor".to_string()),
-            project_filter: Some("FNDR".to_string()),
+            project_filter: Some("Continuum".to_string()),
         };
         let body = serde_json::to_string(&req).unwrap();
         let parsed: MemorySearchRequest = serde_json::from_str(&body).unwrap();
         assert_eq!(parsed.query, "fn companion");
-        assert_eq!(parsed.project_filter.as_deref(), Some("FNDR"));
+        assert_eq!(parsed.project_filter.as_deref(), Some("Continuum"));
     }
 
     #[test]

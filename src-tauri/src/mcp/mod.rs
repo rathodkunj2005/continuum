@@ -1,9 +1,9 @@
-//! MCP server for FNDR — local-first with secure tunnel/public deployment modes.
+//! MCP server for Continuum — local-first with secure tunnel/public deployment modes.
 //!
 //! Features:
 //!  - Deployment modes: local (default), tunnel, public
 //!  - Binds to `127.0.0.1:0` by default; public mode can bind non-loopback
-//!  - Writes `~/.fndr/mcp.json` for client discovery
+//!  - Writes `~/.continuum/mcp.json` for client discovery
 //!  - Bearer-token authentication (required by default outside local mode)
 //!  - CORS layer permissive for local editor / tool connections
 //!  - Supports legacy SSE and streamable-HTTP style GET/POST on `/mcp`
@@ -205,7 +205,7 @@ struct SearchMemoriesArgs {
 }
 
 #[derive(Debug, Deserialize)]
-struct AskFndrArgs {
+struct AskContinuumArgs {
     query: String,
 }
 
@@ -367,7 +367,7 @@ struct RecentChangesArgs {
 }
 
 #[derive(Debug, Deserialize, Default)]
-struct FndrDiffArgs {
+struct ContinuumDiffArgs {
     session_id: String,
     #[serde(default)]
     since_timestamp: Option<i64>,
@@ -504,7 +504,7 @@ fn to_status(rt: &McpRuntime) -> McpServerStatus {
 fn discovery_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".fndr")
+        .join(".continuum")
         .join("mcp.json")
 }
 
@@ -588,7 +588,7 @@ pub async fn start(
     let requested_host = host.unwrap_or_else(|| LOOPBACK_HOST.to_string());
     if !mode.allows_non_loopback_bind() && !is_loopback_host(&requested_host) {
         return Err(format!(
-            "FNDR MCP mode '{}' only supports localhost transport. Refusing to bind to {requested_host}.",
+            "Continuum MCP mode '{}' only supports localhost transport. Refusing to bind to {requested_host}.",
             mode.as_str()
         ));
     }
@@ -646,7 +646,7 @@ pub async fn start(
         use_tls,
         require_auth,
         loopback_auth_bypass = allow_loopback_auth_bypass,
-        "Starting FNDR MCP server"
+        "Starting Continuum MCP server"
     );
 
     write_discovery(
@@ -766,7 +766,7 @@ fn check_auth(headers: &HeaderMap, expected_token: &str) -> bool {
 }
 
 fn mcp_mode() -> McpDeploymentMode {
-    let value = std::env::var("FNDR_MCP_MODE")
+    let value = std::env::var("CONTINUUM_MCP_MODE")
         .unwrap_or_else(|_| "local".to_string())
         .trim()
         .to_ascii_lowercase();
@@ -775,35 +775,35 @@ fn mcp_mode() -> McpDeploymentMode {
         "tunnel" => McpDeploymentMode::Tunnel,
         "public" => McpDeploymentMode::Public,
         _ => {
-            tracing::warn!("Invalid FNDR_MCP_MODE='{value}', falling back to 'local'");
+            tracing::warn!("Invalid CONTINUUM_MCP_MODE='{value}', falling back to 'local'");
             McpDeploymentMode::Local
         }
     }
 }
 
 fn mcp_require_auth(mode: McpDeploymentMode) -> bool {
-    std::env::var("FNDR_MCP_REQUIRE_AUTH")
+    std::env::var("CONTINUUM_MCP_REQUIRE_AUTH")
         .ok()
         .and_then(|value| parse_bool_env(&value))
         .unwrap_or_else(|| mode.default_require_auth())
 }
 
 fn mcp_allow_loopback_auth_bypass(mode: McpDeploymentMode) -> bool {
-    std::env::var("FNDR_MCP_ALLOW_LOOPBACK_AUTH_BYPASS")
+    std::env::var("CONTINUUM_MCP_ALLOW_LOOPBACK_AUTH_BYPASS")
         .ok()
         .and_then(|value| parse_bool_env(&value))
         .unwrap_or_else(|| mode.default_loopback_auth_bypass())
 }
 
 fn mcp_use_tls() -> bool {
-    std::env::var("FNDR_MCP_ENABLE_TLS")
+    std::env::var("CONTINUUM_MCP_ENABLE_TLS")
         .ok()
         .and_then(|value| parse_bool_env(&value))
         .unwrap_or(false)
 }
 
 fn mcp_allowed_origins() -> Vec<String> {
-    std::env::var("FNDR_MCP_ALLOWED_ORIGINS")
+    std::env::var("CONTINUUM_MCP_ALLOWED_ORIGINS")
         .ok()
         .map(|value| {
             value
@@ -815,7 +815,7 @@ fn mcp_allowed_origins() -> Vec<String> {
 }
 
 fn mcp_public_endpoint() -> Option<String> {
-    std::env::var("FNDR_MCP_PUBLIC_BASE_URL")
+    std::env::var("CONTINUUM_MCP_PUBLIC_BASE_URL")
         .ok()
         .and_then(|value| normalize_base_url(&value))
         .map(|base| with_path(&base, "/mcp"))
@@ -988,7 +988,7 @@ async fn root_handler(State(state): State<Arc<HttpState>>) -> impl IntoResponse 
     (
         StatusCode::OK,
         Json(json!({
-            "name": "FNDR MCP Server",
+            "name": "Continuum MCP Server",
             "mcp_endpoint": "/mcp",
             "sse_endpoint": "/mcp/sse",
             "transport": ["streamable_http", "sse"],
@@ -1236,10 +1236,10 @@ fn initialize_result(params: Option<Value>) -> Value {
             "prompts": { "listChanged": false }
         },
         "serverInfo": {
-            "name": "FNDR",
+            "name": "Continuum",
             "version": env!("CARGO_PKG_VERSION")
         },
-        "instructions": "FNDR exposes private local memory search and Q&A tools. All data lives on your machine."
+        "instructions": "Continuum exposes private local memory search and Q&A tools. All data lives on your machine."
     })
 }
 
@@ -1247,20 +1247,20 @@ fn resources_list_result() -> Value {
     json!({
         "resources": [
             {
-                "uri": "fndr://privacy/settings",
-                "name": "FNDR privacy settings",
+                "uri": "continuum://privacy/settings",
+                "name": "Continuum privacy settings",
                 "mimeType": "application/json",
                 "description": "Agent-safe privacy posture and redaction defaults."
             },
             {
-                "uri": "fndr://todo/open",
-                "name": "Open FNDR todos",
+                "uri": "continuum://todo/open",
+                "name": "Open Continuum todos",
                 "mimeType": "application/json",
-                "description": "Open, non-dismissed local FNDR tasks."
+                "description": "Open, non-dismissed local Continuum tasks."
             },
             {
-                "uri": "fndr://decision/recent",
-                "name": "Recent FNDR decisions",
+                "uri": "continuum://decision/recent",
+                "name": "Recent Continuum decisions",
                 "mimeType": "application/json",
                 "description": "Recent local decision ledger entries."
             }
@@ -1298,7 +1298,7 @@ fn get_prompt(params: Option<Value>) -> Result<Value, JsonRpcError> {
         })?;
     let prompt = get_agent_prompt(name).ok_or_else(|| JsonRpcError {
         code: -32004,
-        message: format!("Unknown FNDR prompt: {name}"),
+        message: format!("Unknown Continuum prompt: {name}"),
     })?;
     Ok(json!({
         "description": prompt.description,
@@ -1327,7 +1327,7 @@ async fn read_resource(
             message: "resources/read requires uri".to_string(),
         })?;
     let body = match uri {
-        "fndr://privacy/settings" => {
+        "continuum://privacy/settings" => {
             let config = app_state.config.read().clone();
             json!({
                 "local_first": true,
@@ -1339,7 +1339,7 @@ async fn read_resource(
                 "dangerous_actions": "approval_required_or_blocked"
             })
         }
-        "fndr://todo/open" => {
+        "continuum://todo/open" => {
             let tasks = app_state
                 .store
                 .list_tasks()
@@ -1351,7 +1351,7 @@ async fn read_resource(
                 .collect::<Vec<_>>();
             json!({ "todos": tasks })
         }
-        "fndr://decision/recent" => {
+        "continuum://decision/recent" => {
             let decisions = app_state
                 .store
                 .list_decision_ledger_entries(20, None)
@@ -1362,7 +1362,7 @@ async fn read_resource(
         _ => {
             return Err(JsonRpcError {
                 code: -32004,
-                message: format!("Unknown FNDR resource: {uri}"),
+                message: format!("Unknown Continuum resource: {uri}"),
             });
         }
     };
@@ -1447,7 +1447,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "agent.build_context_pack",
-                "description": "Build FNDR's typed AgentContextPack for Ask, Plan, Act, or Learn mode. Read-only by default; raw evidence is excluded unless requested.",
+                "description": "Build Continuum's typed AgentContextPack for Ask, Plan, Act, or Learn mode. Read-only by default; raw evidence is excluded unless requested.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1466,7 +1466,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "agent.run",
-                "description": "Run FNDR Agent in deterministic local Ask/Plan/Act/Learn scaffolding. It builds a context pack and returns policy-gated output without executing dangerous actions.",
+                "description": "Run Continuum Agent in deterministic local Ask/Plan/Act/Learn scaffolding. It builds a context pack and returns policy-gated output without executing dangerous actions.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1481,7 +1481,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "agent.privacy_status",
-                "description": "Return FNDR Agent/MCP privacy posture: local-only defaults, read-only default mode, redaction defaults, and blocked app/domain counts.",
+                "description": "Return Continuum Agent/MCP privacy posture: local-only defaults, read-only default mode, redaction defaults, and blocked app/domain counts.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -1489,7 +1489,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "agent.explain_retrieval",
-                "description": "Explain why FNDR Agent selected memories and dropped/redacted context for a run, context pack, or query.",
+                "description": "Explain why Continuum Agent selected memories and dropped/redacted context for a run, context pack, or query.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1516,7 +1516,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "agent.list_prompts",
-                "description": "List FNDR-specific agent prompt templates.",
+                "description": "List Continuum-specific agent prompt templates.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -1524,7 +1524,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "agent.get_prompt",
-                "description": "Return one FNDR-specific agent prompt template by name.",
+                "description": "Return one Continuum-specific agent prompt template by name.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1573,7 +1573,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "memory.agent_onboarding",
-                "description": "FNDR-native onboarding context for new agents: stable profile context, active projects, working preferences, constraints, recent decisions, blockers, and high-value context packs.",
+                "description": "Continuum-native onboarding context for new agents: stable profile context, active projects, working preferences, constraints, recent decisions, blockers, and high-value context packs.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1688,7 +1688,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "memory.decisions",
-                "description": "List recent decisions from FNDR's decision ledger.",
+                "description": "List recent decisions from Continuum's decision ledger.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1734,7 +1734,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "memory.todos",
-                "description": "List active todos/reminders/followups from local FNDR tasks.",
+                "description": "List active todos/reminders/followups from local Continuum tasks.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1745,7 +1745,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "memory.graph_query",
-                "description": "Query the local FNDR graph entities and edges by keyword.",
+                "description": "Query the local Continuum graph entities and edges by keyword.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1780,7 +1780,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "search_memories",
-                "description": "Search FNDR memory records by semantic + keyword relevance.",
+                "description": "Search Continuum memory records by semantic + keyword relevance.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1793,8 +1793,8 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "ask_fndr",
-                "description": "Ask FNDR a question and get an answer grounded in captured memories. Times out after 30 seconds.",
+                "name": "ask_continuum",
+                "description": "Ask Continuum a question and get an answer grounded in captured memories. Times out after 30 seconds.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1804,7 +1804,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "get_fndr_stats",
+                "name": "get_continuum_stats",
                 "description": "Return current capture/storage stats.",
                 "inputSchema": {
                     "type": "object",
@@ -1870,8 +1870,8 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr_context",
-                "description": "Build a source-backed FNDR context pack for an agent session.",
+                "name": "continuum_context",
+                "description": "Build a source-backed Continuum context pack for an agent session.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1885,7 +1885,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr_search_code_context",
+                "name": "continuum_search_code_context",
                 "description": "Return coding-oriented context for the active repo and files.",
                 "inputSchema": {
                     "type": "object",
@@ -1898,8 +1898,8 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr_diff",
-                "description": "Return only new or changed FNDR context for a session since the last injection or explicit timestamp.",
+                "name": "continuum_diff",
+                "description": "Return only new or changed Continuum context for a session since the last injection or explicit timestamp.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1910,8 +1910,8 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr_get_recent_working_state",
-                "description": "Return FNDR's best current understanding of what the user was just doing.",
+                "name": "continuum_get_recent_working_state",
+                "description": "Return Continuum's best current understanding of what the user was just doing.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1920,8 +1920,8 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr_remember_decision",
-                "description": "Append a proposed project decision to FNDR's decision ledger.",
+                "name": "continuum_remember_decision",
+                "description": "Append a proposed project decision to Continuum's decision ledger.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -1935,15 +1935,15 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr_health_check",
-                "description": "Return FNDR context runtime health, embedding contract status, and storage health.",
+                "name": "continuum_health_check",
+                "description": "Return Continuum context runtime health, embedding contract status, and storage health.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
                 }
             },
             {
-                "name": "fndr.search",
+                "name": "continuum.search",
                 "description": "Agentic graph-RAG search. Returns memory cards with deterministic `surfacing_reason` (Why this surfaced) attached to each card.",
                 "inputSchema": {
                     "type": "object",
@@ -1955,7 +1955,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr.answer",
+                "name": "continuum.answer",
                 "description": "Agentic graph-RAG grounded answer. Runs plan → routes → fuse → evidence → verify → compose and returns ComposedAnswer with citation-checked answer text.",
                 "inputSchema": {
                     "type": "object",
@@ -1967,7 +1967,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr.build_context_pack",
+                "name": "continuum.build_context_pack",
                 "description": "Build a ContextPack (now upgraded by the agentic-graph-rag pipeline under the hood).",
                 "inputSchema": {
                     "type": "object",
@@ -1981,7 +1981,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr.get_related_memories",
+                "name": "continuum.get_related_memories",
                 "description": "Return memories related to a seed memory id (uses the agentic pipeline seeded from the source memory's text).",
                 "inputSchema": {
                     "type": "object",
@@ -1993,7 +1993,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr.get_memory_subgraph",
+                "name": "continuum.get_memory_subgraph",
                 "description": "Return a bounded subgraph descriptor for the given seed memory ids. (Typed-graph persistence is still pending; descriptor reports zero nodes/edges until that lands.)",
                 "inputSchema": {
                     "type": "object",
@@ -2005,7 +2005,7 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr.timeline",
+                "name": "continuum.timeline",
                 "description": "Return the recent activity timeline (most recent memories with timestamps and titles).",
                 "inputSchema": {
                     "type": "object",
@@ -2016,17 +2016,17 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "fndr.quality_status",
+                "name": "continuum.quality_status",
                 "description": "Aggregate storage quality counters: stored / dropped / flagged.",
                 "inputSchema": { "type": "object", "properties": {} }
             },
             {
-                "name": "fndr.privacy_status",
-                "description": "Privacy status snapshot (alias of agent.privacy_status under the fndr.* namespace).",
+                "name": "continuum.privacy_status",
+                "description": "Privacy status snapshot (alias of agent.privacy_status under the continuum.* namespace).",
                 "inputSchema": { "type": "object", "properties": {} }
             },
             {
-                "name": "fndr.open_target",
+                "name": "continuum.open_target",
                 "description": "Resolve a memory id to its reopen target (URL / file:// / app:// link) so the agent can hand it back to the user.",
                 "inputSchema": {
                     "type": "object",
@@ -2253,15 +2253,15 @@ async fn call_tool(params: Option<Value>, app_state: Arc<AppState>) -> Result<Va
                 })?;
             run_search_memories(app_state, args).await
         }
-        "ask_fndr" => {
-            let args: AskFndrArgs =
+        "ask_continuum" => {
+            let args: AskContinuumArgs =
                 serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
                     code: -32602,
-                    message: format!("Invalid ask_fndr args: {err}"),
+                    message: format!("Invalid ask_continuum args: {err}"),
                 })?;
-            run_ask_fndr(app_state, args).await
+            run_ask_continuum(app_state, args).await
         }
-        "get_fndr_stats" => run_get_stats(app_state).await,
+        "get_continuum_stats" => run_get_stats(app_state).await,
         "start_meeting" => {
             let args: StartMeetingArgs =
                 serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
@@ -2294,59 +2294,59 @@ async fn call_tool(params: Option<Value>, app_state: Arc<AppState>) -> Result<Va
                 });
             run_get_ambient_context(app_state, args).await
         }
-        "fndr_context" => {
+        "continuum_context" => {
             let args: ContextRequest =
                 serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
                     code: -32602,
-                    message: format!("Invalid fndr_context args: {err}"),
+                    message: format!("Invalid continuum_context args: {err}"),
                 })?;
-            run_fndr_context(app_state, args).await
+            run_continuum_context(app_state, args).await
         }
-        "fndr_search_code_context" => {
+        "continuum_search_code_context" => {
             let args: CodeContextRequest =
                 serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
                     code: -32602,
-                    message: format!("Invalid fndr_search_code_context args: {err}"),
+                    message: format!("Invalid continuum_search_code_context args: {err}"),
                 })?;
-            run_fndr_search_code_context(app_state, args).await
+            run_continuum_search_code_context(app_state, args).await
         }
-        "fndr_diff" => {
-            let args: FndrDiffArgs =
+        "continuum_diff" => {
+            let args: ContinuumDiffArgs =
                 serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
                     code: -32602,
-                    message: format!("Invalid fndr_diff args: {err}"),
+                    message: format!("Invalid continuum_diff args: {err}"),
                 })?;
-            run_fndr_diff(app_state, args).await
+            run_continuum_diff(app_state, args).await
         }
-        "fndr_get_recent_working_state" => {
+        "continuum_get_recent_working_state" => {
             let args: ContextRequest = serde_json::from_value(params.arguments)
                 .unwrap_or_else(|_| ContextRequest::default());
-            run_fndr_get_recent_working_state(app_state, args).await
+            run_continuum_get_recent_working_state(app_state, args).await
         }
-        "fndr_remember_decision" => {
+        "continuum_remember_decision" => {
             let args: DecisionProposal =
                 serde_json::from_value(params.arguments).map_err(|err| JsonRpcError {
                     code: -32602,
-                    message: format!("Invalid fndr_remember_decision args: {err}"),
+                    message: format!("Invalid continuum_remember_decision args: {err}"),
                 })?;
-            run_fndr_remember_decision(app_state, args).await
+            run_continuum_remember_decision(app_state, args).await
         }
-        "fndr_health_check" => run_fndr_health_check(app_state).await,
-        "fndr.search" => run_fndr_namespace_search(app_state, params.arguments).await,
-        "fndr.answer" => run_fndr_namespace_answer(app_state, params.arguments).await,
-        "fndr.build_context_pack" => {
-            run_fndr_namespace_build_context_pack(app_state, params.arguments).await
+        "continuum_health_check" => run_continuum_health_check(app_state).await,
+        "continuum.search" => run_continuum_namespace_search(app_state, params.arguments).await,
+        "continuum.answer" => run_continuum_namespace_answer(app_state, params.arguments).await,
+        "continuum.build_context_pack" => {
+            run_continuum_namespace_build_context_pack(app_state, params.arguments).await
         }
-        "fndr.get_related_memories" => {
-            run_fndr_namespace_related_memories(app_state, params.arguments).await
+        "continuum.get_related_memories" => {
+            run_continuum_namespace_related_memories(app_state, params.arguments).await
         }
-        "fndr.get_memory_subgraph" => {
-            run_fndr_namespace_subgraph(app_state, params.arguments).await
+        "continuum.get_memory_subgraph" => {
+            run_continuum_namespace_subgraph(app_state, params.arguments).await
         }
-        "fndr.timeline" => run_fndr_namespace_timeline(app_state, params.arguments).await,
-        "fndr.quality_status" => run_fndr_namespace_quality_status(app_state).await,
-        "fndr.privacy_status" => run_agent_privacy_status(app_state).await,
-        "fndr.open_target" => run_fndr_namespace_open_target(app_state, params.arguments).await,
+        "continuum.timeline" => run_continuum_namespace_timeline(app_state, params.arguments).await,
+        "continuum.quality_status" => run_continuum_namespace_quality_status(app_state).await,
+        "continuum.privacy_status" => run_agent_privacy_status(app_state).await,
+        "continuum.open_target" => run_continuum_namespace_open_target(app_state, params.arguments).await,
         unknown => Ok(tool_error(format!("Unknown tool: {unknown}"))),
     }
 }
@@ -2389,7 +2389,7 @@ async fn run_search_memories(
     })))
 }
 
-async fn run_ask_fndr(app_state: Arc<AppState>, args: AskFndrArgs) -> Result<Value, JsonRpcError> {
+async fn run_ask_continuum(app_state: Arc<AppState>, args: AskContinuumArgs) -> Result<Value, JsonRpcError> {
     let pack = context_runtime::build_context_pack(
         &app_state,
         ContextRequest {
@@ -2557,7 +2557,7 @@ async fn run_get_ambient_context(
     })))
 }
 
-async fn run_fndr_context(
+async fn run_continuum_context(
     app_state: Arc<AppState>,
     args: ContextRequest,
 ) -> Result<Value, JsonRpcError> {
@@ -2567,7 +2567,7 @@ async fn run_fndr_context(
     Ok(tool_success(json!({ "context_pack": pack })))
 }
 
-async fn run_fndr_search_code_context(
+async fn run_continuum_search_code_context(
     app_state: Arc<AppState>,
     args: CodeContextRequest,
 ) -> Result<Value, JsonRpcError> {
@@ -2577,9 +2577,9 @@ async fn run_fndr_search_code_context(
     Ok(tool_success(json!({ "code_context": code_context })))
 }
 
-async fn run_fndr_diff(
+async fn run_continuum_diff(
     app_state: Arc<AppState>,
-    args: FndrDiffArgs,
+    args: ContinuumDiffArgs,
 ) -> Result<Value, JsonRpcError> {
     let delta =
         context_runtime::build_context_delta(&app_state, &args.session_id, args.since_timestamp)
@@ -2588,7 +2588,7 @@ async fn run_fndr_diff(
     Ok(tool_success(json!({ "context_delta": delta })))
 }
 
-async fn run_fndr_get_recent_working_state(
+async fn run_continuum_get_recent_working_state(
     app_state: Arc<AppState>,
     args: ContextRequest,
 ) -> Result<Value, JsonRpcError> {
@@ -2598,7 +2598,7 @@ async fn run_fndr_get_recent_working_state(
     Ok(tool_success(json!({ "working_state": working_state })))
 }
 
-async fn run_fndr_remember_decision(
+async fn run_continuum_remember_decision(
     app_state: Arc<AppState>,
     args: DecisionProposal,
 ) -> Result<Value, JsonRpcError> {
@@ -2608,7 +2608,7 @@ async fn run_fndr_remember_decision(
     Ok(tool_success(json!({ "decision": decision })))
 }
 
-async fn run_fndr_health_check(app_state: Arc<AppState>) -> Result<Value, JsonRpcError> {
+async fn run_continuum_health_check(app_state: Arc<AppState>) -> Result<Value, JsonRpcError> {
     let health = context_runtime::health_check(&app_state)
         .await
         .map_err(internal_tool_error)?;
@@ -2616,26 +2616,26 @@ async fn run_fndr_health_check(app_state: Arc<AppState>) -> Result<Value, JsonRp
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4 — fndr.* namespace handlers (thin wrappers over the Phase 3 pipeline)
+// Phase 4 — continuum.* namespace handlers (thin wrappers over the Phase 3 pipeline)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Default, Deserialize)]
-struct FndrSearchToolArgs {
+struct ContinuumSearchToolArgs {
     #[serde(default)]
     query: String,
     #[serde(default)]
     limit: Option<usize>,
 }
 
-async fn run_fndr_namespace_search(
+async fn run_continuum_namespace_search(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
     let started = std::time::Instant::now();
-    let args: FndrSearchToolArgs =
+    let args: ContinuumSearchToolArgs =
         serde_json::from_value(arguments).map_err(|err| JsonRpcError {
             code: -32602,
-            message: format!("Invalid fndr.search args: {err}"),
+            message: format!("Invalid continuum.search args: {err}"),
         })?;
     let answer = crate::context_runtime::run_query(
         &app_state,
@@ -2646,7 +2646,7 @@ async fn run_fndr_namespace_search(
     .await
     .map_err(internal_tool_error)?;
     crate::telemetry::runtime_metrics::record_ms(
-        "fndr.mcp.search.ms",
+        "continuum.mcp.search.ms",
         started.elapsed().as_millis() as u64,
     );
     Ok(tool_success(
@@ -2654,15 +2654,15 @@ async fn run_fndr_namespace_search(
     ))
 }
 
-async fn run_fndr_namespace_answer(
+async fn run_continuum_namespace_answer(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
     let started = std::time::Instant::now();
-    let args: FndrSearchToolArgs =
+    let args: ContinuumSearchToolArgs =
         serde_json::from_value(arguments).map_err(|err| JsonRpcError {
             code: -32602,
-            message: format!("Invalid fndr.answer args: {err}"),
+            message: format!("Invalid continuum.answer args: {err}"),
         })?;
     let answer = crate::context_runtime::run_query(
         &app_state,
@@ -2673,7 +2673,7 @@ async fn run_fndr_namespace_answer(
     .await
     .map_err(internal_tool_error)?;
     crate::telemetry::runtime_metrics::record_ms(
-        "fndr.mcp.answer.ms",
+        "continuum.mcp.answer.ms",
         started.elapsed().as_millis() as u64,
     );
     Ok(tool_success(
@@ -2682,7 +2682,7 @@ async fn run_fndr_namespace_answer(
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct FndrBuildContextPackArgs {
+struct ContinuumBuildContextPackArgs {
     #[serde(default)]
     query: String,
     #[serde(default)]
@@ -2693,14 +2693,14 @@ struct FndrBuildContextPackArgs {
     budget_tokens: Option<u32>,
 }
 
-async fn run_fndr_namespace_build_context_pack(
+async fn run_continuum_namespace_build_context_pack(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrBuildContextPackArgs =
+    let args: ContinuumBuildContextPackArgs =
         serde_json::from_value(arguments).map_err(|err| JsonRpcError {
             code: -32602,
-            message: format!("Invalid fndr.build_context_pack args: {err}"),
+            message: format!("Invalid continuum.build_context_pack args: {err}"),
         })?;
     let request = crate::context_runtime::ContextRequest {
         query: args.query,
@@ -2719,19 +2719,19 @@ async fn run_fndr_namespace_build_context_pack(
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct FndrRelatedArgs {
+struct ContinuumRelatedArgs {
     memory_id: String,
     #[serde(default)]
     limit: Option<usize>,
 }
 
-async fn run_fndr_namespace_related_memories(
+async fn run_continuum_namespace_related_memories(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrRelatedArgs = serde_json::from_value(arguments).map_err(|err| JsonRpcError {
+    let args: ContinuumRelatedArgs = serde_json::from_value(arguments).map_err(|err| JsonRpcError {
         code: -32602,
-        message: format!("Invalid fndr.get_related_memories args: {err}"),
+        message: format!("Invalid continuum.get_related_memories args: {err}"),
     })?;
     let Some(record) = app_state
         .store
@@ -2758,18 +2758,18 @@ async fn run_fndr_namespace_related_memories(
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct FndrSubgraphArgs {
+struct ContinuumSubgraphArgs {
     #[serde(default)]
     seed_ids: Vec<String>,
     #[serde(default)]
     max_hops: Option<u8>,
 }
 
-async fn run_fndr_namespace_subgraph(
+async fn run_continuum_namespace_subgraph(
     _app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrSubgraphArgs = serde_json::from_value(arguments).unwrap_or_default();
+    let args: ContinuumSubgraphArgs = serde_json::from_value(arguments).unwrap_or_default();
     Ok(tool_success(json!({
         "seed_ids": args.seed_ids,
         "max_hops": args.max_hops.unwrap_or(1),
@@ -2780,18 +2780,18 @@ async fn run_fndr_namespace_subgraph(
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct FndrTimelineArgs {
+struct ContinuumTimelineArgs {
     #[serde(default)]
     limit: Option<usize>,
     #[serde(default)]
     project: Option<String>,
 }
 
-async fn run_fndr_namespace_timeline(
+async fn run_continuum_namespace_timeline(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrTimelineArgs = serde_json::from_value(arguments).unwrap_or_default();
+    let args: ContinuumTimelineArgs = serde_json::from_value(arguments).unwrap_or_default();
     let events = app_state
         .store
         .list_activity_events(args.limit.unwrap_or(20), args.project.as_deref())
@@ -2810,7 +2810,7 @@ async fn run_fndr_namespace_timeline(
     Ok(tool_success(json!({ "entries": entries })))
 }
 
-async fn run_fndr_namespace_quality_status(
+async fn run_continuum_namespace_quality_status(
     app_state: Arc<AppState>,
 ) -> Result<Value, JsonRpcError> {
     Ok(tool_success(json!({
@@ -2820,18 +2820,18 @@ async fn run_fndr_namespace_quality_status(
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct FndrOpenTargetArgs {
+struct ContinuumOpenTargetArgs {
     memory_id: String,
 }
 
-async fn run_fndr_namespace_open_target(
+async fn run_continuum_namespace_open_target(
     app_state: Arc<AppState>,
     arguments: Value,
 ) -> Result<Value, JsonRpcError> {
-    let args: FndrOpenTargetArgs =
+    let args: ContinuumOpenTargetArgs =
         serde_json::from_value(arguments).map_err(|err| JsonRpcError {
             code: -32602,
-            message: format!("Invalid fndr.open_target args: {err}"),
+            message: format!("Invalid continuum.open_target args: {err}"),
         })?;
     let Some(record) = app_state
         .store
@@ -5105,7 +5105,7 @@ mod tests {
 
     #[test]
     fn localhost_initialize_tools_list_and_call_work_without_auth() {
-        std::env::remove_var("FNDR_MCP_REQUIRE_AUTH");
+        std::env::remove_var("CONTINUUM_MCP_REQUIRE_AUTH");
         let app_state = build_test_app_state();
         let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
         runtime.block_on(async move {
@@ -5135,7 +5135,7 @@ mod tests {
             assert_eq!(initialize.status(), reqwest::StatusCode::OK);
             let initialize_body: Value = initialize.json().await.expect("initialize json");
             assert_eq!(initialize_body["jsonrpc"], "2.0");
-            assert_eq!(initialize_body["result"]["serverInfo"]["name"], "FNDR");
+            assert_eq!(initialize_body["result"]["serverInfo"]["name"], "Continuum");
 
             let tools_list = client
                 .post(&status.endpoint)
@@ -5161,7 +5161,7 @@ mod tests {
                     "id": 3,
                     "method": "tools/call",
                     "params": {
-                        "name": "fndr_health_check",
+                        "name": "continuum_health_check",
                         "arguments": {}
                     }
                 }))

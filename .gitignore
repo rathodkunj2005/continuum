@@ -44,7 +44,7 @@ meetings/
 
 # Swift Package Manager build artifacts
 .build/
-apps/ios/FNDRKit/.build/
+apps/ios/ContinuumKit/.build/
 
 # Build output
 build/

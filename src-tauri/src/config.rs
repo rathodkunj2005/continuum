@@ -556,10 +556,10 @@ pub struct AutofillConfig {
     /// How far back semantic retrieval should search.
     #[serde(default = "default_autofill_lookback_days")]
     pub lookback_days: u32,
-    /// Confidence threshold above which FNDR injects without confirmation.
+    /// Confidence threshold above which Continuum injects without confirmation.
     #[serde(default = "default_autofill_auto_inject_threshold")]
     pub auto_inject_threshold: f32,
-    /// Whether FNDR should prefer system-style typing when the target app remains frontmost.
+    /// Whether Continuum should prefer system-style typing when the target app remains frontmost.
     #[serde(default = "default_autofill_prefer_typed_injection")]
     pub prefer_typed_injection: bool,
     /// Maximum number of candidates to return for quick-pick conflict resolution.
@@ -1055,7 +1055,7 @@ impl Config {
         }
         if self.embedding.dimension != DEFAULT_TEXT_EMBEDDING_DIM {
             return Err(format!(
-                "This FNDR build expects {}-dimensional text embeddings, but config.toml sets {}. Change the embedding model, schema, and config together before using a non-default dimension.",
+                "This Continuum build expects {}-dimensional text embeddings, but config.toml sets {}. Change the embedding model, schema, and config together before using a non-default dimension.",
                 DEFAULT_TEXT_EMBEDDING_DIM,
                 self.embedding.dimension
             ));
@@ -1084,7 +1084,7 @@ impl Config {
             config.validate().map_err(|err| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid FNDR config: {err}"),
+                    format!("Invalid Continuum config: {err}"),
                 )
             })?;
             Ok(config)
@@ -1093,7 +1093,7 @@ impl Config {
             config.validate().map_err(|err| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Invalid FNDR config: {err}"),
+                    format!("Invalid Continuum config: {err}"),
                 )
             })?;
             config.save()?;
@@ -1113,7 +1113,7 @@ impl Config {
     }
 
     fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let dirs = directories::ProjectDirs::from("com", "fndr", "FNDR")
+        let dirs = directories::ProjectDirs::from("com", "continuum", "Continuum")
             .ok_or("Could not determine config directory")?;
         Ok(dirs.config_dir().join("config.toml"))
     }

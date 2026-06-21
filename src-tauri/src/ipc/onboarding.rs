@@ -748,7 +748,7 @@ async fn do_download(
 
     emit_download_log(app, "Building reqwest HTTP client (15s connect timeout)...");
     let client = reqwest::Client::builder()
-        .user_agent("FNDR/1.0")
+        .user_agent("Continuum/1.0")
         .connect_timeout(std::time::Duration::from_secs(15))
         .timeout(std::time::Duration::from_secs(7200))
         .build()

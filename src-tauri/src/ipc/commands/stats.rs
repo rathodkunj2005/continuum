@@ -1,6 +1,6 @@
 //! Capture status, MCP/context, voice/capture toggles, stats, daily summary, time/focus.
 
-use super::common::{shared_embedder, strip_internal_fndr_results, truncate_chars};
+use super::common::{shared_embedder, strip_internal_continuum_results, truncate_chars};
 use super::search::{
     cache_is_fresh, card_domain, card_summary, is_low_signal_summary, is_low_signal_title,
     title_from_summary,
@@ -174,7 +174,7 @@ pub async fn list_recent_context_packs(
 }
 
 #[tauri::command]
-pub async fn fndr_subscribe(
+pub async fn continuum_subscribe(
     state: State<'_, Arc<AppState>>,
     session_id: String,
 ) -> Result<bool, String> {
@@ -187,7 +187,7 @@ pub async fn fndr_subscribe(
 }
 
 #[tauri::command]
-pub async fn fndr_unsubscribe(
+pub async fn continuum_unsubscribe(
     state: State<'_, Arc<AppState>>,
     session_id: String,
 ) -> Result<bool, String> {
@@ -408,12 +408,12 @@ pub(crate) fn build_daily_activity_summary(records: &[SearchResult], day_label: 
     };
     if sorted.len() == 1 {
         lines.push(format!(
-            "- FNDR captured 1 memory {day_label} at {}.",
+            "- Continuum captured 1 memory {day_label} at {}.",
             format_local_time(first_ts)
         ));
     } else {
         lines.push(format!(
-            "- FNDR captured {} {memory_word} across {} {day_label}, from {} to {}.",
+            "- Continuum captured {} {memory_word} across {} {day_label}, from {} to {}.",
             sorted.len(),
             human_duration_minutes(span_minutes),
             format_local_time(first_ts),
@@ -615,7 +615,7 @@ pub async fn generate_daily_summary_for_date(
         .get_search_results_in_range(start_ms, end_ms)
         .await
         .map_err(|e| e.to_string())?;
-    let records = strip_internal_fndr_results(records);
+    let records = strip_internal_continuum_results(records);
 
     if records.is_empty() {
         return Ok("No memories recorded for this date.".to_string());

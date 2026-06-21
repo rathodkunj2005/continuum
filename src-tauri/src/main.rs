@@ -1,11 +1,11 @@
-//! FNDR - Privacy-first local memory search
+//! Continuum - Privacy-first local memory search
 //!
 //! Main entry point for the Tauri application.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use chrono::Timelike;
-use fndr_lib::{
+use continuum_lib::{
     capture, config::Config, graph::GraphStore, ipc, models, storage::Store, AppState,
     ProactiveSuggestion,
 };
@@ -62,12 +62,12 @@ fn main() {
     use tracing_subscriber::{fmt, EnvFilter};
     tracing_subscriber::registry()
         .with(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| "fndr=info,fndr_lib=info".into()),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| "continuum=info,continuum_lib=info".into()),
         )
         .with(fmt::layer())
         .init();
 
-    tracing::info!("Starting FNDR...");
+    tracing::info!("Starting Continuum...");
 
     // Build a tokio runtime with a bigger worker stack (default is 2 MB) to
     // prevent SIGABRT on deep async chains.
@@ -96,14 +96,14 @@ fn main() {
             // clear actionable error if the on-disk model files don't match
             // the centralized contract (model file, tokenizer, dimension).
             // This is intentionally non-fatal: a missing model still falls
-            // back to mock when FNDR_ALLOW_MOCK_EMBEDDER=1, and the real
+            // back to mock when CONTINUUM_ALLOW_MOCK_EMBEDDER=1, and the real
             // dimension check still runs inside RealEmbedder::new(). The
             // preflight just turns silent fallback into an obvious log line.
-            let preflight = fndr_lib::embedding::preflight_embedding_environment(&config.embedding);
+            let preflight = continuum_lib::embedding::preflight_embedding_environment(&config.embedding);
             if preflight.is_ready() {
                 tracing::info!("{}", preflight.describe());
             } else {
-                tracing::warn!(target: "fndr::embedding", "{}", preflight.describe());
+                tracing::warn!(target: "continuum::embedding", "{}", preflight.describe());
             }
 
             // Initialize store (LanceDB) — open_all_tables internally calls
@@ -114,13 +114,13 @@ fn main() {
             let store = Store::new(&data_dir)?;
             let store_arc = Arc::new(store);
             tracing::info!("Consolidated store initialized at {:?}", data_dir);
-            let state_store = Arc::new(fndr_lib::storage::StateStore::new(&data_dir)?);
+            let state_store = Arc::new(continuum_lib::storage::StateStore::new(&data_dir)?);
             tracing::info!("State store initialized");
 
             let graph = GraphStore::new(store_arc.clone());
             tracing::info!("Graph store initialized");
 
-            if let Err(err) = tauri::async_runtime::block_on(fndr_lib::meeting::init(
+            if let Err(err) = tauri::async_runtime::block_on(continuum_lib::meeting::init(
                 data_dir.clone(),
                 store_arc.clone(),
             )) {
@@ -188,7 +188,7 @@ fn main() {
                         preferred
                     );
                     let loaded =
-                        fndr_lib::load_ai_engines(restore_data_dir.as_path(), &config).await;
+                        continuum_lib::load_ai_engines(restore_data_dir.as_path(), &config).await;
                     restore_state.replace_ai_engines(loaded.inference, loaded.vlm);
                 });
             }
@@ -241,7 +241,7 @@ fn main() {
                     loop {
                         interval.tick().await;
                         if let Err(err) =
-                            fndr_lib::ipc::commands::commit_graph_updates(graph_state.clone()).await
+                            continuum_lib::ipc::commands::commit_graph_updates(graph_state.clone()).await
                         {
                             tracing::debug!("commit_graph_updates: {err}");
                         }
@@ -255,7 +255,7 @@ fn main() {
             // and the memory_review module docs for the full lifecycle.
             {
                 let review_state = state.clone();
-                fndr_lib::memory_review::spawn_worker(review_state, MEMORY_REVIEW_INTERVAL);
+                continuum_lib::memory_review::spawn_worker(review_state, MEMORY_REVIEW_INTERVAL);
             }
 
             // Background: daily memory-review scheduler. Wakes hourly and runs
@@ -265,7 +265,7 @@ fn main() {
             // never blocked.
             {
                 let daily_state = state.clone();
-                fndr_lib::memory_review::spawn_daily_scheduler(daily_state);
+                continuum_lib::memory_review::spawn_daily_scheduler(daily_state);
             }
 
             let runtime_state = state.clone();
@@ -275,15 +275,15 @@ fn main() {
             // per-model RAM breakdown to the Engine Inspector.
             {
                 let metrics_state = state.clone();
-                fndr_lib::telemetry::system_metrics::spawn_sampler(move || {
-                    fndr_lib::telemetry::system_metrics::model_memory_entries(&metrics_state)
+                continuum_lib::telemetry::system_metrics::spawn_sampler(move || {
+                    continuum_lib::telemetry::system_metrics::model_memory_entries(&metrics_state)
                 });
             }
 
             // Background task: Track downloads folder
             let uploads_state = state.clone();
             tauri::async_runtime::spawn(async move {
-                fndr_lib::downloads::run_watcher(uploads_state).await;
+                continuum_lib::downloads::run_watcher(uploads_state).await;
             });
 
             // Background task: Ebbinghaus decay — runs every 6 hours.
@@ -408,7 +408,7 @@ fn main() {
             {
                 let clip_state = state.clone();
                 tauri::async_runtime::spawn(async move {
-                    fndr_lib::capture::clipboard::run_clipboard_watcher(clip_state).await;
+                    continuum_lib::capture::clipboard::run_clipboard_watcher(clip_state).await;
                 });
             }
 
@@ -473,12 +473,12 @@ fn main() {
 
                                     if !briefing.trim().is_empty() {
                                         let title = if mode == "morning" {
-                                            "☀️ FNDR Morning Briefing"
+                                            "☀️ Continuum Morning Briefing"
                                         } else {
-                                            "🌙 FNDR Evening Recap"
+                                            "🌙 Continuum Evening Recap"
                                         };
                                         let _ = notif_handle.emit(
-                                            "fndr_notification",
+                                            "continuum_notification",
                                             serde_json::json!({
                                                 "title": title,
                                                 "body": briefing,
@@ -529,7 +529,7 @@ fn main() {
                                         titles.join(", ")
                                     );
                                     let _ = notif_handle.emit(
-                                        "fndr_notification",
+                                        "continuum_notification",
                                         serde_json::json!({
                                             "title": "📋 Stale Tasks",
                                             "body": body,
@@ -546,7 +546,7 @@ fn main() {
                         // rolling window.
                         if last_context_switch_check.elapsed() > APP_SWITCH_SAMPLE_INTERVAL {
                             last_context_switch_check = std::time::Instant::now();
-                            let current_app = fndr_lib::capture::macos_frontmost_app_name();
+                            let current_app = continuum_lib::capture::macos_frontmost_app_name();
                             if let Some(app) = current_app {
                                 let last = recent_app_switches.back().cloned();
                                 if last.as_deref() != Some(&app) {
@@ -561,7 +561,7 @@ fn main() {
                                     recent_app_switches.iter().collect();
                                 if unique.len() >= APP_SWITCH_UNIQUE_THRESHOLD {
                                     let _ = notif_handle.emit(
-                                        "fndr_notification",
+                                        "continuum_notification",
                                         serde_json::json!({
                                             "title": "🔀 High Context Switching",
                                             "body": "You've been switching between many apps. Want to refocus?",
@@ -585,7 +585,7 @@ fn main() {
             {
                 let companion_state = state.clone();
                 tauri::async_runtime::spawn(async move {
-                    match fndr_lib::companion::start(companion_state, None, None).await {
+                    match continuum_lib::companion::start(companion_state, None, None).await {
                         Ok(s) => tracing::info!(
                             host = %s.host,
                             port = s.port,
@@ -598,7 +598,7 @@ fn main() {
             }
 
             if let Err(err) =
-                fndr_lib::meeting::bind_runtime(app.handle().clone(), runtime_state.clone())
+                continuum_lib::meeting::bind_runtime(app.handle().clone(), runtime_state.clone())
             {
                 tracing::warn!("Meeting runtime initialization failed: {}", err);
             }
@@ -640,14 +640,14 @@ fn main() {
             ipc::commands::search::search_memory_cards,
             ipc::commands::search::list_memory_cards,
             ipc::commands::search::summarize_search,
-            // FNDR agentic-graph-rag namespace (Phase 4)
-            ipc::commands::retrieval::fndr_search,
-            ipc::commands::retrieval::fndr_answer,
-            ipc::commands::retrieval::fndr_build_context_pack,
-            ipc::commands::retrieval::fndr_get_memory_subgraph,
-            ipc::commands::retrieval::fndr_get_related_memories,
-            ipc::commands::retrieval::fndr_quality_status,
-            ipc::commands::retrieval::fndr_timeline,
+            // Continuum agentic-graph-rag namespace (Phase 4)
+            ipc::commands::retrieval::continuum_search,
+            ipc::commands::retrieval::continuum_answer,
+            ipc::commands::retrieval::continuum_build_context_pack,
+            ipc::commands::retrieval::continuum_get_memory_subgraph,
+            ipc::commands::retrieval::continuum_get_related_memories,
+            ipc::commands::retrieval::continuum_quality_status,
+            ipc::commands::retrieval::continuum_timeline,
             ipc::commands::search::find_visually_similar_memories,
             ipc::commands::get_fun_greeting,
             ipc::commands::get_status,
@@ -668,8 +668,8 @@ fn main() {
             ipc::commands::companion_revoke_device,
             ipc::commands::get_context_runtime_status,
             ipc::commands::list_recent_context_packs,
-            ipc::commands::fndr_subscribe,
-            ipc::commands::fndr_unsubscribe,
+            ipc::commands::continuum_subscribe,
+            ipc::commands::continuum_unsubscribe,
             // Meetings
             ipc::commands::get_meeting_status,
             ipc::commands::start_meeting_recording,
@@ -790,10 +790,10 @@ fn main() {
             ipc::commands::models_cleanup_dry_run,
             ipc::commands::models_cleanup_confirm,
             // Graph projection layer for 3D visualization
-            fndr_lib::graph::projection_commands::get_memory_graph_atlas,
-            fndr_lib::graph::projection_commands::get_memory_graph_context,
-            fndr_lib::graph::projection_commands::get_graph_node_neighborhood,
-            fndr_lib::graph::projection_commands::get_graph_communities,
+            continuum_lib::graph::projection_commands::get_memory_graph_atlas,
+            continuum_lib::graph::projection_commands::get_memory_graph_context,
+            continuum_lib::graph::projection_commands::get_graph_node_neighborhood,
+            continuum_lib::graph::projection_commands::get_graph_communities,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

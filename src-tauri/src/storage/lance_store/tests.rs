@@ -65,17 +65,17 @@ fn normalize_record_for_index_suppresses_auth_urls() {
 #[test]
 fn normalize_record_for_index_keeps_specific_paths() {
     let normalized = normalize_record_for_index(&record(
-        Some("https://docs.example.com/projects/fndr/pipeline?view=full"),
+        Some("https://docs.example.com/projects/continuum/pipeline?view=full"),
         "Pipeline design",
-        "Reviewed the FNDR pipeline design and search notes",
+        "Reviewed the Continuum pipeline design and search notes",
     ));
     assert_eq!(
         normalized.url.as_deref(),
-        Some("https://docs.example.com/projects/fndr/pipeline")
+        Some("https://docs.example.com/projects/continuum/pipeline")
     );
     assert_eq!(
         normalized.session_key,
-        "chrome:docs.example.com:projects/fndr"
+        "chrome:docs.example.com:projects/continuum"
     );
 }
 
@@ -532,7 +532,7 @@ fn normalize_record_for_index_strips_low_confidence_markers() {
 #[test]
 fn normalize_record_for_index_preserves_existing_embedding_text_and_flags_mismatch() {
     let mut source = record(
-        Some("https://docs.example.com/fndr/search"),
+        Some("https://docs.example.com/continuum/search"),
         "Search quality",
         "Improved search quality for memory cards",
     );
@@ -562,7 +562,7 @@ fn normalize_record_for_index_preserves_existing_embedding_text_and_flags_mismat
 #[test]
 fn batch_to_search_results_exposes_safe_embedding_provenance() {
     let mut source = record(
-        Some("https://docs.example.com/fndr/search"),
+        Some("https://docs.example.com/continuum/search"),
         "Search quality",
         "Improved search quality for memory cards",
     );
@@ -601,11 +601,11 @@ fn batch_to_search_results_exposes_safe_embedding_provenance() {
 #[test]
 fn normalize_record_for_index_builds_fingerprint_fallback_when_invalid() {
     let mut source = record(
-        Some("https://docs.example.com/fndr/search"),
+        Some("https://docs.example.com/continuum/search"),
         "Search quality",
         "Improved search quality for memory cards",
     );
-    source.project = "FNDR".to_string();
+    source.project = "Continuum".to_string();
     source.activity_type = "coding".to_string();
     source.dedup_fingerprint = "invalid fingerprint ###".to_string();
 
@@ -678,10 +678,10 @@ fn generate_search_aliases_entity_underscore_variant_without_acronym_noise() {
         "Touched config files.",
     );
     r.topic = "unknown".to_string();
-    r.entities = vec!["fndr_search_pipeline".to_string()];
+    r.entities = vec!["continuum_search_pipeline".to_string()];
     let aliases = generate_search_aliases_public(&r);
-    assert!(aliases.contains(&"fndr_search_pipeline".to_string()));
-    assert!(aliases.contains(&"fndr search pipeline".to_string()));
+    assert!(aliases.contains(&"continuum_search_pipeline".to_string()));
+    assert!(aliases.contains(&"continuum search pipeline".to_string()));
     assert!(
         !aliases
             .iter()

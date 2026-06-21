@@ -7,21 +7,21 @@
 ## What shipped
 
 - Added watch target scaffolding in project spec:
-  - `apps/ios/project.yml` target `FNDR Watch` (`application.watchapp2`)
+  - `apps/ios/project.yml` target `Continuum Watch` (`application.watchapp2`)
 - Added watch app files:
-  - `apps/ios/FNDR Watch/App/FNDRWatchApp.swift`
+  - `apps/ios/Continuum Watch/App/ContinuumWatchApp.swift`
   - `Ask/WatchAskView.swift`
   - `Remember/WatchRememberView.swift`
   - `Recent/WatchRecentView.swift`
   - `Status/WatchStatusView.swift`
-- Added shared watch bridge schema/service in FNDRKit:
-  - `apps/ios/FNDRKit/Sources/FNDRKit/WatchBridge.swift`
-- Added runnable watch bridge suite coverage in `FNDRKitCheck`.
+- Added shared watch bridge schema/service in ContinuumKit:
+  - `apps/ios/ContinuumKit/Sources/ContinuumKit/WatchBridge.swift`
+- Added runnable watch bridge suite coverage in `ContinuumKitCheck`.
 
 ## Verification
 
 - `xcodegen generate --spec apps/ios/project.yml --project apps/ios` ✅
-- `swift run FNDRKitCheck` watch bridge suite ✅
+- `swift run ContinuumKitCheck` watch bridge suite ✅
 
 ## Remaining validation gap
 

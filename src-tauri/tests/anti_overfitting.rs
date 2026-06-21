@@ -11,7 +11,7 @@ fn production_query_and_intent_logic_avoids_fixture_specific_alias_rules() {
         ),
         (
             "src/context_runtime/mod.rs",
-            vec!["contains(\"fndr\")", "Some(\"FNDR\".to_string())"],
+            vec!["contains(\"continuum\")", "Some(\"Continuum\".to_string())"],
         ),
         (
             "src/memory_embedding_document.rs",

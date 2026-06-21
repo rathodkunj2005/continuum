@@ -1,11 +1,11 @@
-# FNDR Refactoring Skills
+# Continuum Refactoring Skills
 
 This repo now has four reusable Codex skills for behavior-preserving code quality work:
 
-- `fndr-codebase-refactor`: architecture mapping, duplication discovery, maintainability risk review, and scoped refactoring.
-- `fndr-clean-architecture`: concern separation, modular folder/module structure, and coupling reduction.
-- `fndr-performance-optimization`: polling/render/async/storage/search optimization without behavior changes.
-- `fndr-production-debugging`: root-cause analysis, edge-case review, and production-ready fixes.
+- `continuum-codebase-refactor`: architecture mapping, duplication discovery, maintainability risk review, and scoped refactoring.
+- `continuum-clean-architecture`: concern separation, modular folder/module structure, and coupling reduction.
+- `continuum-performance-optimization`: polling/render/async/storage/search optimization without behavior changes.
+- `continuum-production-debugging`: root-cause analysis, edge-case review, and production-ready fixes.
 
 ## Application Order
 
@@ -14,9 +14,9 @@ This repo now has four reusable Codex skills for behavior-preserving code qualit
 3. Optimize repeated work and cleanup paths.
 4. Verify edge cases and run focused checks.
 
-## FNDR Architecture Summary
+## Continuum Architecture Summary
 
-FNDR is a local-first Tauri app. The React frontend in `src` owns the product shell, panels, onboarding, search UI, and Tauri command bindings. The Rust backend in `src-tauri/src` owns capture, privacy filtering, embeddings, search, storage, speech, meeting capture, MCP/Hermes integration, and command handlers.
+Continuum is a local-first Tauri app. The React frontend in `src` owns the product shell, panels, onboarding, search UI, and Tauri command bindings. The Rust backend in `src-tauri/src` owns capture, privacy filtering, embeddings, search, storage, speech, meeting capture, MCP/Hermes integration, and command handlers.
 
 Important data flow:
 

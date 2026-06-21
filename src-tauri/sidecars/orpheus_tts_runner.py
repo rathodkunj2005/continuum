@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FNDR Orpheus GGUF sidecar.
+"""Continuum Orpheus GGUF sidecar.
 
 Usage:
     python3 orpheus_tts_runner.py <model_path> <output_path> <voice_id> <text>

@@ -32,12 +32,12 @@ fn prompt_specs() -> &'static [(&'static str, &'static str, &'static str, &'stat
             "resume_work",
             "Resume Work",
             "Reconstruct the user's recent work and propose the next safe step.",
-            "Call agent.privacy_status, then agent.build_context_pack in ask or plan mode for the user's goal. Cite FNDR memories by id, explain uncertainty, and do not take actions unless the user approves them.",
+            "Call agent.privacy_status, then agent.build_context_pack in ask or plan mode for the user's goal. Cite Continuum memories by id, explain uncertainty, and do not take actions unless the user approves them.",
         ),
         (
             "debug_with_history",
             "Debug With History",
-            "Use prior FNDR debugging memories before suggesting a fix.",
+            "Use prior Continuum debugging memories before suggesting a fix.",
             "Call agent.build_context_pack with mode=plan and search for prior errors, files, commands, and decisions. Use evidence from memories; if exact ranking scores are unavailable, say so. Suggest commands only, unless Act mode approval is granted.",
         ),
         (
@@ -50,12 +50,12 @@ fn prompt_specs() -> &'static [(&'static str, &'static str, &'static str, &'stat
             "prepare_for_meeting",
             "Prepare For Meeting",
             "Build a meeting prep brief from recent project memory.",
-            "Call FNDR context tools first. Summarize recent decisions, blockers, todos, and relevant files. Cite evidence and do not expose raw private history by default.",
+            "Call Continuum context tools first. Summarize recent decisions, blockers, todos, and relevant files. Cite evidence and do not expose raw private history by default.",
         ),
         (
             "handoff_to_coding_agent",
             "Handoff To Coding Agent",
-            "Create a coding-agent handoff from FNDR memory.",
+            "Create a coding-agent handoff from Continuum memory.",
             "Call agent.build_context_pack with mode=plan. Include goals, files, constraints, blockers, commands, and next steps from evidence. Tell the receiving agent to inspect the repo before editing.",
         ),
         (
@@ -67,8 +67,8 @@ fn prompt_specs() -> &'static [(&'static str, &'static str, &'static str, &'stat
         (
             "turn_workflow_into_skill",
             "Turn Workflow Into Skill",
-            "Draft a reusable skill from a completed FNDR Agent run.",
-            "Call agent.explain_retrieval for the run, then propose_skill_from_run through FNDR UI/backend if available. Do not activate the skill automatically.",
+            "Draft a reusable skill from a completed Continuum Agent run.",
+            "Call agent.explain_retrieval for the run, then propose_skill_from_run through Continuum UI/backend if available. Do not activate the skill automatically.",
         ),
     ]
 }

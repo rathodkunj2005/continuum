@@ -1,4 +1,4 @@
-//! Companion API — the local-network HTTP surface that the FNDR iPhone and
+//! Companion API — the local-network HTTP surface that the Continuum iPhone and
 //! Apple Watch apps talk to.
 //!
 //! Design summary:
@@ -12,7 +12,7 @@
 //!   - `/v1/ask`, `/v1/memories/search`, `/v1/memories/:id`, `/v1/feedback`
 //!     cover slices 3-7.
 //!
-//! Endpoint discovery file: `~/.fndr/companion.json` (host, port, tls, cert).
+//! Endpoint discovery file: `~/.continuum/companion.json` (host, port, tls, cert).
 
 pub mod auth;
 pub mod device_registry;
@@ -44,7 +44,7 @@ const LOOPBACK_HOST: &str = "127.0.0.1";
 fn discovery_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".fndr")
+        .join(".continuum")
         .join("companion.json")
 }
 
@@ -365,7 +365,7 @@ fn write_discovery(host: &str, port: u16, tls_enabled: bool, mac_name: &str) {
 
 async fn root_handler() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
-        "service": "fndr_companion",
+        "service": "continuum_companion",
         "version": env!("CARGO_PKG_VERSION"),
         "endpoints": [
             "/v1/pair/start",

@@ -47,7 +47,7 @@ export const LABEL_CONFIG = {
   topImportanceShown: 5,
 } as const
 
-// Community colors (map to FNDR design tokens)
+// Community colors (map to Continuum design tokens)
 export const COMMUNITY_COLORS: Record<string, string> = {
   "Work/Code": "#5B7FFF", // token-blue
   Research: "#7FFF5B", // token-green

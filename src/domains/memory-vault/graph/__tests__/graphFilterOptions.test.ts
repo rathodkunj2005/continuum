@@ -64,7 +64,7 @@ describe("deriveFilterOptions", () => {
                     id: "a",
                     raw: {
                         node_type: "Concept",
-                        metadata: { project: "Work / FNDR", topic: "color" },
+                        metadata: { project: "Work / Continuum", topic: "color" },
                     } as never,
                     label: "x",
                     nodeType: "Concept",
@@ -75,7 +75,7 @@ describe("deriveFilterOptions", () => {
                 },
                 {
                     id: "b",
-                    raw: { node_type: "Concept", metadata: { project: "Work / FNDR" } } as never,
+                    raw: { node_type: "Concept", metadata: { project: "Work / Continuum" } } as never,
                     label: "y",
                     nodeType: "Concept",
                     community: null,
@@ -86,7 +86,7 @@ describe("deriveFilterOptions", () => {
             ],
         };
         const o = deriveFilterOptions(view);
-        expect(o.projects).toEqual(["Work / FNDR"]);
+        expect(o.projects).toEqual(["Work / Continuum"]);
         expect(o.topics).toEqual(["color"]);
     });
 

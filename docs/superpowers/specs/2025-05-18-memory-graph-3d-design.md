@@ -1,4 +1,4 @@
-# FNDR Memory Graph 3D: Design Specification
+# Continuum Memory Graph 3D: Design Specification
 
 **Date:** 2025-05-18  
 **Feature:** MemoryGraph3D / KnowledgeGraph3D  
@@ -9,9 +9,9 @@
 
 ## 1. Design Philosophy
 
-FNDR's graph should be a **spatially meaningful second brain map**, not a chaotic particle visualization. The graph answers four fundamental questions:
+Continuum's graph should be a **spatially meaningful second brain map**, not a chaotic particle visualization. The graph answers four fundamental questions:
 
-- **What does FNDR know?** (Atlas Mode)
+- **What does Continuum know?** (Atlas Mode)
 - **Where is this memory located semantically?** (Context Mode + visual positioning)
 - **Why is this memory connected?** (Explainability layer)
 - **What evidence supports it?** (Progressive disclosure)
@@ -250,7 +250,7 @@ interface GraphData {
 
 ### 5.1 Design Tokens
 
-FNDR aesthetic is **dark, cinematic, premium**. Avoid generic "AI neon purple/blue."
+Continuum aesthetic is **dark, cinematic, premium**. Avoid generic "AI neon purple/blue."
 
 **Base:**
 - Background: Deep navy/black with subtle depth fog
@@ -329,7 +329,7 @@ FNDR aesthetic is **dark, cinematic, premium**. Avoid generic "AI neon purple/bl
 - Timestamp (relative, e.g., "2 hours ago")
 - Short summary (1 line if available)
 - Confidence/relevance if relevant
-- One-line "why connected" reason (e.g., "Same project: FNDR")
+- One-line "why connected" reason (e.g., "Same project: Continuum")
 
 **Full detail belongs in side panel, not directly on graph.**
 
@@ -452,7 +452,7 @@ function explainConnection(
   edge: GraphEdge
 ): string {
   // Examples:
-  // "Connected because both memories belong to the FNDR project."
+  // "Connected because both memories belong to the Continuum project."
   // "Pulled forward due to high semantic similarity to your query."
   // "Frequently reused in prior agent context packs."
   // "Occurred in the same capture session."
@@ -464,7 +464,7 @@ function explainConnection(
 ### 8.2 Signal Examples
 
 - **Semantic match:** "Pulled forward because it has high semantic similarity (0.89) to your query."
-- **Project/topic:** "Connected because both memories belong to the FNDR project."
+- **Project/topic:** "Connected because both memories belong to the Continuum project."
 - **Temporal:** "Related by temporal proximity—captured in the same session."
 - **Reuse:** "Frequently reused in prior agent context packs."
 - **Reference:** "Connected through an explicit reference in the source code."
@@ -476,7 +476,7 @@ Show explanations in hover card and side panel.
 
 ## 9. Performance & Level-of-Detail
 
-FNDR graphs may grow large. Implement smart LOD.
+Continuum graphs may grow large. Implement smart LOD.
 
 ### 9.1 Rendering LOD
 
@@ -694,7 +694,7 @@ interface GraphDataAdapter {
 - Do NOT expose raw OCR, screenshots, or sensitive metadata in `GraphNode`
 - Do NOT include full window titles or URLs unless explicitly approved
 - Evidence nodes must be filtered: hide by default, reveal only on user action
-- Respect existing FNDR privacy/incognito behavior
+- Respect existing Continuum privacy/incognito behavior
 - Do not create new data retention or backup of graph data
 
 ---
@@ -739,7 +739,7 @@ src/features/graph/
     └── useGraphInteraction.ts         # Handle clicks/hover/selection
 ```
 
-(Adjust paths to match existing FNDR patterns if different.)
+(Adjust paths to match existing Continuum patterns if different.)
 
 ### 12.2 Component Responsibilities
 
@@ -793,7 +793,7 @@ Do **not** over-invest in brittle snapshot tests. Focus on layout correctness in
 7. ✅ Clicking a node opens side panel with metadata, summary, relationships, actions
 8. ✅ Hover/click interactions explain why nodes/edges appear
 9. ✅ Graph remains smooth on realistic data (200+ nodes)
-10. ✅ Implementation is typed, modular, matches FNDR architecture
+10. ✅ Implementation is typed, modular, matches Continuum architecture
 11. ✅ No hardcoded demo data in production paths
 12. ✅ No privacy violations; raw evidence hidden by default
 13. ✅ No excessive dependencies; bundle impact acceptable
@@ -833,7 +833,7 @@ Backend must be built first. Frontend depends on it.
 
 Frontend implementation depends on Phase 1 completion.
 
-1. **Inspect FNDR frontend structure** — Review existing graph/search/memory UI components
+1. **Inspect Continuum frontend structure** — Review existing graph/search/memory UI components
 2. **Design tokens & visual patterns** — Identify color tokens, layout conventions
 3. **Type definitions** — Copy/generate TypeScript interfaces from Rust contract
 4. **GraphDataAdapter** — Wire to Tauri graph commands (primary path); add fallback-only memory card derivation
@@ -893,12 +893,12 @@ Frontend implementation depends on Phase 1 completion.
     - Empty/error state handling
 17. **Polish & cleanup:**
     - Remove unused code, verify component structure
-    - Confirm FNDR aesthetic (dark, cinematic, no generic neon)
+    - Confirm Continuum aesthetic (dark, cinematic, no generic neon)
     - Document architecture briefly
 18. **Final validation:**
     - Typecheck, lint, build pass
     - Unit/integration tests pass
-    - Demo with real FNDR data (atlas + context modes)
+    - Demo with real Continuum data (atlas + context modes)
     - Verify performance targets (60 FPS typical, 30+ FPS large graphs)
 
 ---
@@ -917,7 +917,7 @@ Frontend implementation depends on Phase 1 completion.
 - ❌ Do NOT make ThreeJS depend on raw OCR, screenshots, or frontend-only memory card text
 - ✅ DO prefer small, reversible changes
 - ✅ DO keep implementation modular and testable
-- ✅ DO wire to real FNDR data, not fixtures
+- ✅ DO wire to real Continuum data, not fixtures
 - ✅ DO have backend graph projection produce graph-ready nodes, edges, communities, scores, reasons
 - ✅ DO respect backend graph contract; frontend receives clean GraphData
 
@@ -931,7 +931,7 @@ Include:
 - Summary of changed files
 - Commands to run
 - Any remaining gaps
-- Instructions for testing with real FNDR data
+- Instructions for testing with real Continuum data
 
 ---
 

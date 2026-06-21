@@ -391,7 +391,7 @@ fn browser_semantic_javascript() -> &'static str {
             const navRatio=bodyWords>0 ? Math.min(1, (navWords/Math.max(1, bodyWords))*1.8) : 0;\
             const contentSignal=Math.max(0, Math.min(1, primaryWords/120))*(1-navRatio);\
             const articleOut=article.slice(0, 2800);\
-            return [title,desc,h1,articleOut,navRatio.toFixed(3),contentSignal.toFixed(3)].join('|||FNDR|||');\
+            return [title,desc,h1,articleOut,navRatio.toFixed(3),contentSignal.toFixed(3)].join('|||Continuum|||');\
         } catch (e) {\
             return '';\
         }\
@@ -399,7 +399,7 @@ fn browser_semantic_javascript() -> &'static str {
 }
 
 fn parse_browser_semantic_payload(payload: &str) -> Option<BrowserSemanticContent> {
-    let parts = payload.split("|||FNDR|||").collect::<Vec<_>>();
+    let parts = payload.split("|||Continuum|||").collect::<Vec<_>>();
     if parts.len() < 6 {
         return None;
     }
@@ -612,7 +612,7 @@ mod tests {
 
     #[test]
     fn parses_browser_semantic_payload() {
-        let payload = "Screenpipe Docs|||FNDR|||Memory indexing guide|||FNDR|||Memory indexing|||FNDR|||This page explains capture and retrieval details.|||FNDR|||0.120|||FNDR|||0.740";
+        let payload = "Screenpipe Docs|||Continuum|||Memory indexing guide|||Continuum|||Memory indexing|||Continuum|||This page explains capture and retrieval details.|||Continuum|||0.120|||Continuum|||0.740";
         let parsed = parse_browser_semantic_payload(payload).expect("payload parse");
         assert_eq!(parsed.title, "Screenpipe Docs");
         assert!(parsed.content_signal_score > 0.7);

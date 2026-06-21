@@ -35,7 +35,7 @@ describe("getWallpaperAuroraColors", () => {
 
     it("every cinematic light animated wallpaper field has three distinct, non-white palette colors", () => {
         for (const paletteKey of listPalettes()) {
-            if (paletteKey === "fndrLight") continue;
+            if (paletteKey === "continuumLight") continue;
             const { bg, mid, acc } = getWallpaperAuroraColors(paletteKey, "light");
 
             expect(relativeLuminance(bg), `${paletteKey} bg`).toBeLessThan(0.72);

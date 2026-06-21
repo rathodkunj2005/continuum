@@ -33,12 +33,12 @@ pub(super) fn shared_real_embedder() -> Result<&'static Embedder, String> {
     ))
 }
 
-pub(super) fn is_internal_fndr_result(result: &SearchResult) -> bool {
+pub(super) fn is_internal_continuum_result(result: &SearchResult) -> bool {
     Blocklist::is_internal_app(&result.app_name, result.bundle_id.as_deref())
 }
 
-pub(super) fn strip_internal_fndr_results(mut results: Vec<SearchResult>) -> Vec<SearchResult> {
-    results.retain(|result| !is_internal_fndr_result(result));
+pub(super) fn strip_internal_continuum_results(mut results: Vec<SearchResult>) -> Vec<SearchResult> {
+    results.retain(|result| !is_internal_continuum_result(result));
     results
 }
 

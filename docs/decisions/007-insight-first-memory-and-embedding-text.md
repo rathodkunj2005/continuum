@@ -2,7 +2,7 @@
 
 ## Context
 
-FNDR stores screen-derived OCR in `MemoryRecord.text` / `clean_text` for provenance and debugging, while semantic search relies on `embedding_text` and related vectors. Product direction treats **human-facing insight layers** (what happened, why it mattered, what changed, thread context) as the durable story of a capture, not the raw transcript.
+Continuum stores screen-derived OCR in `MemoryRecord.text` / `clean_text` for provenance and debugging, while semantic search relies on `embedding_text` and related vectors. Product direction treats **human-facing insight layers** (what happened, why it mattered, what changed, thread context) as the durable story of a capture, not the raw transcript.
 
 ## Decision
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Download official Qwen3-VL 4B Instruct GGUF (Q4_K_M) for FNDR import vision + VLM tier.
+# Download official Qwen3-VL 4B Instruct GGUF (Q4_K_M) for Continuum import vision + VLM tier.
 # Usage: ./scripts/bootstrap/download-qwen3-vl-4b.sh [models_dir]
 # Default models_dir matches other bootstrap scripts (macOS app support).
 set -euo pipefail
 
-MODEL_DIR="${1:-$HOME/Library/Application Support/com.fndr.app/models}"
+MODEL_DIR="${1:-$HOME/Library/Application Support/com.continuum.app/models}"
 mkdir -p "$MODEL_DIR"
 
 FILE="Qwen3VL-4B-Instruct-Q4_K_M.gguf"

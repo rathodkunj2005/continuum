@@ -1,4 +1,4 @@
-# FNDR Intelligence Engine (Current Architecture)
+# Continuum Intelligence Engine (Current Architecture)
 
 This document reflects the live local-first implementation in this repository.
 
@@ -10,7 +10,7 @@ This document reflects the live local-first implementation in this repository.
 - OCR cleanup/noise filtering: `src-tauri/src/capture/text_cleanup.rs`
 - Text chunking and embedding: `src-tauri/src/embedding/chunking.rs`, `src-tauri/src/embedding/onnx.rs`
 
-Per memory event, FNDR stores:
+Per memory event, Continuum stores:
 - app/window/session metadata
 - cleaned OCR text
 - snippet summary
@@ -53,7 +53,7 @@ Current behavior:
 ## 4. Meeting Memory Ingestion
 
 - Meeting runtime/transcription: `src-tauri/src/meeting/mod.rs`
-- Meeting transcript is ingested into FNDR memory after recording stops
+- Meeting transcript is ingested into Continuum memory after recording stops
 - Transcript memories now attempt text embeddings before falling back to zero vectors
 
 ## 5. Notes on Reliability

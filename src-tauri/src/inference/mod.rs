@@ -52,7 +52,7 @@ pub fn get_or_init_backend() -> Result<Arc<LlamaBackend>, Box<dyn std::error::Er
 
     let mut backend = LlamaBackend::init()?;
     // llama.cpp model loader is very chatty on stderr; void unless debugging inference.
-    if std::env::var_os("FNDR_LLAMA_VERBOSE").is_none() {
+    if std::env::var_os("CONTINUUM_LLAMA_VERBOSE").is_none() {
         backend.void_logs();
     }
     let backend = Arc::new(backend);
@@ -326,8 +326,8 @@ fn validate_memory_card_draft(mut draft: MemoryCardDraft) -> Option<MemoryCardDr
 /// (e.g. markdown code fences) that the naive first-`{`/last-`}` approach mishandled.
 /// Walk the LLM's JSON object and coerce known-string-array fields into actual
 /// arrays of strings. The 1B Llama variant routinely emits
-/// `"entities": [{"name": "FNDR"}]` or `"tags": [{"label": "memory"}]`
-/// instead of `"entities": ["FNDR"]`, which makes `serde_json::from_str`
+/// `"entities": [{"name": "Continuum"}]` or `"tags": [{"label": "memory"}]`
+/// instead of `"entities": ["Continuum"]`, which makes `serde_json::from_str`
 /// fail with `invalid type: map, expected a string` and kills the frame at
 /// the grounding gate. We tolerate this by post-processing the JSON before
 /// it ever touches serde — strings stay strings, objects collapse to the
@@ -745,7 +745,7 @@ pub fn parse_expansion_terms(raw: &str) -> Vec<String> {
 // InferenceEngine
 // ============================================================================
 
-/// AI Inference Engine for FNDR using llama-cpp-2.
+/// AI Inference Engine for Continuum using llama-cpp-2.
 /// Persists the LlamaContext to prevent Metal resource exhaustion crashes.
 ///
 /// After a GPU OOM cascade, quit and relaunch the app before expecting stable Metal behaviour.
@@ -822,17 +822,17 @@ impl InferenceEngine {
 
         // n_ctx / n_batch tuned down for Apple Silicon unified memory (Metal peak working set).
         // Raise via env only when debugging long-context behaviour (values are clamped to llama.cpp rules).
-        let n_ctx = std::env::var("FNDR_INFERENCE_N_CTX")
+        let n_ctx = std::env::var("CONTINUUM_INFERENCE_N_CTX")
             .ok()
             .and_then(|s| s.parse::<u32>().ok())
             .and_then(NonZeroU32::new)
             .unwrap_or_else(|| NonZeroU32::new(2048).expect("2048 is non-zero"));
-        let n_batch = std::env::var("FNDR_INFERENCE_N_BATCH")
+        let n_batch = std::env::var("CONTINUUM_INFERENCE_N_BATCH")
             .ok()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(512)
             .min(n_ctx.get());
-        let n_ubatch = std::env::var("FNDR_INFERENCE_N_UBATCH")
+        let n_ubatch = std::env::var("CONTINUUM_INFERENCE_N_UBATCH")
             .ok()
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(256)
@@ -1106,25 +1106,25 @@ impl InferenceEngine {
         {
             Ok(raw) => raw,
             Err(_) => {
-                crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.timeout");
+                crate::telemetry::runtime_metrics::bump("continuum.retrieval.planner.llm.timeout");
                 return None;
             }
         };
 
         let Some(candidate) = extract_json_object(&raw) else {
-            crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.fail");
+            crate::telemetry::runtime_metrics::bump("continuum.retrieval.planner.llm.fail");
             return None;
         };
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&candidate) else {
-            crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.fail");
+            crate::telemetry::runtime_metrics::bump("continuum.retrieval.planner.llm.fail");
             return None;
         };
         if !valid_query_plan_refinement(&value) {
-            crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.fail");
+            crate::telemetry::runtime_metrics::bump("continuum.retrieval.planner.llm.fail");
             return None;
         }
 
-        crate::telemetry::runtime_metrics::bump("fndr.retrieval.planner.llm.success");
+        crate::telemetry::runtime_metrics::bump("continuum.retrieval.planner.llm.success");
         serde_json::to_string(&value).ok()
     }
 
@@ -1843,16 +1843,16 @@ mod tests {
     #[test]
     fn accepts_concise_activity_summary() {
         assert!(is_usable_summary(
-            "Reviewing download_model.sh changes in FNDR"
+            "Reviewing download_model.sh changes in Continuum"
         ));
     }
 
     #[test]
     fn handles_action_context_format() {
         let cleaned =
-            clean_summary_output("Action: edited schema.rs | Context: in FNDR's store module");
+            clean_summary_output("Action: edited schema.rs | Context: in Continuum's store module");
         assert!(cleaned.starts_with("edited schema.rs"));
-        assert!(cleaned.contains("FNDR"));
+        assert!(cleaned.contains("Continuum"));
     }
 
     #[test]
@@ -1905,7 +1905,7 @@ mod tests {
     fn normalize_collapses_entity_objects_to_strings() {
         let raw = r#"{
             "entities": [
-                {"name": "FNDR"},
+                {"name": "Continuum"},
                 {"label": "Capture Pipeline"},
                 "Cursor",
                 {"foo": "bar"}
@@ -1919,7 +1919,7 @@ mod tests {
 
         let entities = parsed["entities"].as_array().expect("entities array");
         let entity_strs: Vec<&str> = entities.iter().filter_map(|v| v.as_str()).collect();
-        assert!(entity_strs.contains(&"FNDR"));
+        assert!(entity_strs.contains(&"Continuum"));
         assert!(entity_strs.contains(&"Capture Pipeline"));
         assert!(entity_strs.contains(&"Cursor"));
         // The `{"foo": "bar"}` entity has no recognized text key, so it
@@ -1958,7 +1958,7 @@ mod tests {
         //   "Failed to parse structured memory JSON: invalid type: map, expected a string"
         let raw = r#"{
             "memory_context": "Reviewing capture loop",
-            "entities": [{"name": "Cursor"}, {"name": "FNDR"}],
+            "entities": [{"name": "Cursor"}, {"name": "Continuum"}],
             "tags": [{"label": "engineering"}],
             "confidence": 0.7
         }"#;
@@ -1967,7 +1967,7 @@ mod tests {
             serde_json::from_str(&normalized).expect("strict serde must accept normalized JSON");
         assert_eq!(
             parsed.entities,
-            vec!["Cursor".to_string(), "FNDR".to_string()]
+            vec!["Cursor".to_string(), "Continuum".to_string()]
         );
         assert_eq!(parsed.tags, vec!["engineering".to_string()]);
         assert!((parsed.confidence - 0.7).abs() < 1e-6);

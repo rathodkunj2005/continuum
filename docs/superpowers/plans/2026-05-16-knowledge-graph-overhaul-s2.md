@@ -96,20 +96,20 @@ describe("deriveFilterOptions", () => {
             nodes: [
                 {
                     id: "a",
-                    raw: { node_type: "Concept", metadata: { project: "Work / FNDR", topic: "color" } } as never,
+                    raw: { node_type: "Concept", metadata: { project: "Work / Continuum", topic: "color" } } as never,
                     label: "x", nodeType: "Concept", community: null,
                     connectionCount: 0, size: 8, importance: 0.3,
                 },
                 {
                     id: "b",
-                    raw: { node_type: "Concept", metadata: { project: "Work / FNDR" } } as never,
+                    raw: { node_type: "Concept", metadata: { project: "Work / Continuum" } } as never,
                     label: "y", nodeType: "Concept", community: null,
                     connectionCount: 0, size: 8, importance: 0.3,
                 },
             ],
         };
         const o = deriveFilterOptions(view);
-        expect(o.projects).toEqual(["Work / FNDR"]);
+        expect(o.projects).toEqual(["Work / Continuum"]);
         expect(o.topics).toEqual(["color"]);
     });
 

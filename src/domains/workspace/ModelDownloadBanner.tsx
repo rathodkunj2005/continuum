@@ -59,12 +59,12 @@ export function ModelDownloadBanner() {
                 const runtime = await refreshAiModels();
                 if (!runtime.ai_model_available && !cancelled) {
                     setError(
-                        `Model download finished, but FNDR still cannot see the Qwen model at ${downloadStatus.destination_path ?? "disk"}.`,
+                        `Model download finished, but Continuum still cannot see the Qwen model at ${downloadStatus.destination_path ?? "disk"}.`,
                     );
                 }
             } catch (refreshError) {
                 if (!cancelled) {
-                    setError(`Model downloaded, but FNDR could not refresh model state: ${String(refreshError)}`);
+                    setError(`Model downloaded, but Continuum could not refresh model state: ${String(refreshError)}`);
                 }
             } finally {
                 if (!cancelled) {
@@ -88,7 +88,7 @@ export function ModelDownloadBanner() {
             try {
                 const runtime = await refreshAiModels();
                 if (!runtime.ai_model_available) {
-                    setError("Qwen is supposed to be on disk, but FNDR could not find the local model files.");
+                    setError("Qwen is supposed to be on disk, but Continuum could not find the local model files.");
                 }
             } catch (refreshError) {
                 setError(String(refreshError));
@@ -124,7 +124,7 @@ export function ModelDownloadBanner() {
             <div className="banner-header">
                 <h3><Icon name="alert-triangle" size={15} /> Qwen Model Required</h3>
                 <p>
-                    FNDR is in OCR-only mode because the required local Qwen3-VL model is missing.
+                    Continuum is in OCR-only mode because the required local Qwen3-VL model is missing.
                     Search still works, but memory Q&A, summaries, and smarter indexing need the core model on disk.
                 </p>
             </div>
@@ -152,7 +152,7 @@ export function ModelDownloadBanner() {
                 <div className="banner-progress-area" style={{ textAlign: "center", fontStyle: "italic", opacity: 0.8 }}>
                     <span className="ob-icon pulse" style={{ marginRight: 8 }}><Icon name="settings" size={16} /></span>
                     {isActivatingModel
-                        ? "Loading model into FNDR"
+                        ? "Loading model into Continuum"
                         : activeDownloadStatus?.state === "finalizing"
                             ? "Finalizing model on disk"
                             : "Preparing download and connecting to HuggingFace"}

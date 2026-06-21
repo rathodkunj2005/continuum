@@ -1,7 +1,7 @@
-use fndr_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
-use fndr_lib::embedding::{Embedder, EMBEDDING_DIM};
-use fndr_lib::search::HybridSearcher;
-use fndr_lib::storage::{MemoryRecord, Store};
+use continuum_lib::config::DEFAULT_IMAGE_EMBEDDING_DIM;
+use continuum_lib::embedding::{Embedder, EMBEDDING_DIM};
+use continuum_lib::search::HybridSearcher;
+use continuum_lib::storage::{MemoryRecord, Store};
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -24,7 +24,7 @@ fn eval_rows() -> Vec<(
             "mem_4000_overview",
             "Google Chrome",
             "ChatGPT - 4000",
-            "User asked what is 4000 and explored FNDR intelligence layer concepts.",
+            "User asked what is 4000 and explored Continuum intelligence layer concepts.",
             Some("https://chatgpt.com"),
         ),
         (
@@ -65,8 +65,8 @@ fn eval_rows() -> Vec<(
         (
             "mem_knowledge_graph",
             "Codex",
-            "FNDR Knowledge Graph",
-            "Improved FNDR knowledge graph layout and discussed graph UI miniaturization.",
+            "Continuum Knowledge Graph",
+            "Improved Continuum knowledge graph layout and discussed graph UI miniaturization.",
             None,
         ),
         (
@@ -112,10 +112,10 @@ fn eval_rows() -> Vec<(
             Some("https://www.youtube.com"),
         ),
         (
-            "mem_fndr_uiux",
+            "mem_continuum_uiux",
             "Google Chrome",
-            "FNDR Stats",
-            "Queried FNDR stats, video generation, and UI UX file analysis in ChatGPT.",
+            "Continuum Stats",
+            "Queried Continuum stats, video generation, and UI UX file analysis in ChatGPT.",
             Some("https://chatgpt.com"),
         ),
         (
@@ -195,7 +195,7 @@ fn reciprocal_rank(hit_ids: &[String], relevant: &HashSet<String>) -> f32 {
 
 #[test]
 fn hybrid_search_relevance_eval_suite() {
-    std::env::set_var("FNDR_ALLOW_MOCK_EMBEDDER", "1");
+    std::env::set_var("CONTINUUM_ALLOW_MOCK_EMBEDDER", "1");
     let cases: Vec<EvalCase> =
         serde_json::from_str(include_str!("fixtures/search_eval_cases.json"))
             .expect("valid search eval fixture");

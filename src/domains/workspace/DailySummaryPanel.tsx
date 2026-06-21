@@ -169,7 +169,7 @@ export function DailySummaryPanel({ isVisible, onClose }: DailySummaryPanelProps
                 <div className="daily-toast" role="status" aria-live="polite">
                     <div className="daily-toast-copy">
                         <strong>PDF downloaded</strong>
-                        <span>Open the exported daily summary from FNDR.</span>
+                        <span>Open the exported daily summary from Continuum.</span>
                     </div>
                     <div className="daily-toast-actions">
                         <button className="daily-toast-btn primary" onClick={() => void handleOpenPdf()}>

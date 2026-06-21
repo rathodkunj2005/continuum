@@ -20,7 +20,7 @@ export function SurfacingReason({ reason }: Props) {
 
     return (
         <span
-            className="fndr-surfacing-reason"
+            className="continuum-surfacing-reason"
             style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -52,7 +52,7 @@ export function SurfacingReason({ reason }: Props) {
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
             onClick={() => setOpen((v) => !v)}
-            data-testid="fndr-surfacing-reason"
+            data-testid="continuum-surfacing-reason"
         >
             <span
                 style={{

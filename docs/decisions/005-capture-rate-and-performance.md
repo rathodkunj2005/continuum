@@ -1,6 +1,6 @@
 # 005: Capture Rate And Performance
 
-FNDR captures enough screen context to make memory search useful without turning the desktop app into a constant high-load observer. The capture loop balances three pressures: recall, battery/CPU cost, and privacy. More frequent capture improves recall, but also increases OCR, embedding, storage, and model-summary work.
+Continuum captures enough screen context to make memory search useful without turning the desktop app into a constant high-load observer. The capture loop balances three pressures: recall, battery/CPU cost, and privacy. More frequent capture improves recall, but also increases OCR, embedding, storage, and model-summary work.
 
 The stable loop uses a configurable base FPS, lower idle FPS, deep-idle pause, forced capture interval, perceptual deduplication, semantic deduplication, and batched LanceDB writes. This means a changing screen is captured, but repeated frames, unchanged OCR text, and idle periods are suppressed. The loop also batches records and flushes on a named interval or batch size rather than writing every frame individually.
 

@@ -130,12 +130,12 @@ pub fn latest_snapshot() -> SystemMetricsSnapshot {
 
 /// Coarse "is the system under enough pressure that a heavy VLM/LLM call
 /// is likely to OOM or stall?" check. Combines macOS host memory pressure
-/// (free + compressed pages) with the FNDR process's own CPU saturation.
+/// (free + compressed pages) with the Continuum process's own CPU saturation.
 /// Returns `(skip_heavy_models, reason)`.
 ///
-/// Thresholds tuned for an 8–16 GB Mac running dev tools alongside FNDR:
+/// Thresholds tuned for an 8–16 GB Mac running dev tools alongside Continuum:
 ///   * less than 512 MiB free → "high"
-///   * FNDR using more than 90% of one core sustained → "process_saturated"
+///   * Continuum using more than 90% of one core sustained → "process_saturated"
 /// Either condition flips the gate.
 pub fn pressure_recommends_skipping_heavy_models() -> (bool, &'static str) {
     let snap = latest_snapshot();
@@ -143,12 +143,12 @@ pub fn pressure_recommends_skipping_heavy_models() -> (bool, &'static str) {
         return (true, "host_memory_high");
     }
     // Removed moderate pressure gate: on 8 GB Macs, Qwen3-VL-2B can coexist
-    // with FNDR + LLM + text embedding even under moderate pressure. The 3 GiB
+    // with Continuum + LLM + text embedding even under moderate pressure. The 3 GiB
     // process footprint check below catches real memory exhaustion before swap.
     if snap.process_cpu.cpu_percent > 380.0 {
         return (true, "process_cpu_saturated");
     }
-    // FNDR process holding more than 3 GiB resident is the bound that
+    // Continuum process holding more than 3 GiB resident is the bound that
     // matters on 8 GB Macs. The earlier 6 GiB threshold could only ever fire
     // AFTER a freeze; this catches it before.
     if snap.process_memory.phys_footprint_bytes > 3 * 1024 * 1024 * 1024 {
@@ -195,7 +195,7 @@ pub fn compute_pressure_label(
 }
 
 /// Hard safety floor for Qwen3-VL-2B (~3.5 GB working set): optimized for 8 GB
-/// Macs; can coexist with the LLM + BGE + FNDR without thrashing at this level.
+/// Macs; can coexist with the LLM + BGE + Continuum without thrashing at this level.
 pub const VLM_SAFE_MIN_HOST_RAM_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 /// Safety floor for SmolVLM 500M (~1.2 GB working set): lighter model can
@@ -247,13 +247,13 @@ fn host_total_ram_bytes_from_sources(sysctl_total: Option<u64>, sampled_total: u
 }
 
 /// Returns true if this host has enough RAM to safely run Qwen3-VL 4B
-/// alongside the LLM and the rest of FNDR (requires ≥ 12 GB).
+/// alongside the LLM and the rest of Continuum (requires ≥ 12 GB).
 pub fn host_supports_vlm() -> bool {
     host_total_ram_bytes() >= VLM_SAFE_MIN_HOST_RAM_BYTES
 }
 
 /// Returns true if this host has enough RAM to safely run SmolVLM 500M
-/// alongside the LLM and the rest of FNDR (requires ≥ 8 GB).
+/// alongside the LLM and the rest of Continuum (requires ≥ 8 GB).
 pub fn host_supports_lightweight_vlm() -> bool {
     host_total_ram_bytes() >= VLM_SAFE_MIN_HOST_RAM_BYTES_LIGHTWEIGHT
 }

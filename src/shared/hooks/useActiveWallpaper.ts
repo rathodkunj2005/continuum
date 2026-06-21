@@ -16,8 +16,8 @@ export function useActiveWallpaper() {
                 setWallpaperId(detail.wallpaper);
             }
         };
-        window.addEventListener("fndr-appearance-changed", handler);
-        return () => window.removeEventListener("fndr-appearance-changed", handler);
+        window.addEventListener("continuum-appearance-changed", handler);
+        return () => window.removeEventListener("continuum-appearance-changed", handler);
     }, []);
 
     return wallpaperId;

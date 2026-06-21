@@ -34,8 +34,8 @@ import {
     stopAgent,
     stopHermesGateway,
     syncHermesBridgeContext,
-    fndrSubscribe,
-    fndrUnsubscribe,
+    continuumSubscribe,
+    continuumUnsubscribe,
     onContextDelta,
     type ContextDelta,
 } from "@/shared/ipc/tauri";
@@ -59,7 +59,7 @@ const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
 const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1";
 
 function nextConversationId(): string {
-    return createClientId("fndr-hermes");
+    return createClientId("continuum-hermes");
 }
 
 function isProviderKind(value: string | null | undefined): value is HermesProviderKind {
@@ -224,7 +224,7 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
 
         const setup = async () => {
             try {
-                await fndrSubscribe(conversationId);
+                await continuumSubscribe(conversationId);
                 unlisten = await onContextDelta((delta) => {
                     setLastDelta(delta);
                 });
@@ -236,7 +236,7 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
         setup();
 
         return () => {
-            fndrUnsubscribe(conversationId).catch(() => {});
+            continuumUnsubscribe(conversationId).catch(() => {});
             if (unlisten) unlisten();
         };
     }, [isVisible, conversationId]);
@@ -336,7 +336,7 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
                 const history = messages.map(m => ({ role: m.role, content: m.content }));
                 replyContent = await sendDirectChat(history, input);
             } else {
-                throw new Error("Enable the FNDR agent runtime or connect a local Ollama model first.");
+                throw new Error("Enable the Continuum agent runtime or connect a local Ollama model first.");
             }
 
             setMessages([...nextMessages, { role: "assistant", content: replyContent }]);
@@ -483,7 +483,7 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
             <header className="ap-header">
                 <div className="ap-header-left">
                     <div className={`ap-header-dot ${gatewayStatusClass}`} />
-                    <span className="ap-header-title">FNDR Agent</span>
+                    <span className="ap-header-title">Continuum Agent</span>
                     {hermes?.configured && (
                         <span className="ap-header-badge">
                             {hermes.model_name ?? currentProviderLabel}
@@ -520,7 +520,7 @@ export function AgentPanel({ isVisible, onClose }: AgentPanelProps) {
                             <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.2" />
                             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                         </svg>
-                        <span>FNDR Agent</span>
+                        <span>Continuum Agent</span>
                         {readinessStep === 4 && (
                             <span className="ap-nav-ready-dot" />
                         )}
@@ -717,7 +717,7 @@ function OverviewView({
                                 onRunAgentMode();
                             }
                         }}
-                        placeholder="What do you want FNDR Agent to help with?"
+                        placeholder="What do you want Continuum Agent to help with?"
                     />
                     <button
                         className="ap-btn ap-btn-primary"
@@ -899,7 +899,7 @@ function OverviewView({
                         {isRunning ? "Agent running" : "Agent idle"}
                     </div>
                     <h3>{status?.task_title ?? "No active task"}</h3>
-                    <p>{status?.last_message ?? "Start a task from the command palette or open the FNDR Agent."}</p>
+                    <p>{status?.last_message ?? "Start a task from the command palette or open the Continuum Agent."}</p>
                 </div>
                 <div className="ap-overview-hero-actions">
                     {isRunning && (
@@ -969,7 +969,7 @@ function OverviewView({
             {/* Recent memories */}
             {(hermes?.recent_memories?.length ?? 0) > 0 && (
                 <section className="ap-card">
-                    <div className="ap-card-title">Recent FNDR context</div>
+                    <div className="ap-card-title">Recent Continuum context</div>
                     <div className="ap-memory-list">
                         {hermes!.recent_memories.map((m, i) => (
                             <div key={i} className="ap-memory-row">
@@ -1060,28 +1060,28 @@ function HermesView(props: HermesViewProps) {
         !hermes.installed &&
         (!localFallbackReady || hermes.bundled_repo_available);
     const installTitle = hermes?.bundled_repo_available
-        ? "Enable full FNDR agent"
+        ? "Enable full Continuum agent"
         : "Install Hermes";
     const installBody = hermes?.bundled_repo_available
         ? localFallbackReady
-            ? "FNDR can already do quick local chat through Ollama, but enabling the bundled Hermes runtime unlocks the full native agent experience: tools, longer-lived conversations, and Hermes-style behavior inside FNDR."
-            : "FNDR found the vendored hermes-agent clone in this repo. Enabling it prepares a private runtime inside FNDR so the agent behaves like a built-in feature instead of a separately installed CLI."
-        : "FNDR will run the official Hermes installer to set up the local agent runtime.";
+            ? "Continuum can already do quick local chat through Ollama, but enabling the bundled Hermes runtime unlocks the full native agent experience: tools, longer-lived conversations, and Hermes-style behavior inside Continuum."
+            : "Continuum found the vendored hermes-agent clone in this repo. Enabling it prepares a private runtime inside Continuum so the agent behaves like a built-in feature instead of a separately installed CLI."
+        : "Continuum will run the official Hermes installer to set up the local agent runtime.";
     const installButtonLabel = hermes?.bundled_repo_available ? "Enable Agent" : "Install Hermes";
     const emptyStateTitle = fullAgentReady
-        ? "FNDR Agent is ready"
+        ? "Continuum Agent is ready"
         : fullAgentConfigured
-            ? "FNDR Agent will start on first message"
+            ? "Continuum Agent will start on first message"
         : localFallbackReady
             ? "Local chat is ready"
             : "Start the agent runtime";
     const emptyStateBody = fullAgentReady
-        ? "Ask about your FNDR memories, draft something, or run a multi-step task."
+        ? "Ask about your Continuum memories, draft something, or run a multi-step task."
         : fullAgentConfigured
-            ? "Send a message and FNDR will launch the bundled Hermes runtime automatically."
+            ? "Send a message and Continuum will launch the bundled Hermes runtime automatically."
         : localFallbackReady
-            ? "You can chat through Ollama right now. Enable the full FNDR agent runtime for richer Hermes behavior."
-            : "Bring the FNDR agent online above, then chat here.";
+            ? "You can chat through Ollama right now. Enable the full Continuum agent runtime for richer Hermes behavior."
+            : "Bring the Continuum agent online above, then chat here.";
     const chatTitle = fullAgentConfigured ? "Agent chat" : "Local chat";
     const assistantLabel = "Agent";
 
@@ -1405,7 +1405,7 @@ function HermesView(props: HermesViewProps) {
                             placeholder={
                                 isHermesReady
                                     ? fullAgentConfigured
-                                        ? "Ask the FNDR agent..."
+                                        ? "Ask the Continuum agent..."
                                         : "Ask local chat..."
                                     : "Set up the agent runtime to send messages"
                             }
@@ -1501,16 +1501,16 @@ function providerTabStatus(p: HermesProviderKind, hermes: HermesBridgeStatus | n
 function providerDetailNote(p: HermesProviderKind, hermes: HermesBridgeStatus | null): string {
     switch (p) {
         case "ollama":
-            if (!hermes?.ollama_installed) return "Install Ollama to run the FNDR agent fully locally. No API key needed.";
+            if (!hermes?.ollama_installed) return "Install Ollama to run the Continuum agent fully locally. No API key needed.";
             if (!hermes.ollama_reachable) return "Ollama is installed but not running. Open Ollama or run `ollama serve`.";
             if (hermes.ollama_models.length === 0) return "Ollama is running but has no models. Pull one: `ollama pull llama3.2`";
-            return `Running ${hermes.ollama_models.length} local model${hermes.ollama_models.length !== 1 ? "s" : ""}. FNDR can chat locally right away, and the full bundled agent runtime can layer on top of the same Ollama setup.`;
+            return `Running ${hermes.ollama_models.length} local model${hermes.ollama_models.length !== 1 ? "s" : ""}. Continuum can chat locally right away, and the full bundled agent runtime can layer on top of the same Ollama setup.`;
         case "codex":
             return hermes?.codex_logged_in
-                ? "FNDR detected your local Codex auth. No extra API key is needed inside FNDR."
+                ? "Continuum detected your local Codex auth. No extra API key is needed inside Continuum."
                 : "Sign in to Codex on this Mac first, then return here.";
         case "openrouter":
-            return "Access frontier models through OpenRouter. FNDR stores the key in its contained agent runtime.";
+            return "Access frontier models through OpenRouter. Continuum stores the key in its contained agent runtime.";
         case "custom":
             return "Point Hermes at any OpenAI-compatible endpoint — self-hosted or private.";
     }

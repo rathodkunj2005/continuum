@@ -1,7 +1,7 @@
 /* MemoryProvenanceStrip — mono caps key/value grid used inside the
    expanded MemoryCard variant. */
 
-.fndr-mc-provenance {
+.continuum-mc-provenance {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 12px 24px;
@@ -12,13 +12,13 @@
     font-family: var(--font-mono);
 }
 
-.fndr-mc-provenance > div {
+.continuum-mc-provenance > div {
     display: flex;
     flex-direction: column;
     gap: 3px;
 }
 
-.fndr-mc-provenance dt {
+.continuum-mc-provenance dt {
     font-size: 9px;
     letter-spacing: var(--film-track-stamp);
     text-transform: uppercase;
@@ -26,7 +26,7 @@
     margin: 0;
 }
 
-.fndr-mc-provenance dd {
+.continuum-mc-provenance dd {
     margin: 0;
     font-family: var(--font-body);
     font-size: var(--t-body-sm);

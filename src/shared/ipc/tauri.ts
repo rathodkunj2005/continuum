@@ -217,55 +217,55 @@ export interface ComposedAnswer {
     debug_trace?: unknown;
 }
 
-export interface FndrSearchResponse {
+export interface ContinuumSearchResponse {
     query: string;
     cards: MemoryCard[];
 }
 
-export async function fndrSearch(query: string, limit?: number): Promise<FndrSearchResponse> {
-    return invoke("fndr_search", { query, limit });
+export async function continuumSearch(query: string, limit?: number): Promise<ContinuumSearchResponse> {
+    return invoke("continuum_search", { query, limit });
 }
 
-export async function fndrAnswer(query: string, limit?: number): Promise<ComposedAnswer> {
-    return invoke("fndr_answer", { query, limit });
+export async function continuumAnswer(query: string, limit?: number): Promise<ComposedAnswer> {
+    return invoke("continuum_answer", { query, limit });
 }
 
-export async function fndrBuildContextPack(args: {
+export async function continuumBuildContextPack(args: {
     query: string;
     session_id?: string;
     project?: string;
     budget_tokens?: number;
 }): Promise<unknown> {
-    return invoke("fndr_build_context_pack", args);
+    return invoke("continuum_build_context_pack", args);
 }
 
-export async function fndrGetRelatedMemories(
+export async function continuumGetRelatedMemories(
     memoryId: string,
     limit?: number,
 ): Promise<MemoryCard[]> {
-    return invoke("fndr_get_related_memories", { memoryId, limit });
+    return invoke("continuum_get_related_memories", { memoryId, limit });
 }
 
-export async function fndrGetMemorySubgraph(
+export async function continuumGetMemorySubgraph(
     seedIds: string[],
     maxHops = 2,
 ): Promise<{ seed_ids: string[]; node_count: number; edge_count: number }> {
-    return invoke("fndr_get_memory_subgraph", { seedIds, maxHops });
+    return invoke("continuum_get_memory_subgraph", { seedIds, maxHops });
 }
 
-export async function fndrTimeline(args?: {
+export async function continuumTimeline(args?: {
     limit?: number;
     project?: string;
 }): Promise<Array<{ memory_id: string; timestamp: number; snippet: string }>> {
-    return invoke("fndr_timeline", args ?? {});
+    return invoke("continuum_timeline", args ?? {});
 }
 
-export async function fndrQualityStatus(): Promise<{
+export async function continuumQualityStatus(): Promise<{
     stored_count: number;
     dropped_count: number;
     flagged_count: number;
 }> {
-    return invoke("fndr_quality_status");
+    return invoke("continuum_quality_status");
 }
 
 export interface MemoryScoreBreakdown {
@@ -411,7 +411,7 @@ export interface CapturePipelineBreakdown {
     stored_url_only: number;
     stored_total: number;
     skipped_blocklist: number;
-    /** FNDR was frontmost; the app never captures its own window. */
+    /** Continuum was frontmost; the app never captures its own window. */
     skipped_self_app: number;
     skipped_surface_policy: number;
     skipped_perceptual_dup: number;
@@ -1360,12 +1360,12 @@ export async function getAgentPrompt(name: string): Promise<AgentPrompt | null> 
     return invoke<AgentPrompt | null>("get_agent_prompt", { name });
 }
 
-export async function fndrSubscribe(sessionId: string): Promise<boolean> {
-    return invoke<boolean>("fndr_subscribe", { sessionId });
+export async function continuumSubscribe(sessionId: string): Promise<boolean> {
+    return invoke<boolean>("continuum_subscribe", { sessionId });
 }
 
-export async function fndrUnsubscribe(sessionId: string): Promise<boolean> {
-    return invoke<boolean>("fndr_unsubscribe", { sessionId });
+export async function continuumUnsubscribe(sessionId: string): Promise<boolean> {
+    return invoke<boolean>("continuum_unsubscribe", { sessionId });
 }
 
 export function onContextDelta(handler: (delta: ContextDelta) => void): Promise<() => void> {
@@ -1729,7 +1729,7 @@ export interface HermesBridgeStatus {
     context_path: string;
     context_ready: boolean;
     last_synced_at: number | null;
-    fndr_local_model_id: string | null;
+    continuum_local_model_id: string | null;
     ollama_installed: boolean;
     ollama_reachable: boolean;
     ollama_models: string[];
@@ -1872,7 +1872,7 @@ export interface ProactiveSuggestion {
     task_title: string | null;
 }
 
-export interface FndrNotificationPayload {
+export interface ContinuumNotificationPayload {
     title: string;
     body: string;
     kind: string;
@@ -1886,10 +1886,10 @@ export function onProactiveSuggestion(
     });
 }
 
-export function onFndrNotification(
-    callback: (notification: FndrNotificationPayload) => void
+export function onContinuumNotification(
+    callback: (notification: ContinuumNotificationPayload) => void
 ): Promise<() => void> {
-    return listen<FndrNotificationPayload>("fndr_notification", (event) => {
+    return listen<ContinuumNotificationPayload>("continuum_notification", (event) => {
         callback(event.payload);
     });
 }

@@ -1,8 +1,8 @@
-# FNDR
+# Continuum
 
 **A local-first multimodal memory engine for desktop context, semantic search, and agent-ready recall.**
 
-FNDR is a macOS desktop system that continuously captures foreground context, extracts text and metadata, and stores compact memory records for retrieval. It is designed as an engineering-first memory layer, not a screenshot archive.
+Continuum is a macOS desktop system that continuously captures foreground context, extracts text and metadata, and stores compact memory records for retrieval. It is designed as an engineering-first memory layer, not a screenshot archive.
 
 The core runtime is a React + TypeScript UI (`src/`) on top of a Tauri 2 + Rust backend (`src-tauri/`). The backend handles capture, OCR, normalization, embeddings, LanceDB persistence, hybrid retrieval, and MCP serving for external agents.
 
@@ -10,11 +10,11 @@ The core runtime is a React + TypeScript UI (`src/`) on top of a Tauri 2 + Rust 
 
 ## 1. Project Overview
 
-FNDR captures desktop activity and converts it into structured memory records. A memory record includes cleaned text, app/window/url metadata, retrieval fields, embeddings, and insight fields used to improve recall quality.
+Continuum captures desktop activity and converts it into structured memory records. A memory record includes cleaned text, app/window/url metadata, retrieval fields, embeddings, and insight fields used to improve recall quality.
 
 Search is hybrid by design: semantic vector retrieval and lexical retrieval run together, then get fused and reranked. This avoids the common failure mode where pure vector search loses exact identifiers and pure keyword search misses paraphrases.
 
-FNDR also supports retrieval-grounded answering (`fndr_answer`) through a context runtime that plans retrieval routes, composes evidence, and returns cited answers. The same local memory can be exposed to external tools through an MCP server with explicit local/tunnel/public deployment modes.
+Continuum also supports retrieval-grounded answering (`continuum_answer`) through a context runtime that plans retrieval routes, composes evidence, and returns cited answers. The same local memory can be exposed to external tools through an MCP server with explicit local/tunnel/public deployment modes.
 
 Knowledge graph support exists in two forms: a legacy graph and an insight graph persisted in LanceDB (`graph_nodes`, `graph_edges`) for typed entities/relations and graph-aware recall workflows.
 
@@ -22,13 +22,13 @@ Privacy is a first-class system constraint: data stays local by default, capture
 
 ---
 
-## 2. Why FNDR Exists
+## 2. Why Continuum Exists
 
 Personal context gets fragmented across browser tabs, terminals, editors, docs, chat windows, and meeting tools. Standard file search is mostly keyword-only and often fails when the user remembers intent but not exact wording.
 
 LLM chats are session-scoped and do not reliably remember a user’s real desktop workflow history unless context is re-supplied. Cloud memory tools add privacy and control concerns because raw personal activity is uploaded to external services.
 
-FNDR addresses this by building a local, inspectable memory layer:
+Continuum addresses this by building a local, inspectable memory layer:
 
 - Capture context on-device.
 - Convert it into structured, retrieval-ready records.
@@ -47,14 +47,14 @@ FNDR addresses this by building a local, inspectable memory layer:
 | Memory cards / Memory Vault | UI surfaces under `src/domains/memory-vault/` | Stable |
 | Semantic embeddings | Local ONNX embedder (`all-MiniLM-L6-v2`, 384-d) | Stable |
 | Hybrid retrieval | Semantic + keyword fusion and reranking (`src-tauri/src/search/`) | Stable |
-| Retrieval-grounded Q&A | `fndr_answer` / context runtime pipeline (`src-tauri/src/context_runtime/`) | Stable |
+| Retrieval-grounded Q&A | `continuum_answer` / context runtime pipeline (`src-tauri/src/context_runtime/`) | Stable |
 | Local vector store | LanceDB-backed memory + graph tables | Stable |
 | Visual similarity retrieval | CLIP-based `image_embedding` + `find_visually_similar_memories` | Stable |
 | Insight knowledge graph | Typed node/edge tables + graph UI hooks | Stable |
 | MCP server for agents | `src-tauri/src/mcp/`, MCP deployment modes + auth/tls controls | Stable |
 | Agent-oriented tools/prompts | `agent.*`, `memory.*`, prompt/resources in MCP | Stable |
 | Manual photo import (Meta glasses flow) | `import_meta_glasses_photo` pipeline | Experimental |
-| Some graph-RAG subgraph APIs | `fndr_get_memory_subgraph` currently returns bounded empty descriptor | Experimental |
+| Some graph-RAG subgraph APIs | `continuum_get_memory_subgraph` currently returns bounded empty descriptor | Experimental |
 
 ---
 
@@ -72,7 +72,7 @@ flowchart LR
     F --> G
     G --> H["Hybrid Retrieval (Vector + Keyword + Rerank)"]
     H --> I["Memory Cards / Memory Vault UI"]
-    H --> J["Context Runtime (fndr_search / fndr_answer)"]
+    H --> J["Context Runtime (continuum_search / continuum_answer)"]
     G --> K["Insight Graph (graph_nodes / graph_edges)"]
     J --> L["MCP Server (local/tunnel/public)"]
     K --> L
@@ -124,15 +124,15 @@ Optional: if you want the multimodal local model available for richer memory syn
 
 ### First run
 
-Grant required macOS permissions during onboarding (screen capture/accessibility as prompted). FNDR stores app data under the Tauri app identifier path (`com.fndr.app`).
+Grant required macOS permissions during onboarding (screen capture/accessibility as prompted). Continuum stores app data under the Tauri app identifier path (`com.continuum.app`).
 
 ---
 
-## 6. How to Use FNDR
+## 6. How to Use Continuum
 
-1. Keep FNDR running while working normally across apps.
+1. Keep Continuum running while working normally across apps.
 2. Use Search or Memory Vault to retrieve previous context.
-3. Use Ask-style queries (`fndr_answer`) for grounded recall over stored memories.
+3. Use Ask-style queries (`continuum_answer`) for grounded recall over stored memories.
 4. Use workspace controls to pause/resume capture, manage blocklists, and inspect status.
 5. Optionally start MCP for external agent access to local memory tools.
 
@@ -148,27 +148,27 @@ Implemented controls include:
 - Sensitive-context safety checks and private/incognito title heuristics (`src-tauri/src/privacy/`)
 - MCP auth/origin policies for non-local deployment modes
 
-FNDR is local-first by default. Optional environment variables can enable external integrations; review `.env.example` before enabling them.
+Continuum is local-first by default. Optional environment variables can enable external integrations; review `.env.example` before enabling them.
 
 ---
 
 ## 8. MCP and Agent Integration
 
-FNDR includes an MCP server with:
+Continuum includes an MCP server with:
 
 - Transport endpoints for streamable HTTP and legacy SSE compatibility
 - Deployment modes: `local`, `tunnel`, `public`
 - Optional TLS + bearer auth + allowed-origin controls
-- Memory + agent tool surfaces (`memory.*`, `fndr.*`, `agent.*`)
+- Memory + agent tool surfaces (`memory.*`, `continuum.*`, `agent.*`)
 
 Key environment variables:
 
-- `FNDR_MCP_MODE`
-- `FNDR_MCP_REQUIRE_AUTH`
-- `FNDR_MCP_ALLOW_LOOPBACK_AUTH_BYPASS`
-- `FNDR_MCP_ENABLE_TLS`
-- `FNDR_MCP_ALLOWED_ORIGINS`
-- `FNDR_MCP_PUBLIC_BASE_URL`
+- `CONTINUUM_MCP_MODE`
+- `CONTINUUM_MCP_REQUIRE_AUTH`
+- `CONTINUUM_MCP_ALLOW_LOOPBACK_AUTH_BYPASS`
+- `CONTINUUM_MCP_ENABLE_TLS`
+- `CONTINUUM_MCP_ALLOWED_ORIGINS`
+- `CONTINUUM_MCP_PUBLIC_BASE_URL`
 
 ---
 
@@ -222,7 +222,7 @@ make clean-all-generated
 ## 12. Repository Map
 
 ```text
-fndr/
+continuum/
 ├── src/                  # React + TypeScript UI
 ├── src-tauri/            # Rust backend, Tauri commands, MCP, storage, capture
 ├── docs/                 # Architecture, decisions, agent/MCP docs

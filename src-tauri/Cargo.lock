@@ -2842,7 +2842,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fndr"
+name = "continuum"
 version = "0.2.11"
 dependencies = [
  "arrow-array",

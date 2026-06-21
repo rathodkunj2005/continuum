@@ -15,7 +15,7 @@
   {"query":"match schedule cricket","relevant_ids":["mem_cricket_schedule"],"expect_empty":false},
 
   {"query":"knowledge graph","relevant_ids":["mem_knowledge_graph"],"expect_empty":false},
-  {"query":"fndr knowledge graph ui","relevant_ids":["mem_knowledge_graph"],"expect_empty":false},
+  {"query":"continuum knowledge graph ui","relevant_ids":["mem_knowledge_graph"],"expect_empty":false},
 
   {"query":"finder recent content","relevant_ids":["mem_finder_recent"],"expect_empty":false},
   {"query":"recent finder window","relevant_ids":["mem_finder_recent"],"expect_empty":false},
@@ -34,13 +34,13 @@
   {"query":"196 capital cities challenge","relevant_ids":["mem_global_capitals"],"expect_empty":false},
   {"query":"global capitals youtube","relevant_ids":["mem_global_capitals"],"expect_empty":false},
 
-  {"query":"fndr stats ui ux analysis","relevant_ids":["mem_fndr_uiux"],"expect_empty":false},
-  {"query":"video generation ui ux file analysis","relevant_ids":["mem_fndr_uiux"],"expect_empty":false},
+  {"query":"continuum stats ui ux analysis","relevant_ids":["mem_continuum_uiux"],"expect_empty":false},
+  {"query":"video generation ui ux file analysis","relevant_ids":["mem_continuum_uiux"],"expect_empty":false},
 
   {"query":"cargo test rust errors","relevant_ids":["mem_terminal_rust"],"expect_empty":false},
   {"query":"terminal rust error logs","relevant_ids":["mem_terminal_rust"],"expect_empty":false},
 
-  {"query":"fndr stats and knowledge graph","relevant_ids":["mem_fndr_uiux","mem_knowledge_graph"],"expect_empty":false},
+  {"query":"continuum stats and knowledge graph","relevant_ids":["mem_continuum_uiux","mem_knowledge_graph"],"expect_empty":false},
   {"query":"canvas and cricket","relevant_ids":["mem_canva_resize","mem_cricket_highlights"],"expect_empty":false},
 
   {"query":"quantum mechanics lecture notes","relevant_ids":[],"expect_empty":true},

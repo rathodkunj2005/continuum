@@ -78,7 +78,7 @@ mod tests {
     fn compose_never_includes_clean_text_when_structured_present() {
         let mut r = MemoryRecord::default();
         r.user_intent = "Ship the fix".to_string();
-        r.project = "fndr".to_string();
+        r.project = "continuum".to_string();
         r.topic = "memory".to_string();
         r.clean_text = "SECRET_OCR_BLOB_THAT_MUST_NOT_LEAK_INTO_EMBEDDING".to_string();
         r.insight_what_happened = "Worked on memory indexing.".to_string();

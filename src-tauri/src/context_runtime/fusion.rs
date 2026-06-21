@@ -75,7 +75,7 @@ pub fn fuse(plan: &QueryPlan, hits: Vec<RouteHits>, weights: &FusionWeights) -> 
     fused.truncate(MAX_FUSED_HITS);
 
     runtime_metrics::record_ms(
-        "fndr.retrieval.fusion.ms",
+        "continuum.retrieval.fusion.ms",
         started.elapsed().as_millis() as u64,
     );
     fused

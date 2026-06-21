@@ -1,7 +1,7 @@
 //! Phase 4 Tauri commands for the agentic-graph-rag pipeline.
 //!
 //! Each command is a thin wrapper around `context_runtime::run_query` or an
-//! existing handler that the new `fndr.*` namespace re-exposes.
+//! existing handler that the new `continuum.*` namespace re-exposes.
 
 use crate::context_runtime::context_pack::ComposedAnswer;
 use crate::context_runtime::{run_query, ComposeMode};
@@ -15,17 +15,17 @@ use tauri::State;
 const DEFAULT_LIMIT: usize = 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct FndrSearchResponse {
+pub struct ContinuumSearchResponse {
     pub query: String,
     pub cards: Vec<MemoryCard>,
 }
 
 #[tauri::command]
-pub async fn fndr_search(
+pub async fn continuum_search(
     state: State<'_, Arc<AppState>>,
     query: String,
     limit: Option<usize>,
-) -> Result<FndrSearchResponse, String> {
+) -> Result<ContinuumSearchResponse, String> {
     let answer = run_query(
         state.inner(),
         &query,
@@ -33,15 +33,15 @@ pub async fn fndr_search(
         ComposeMode::Cards,
     )
     .await?;
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.search.calls");
-    Ok(FndrSearchResponse {
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.search.calls");
+    Ok(ContinuumSearchResponse {
         query: answer.query,
         cards: answer.cards,
     })
 }
 
 #[tauri::command]
-pub async fn fndr_answer(
+pub async fn continuum_answer(
     state: State<'_, Arc<AppState>>,
     query: String,
     limit: Option<usize>,
@@ -53,12 +53,12 @@ pub async fn fndr_answer(
         ComposeMode::Answer,
     )
     .await;
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.answer.calls");
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.answer.calls");
     result
 }
 
 #[tauri::command]
-pub async fn fndr_build_context_pack(
+pub async fn continuum_build_context_pack(
     state: State<'_, Arc<AppState>>,
     query: String,
     session_id: Option<String>,
@@ -73,28 +73,28 @@ pub async fn fndr_build_context_pack(
         active_files: Vec::new(),
         budget_tokens: budget_tokens.unwrap_or(0),
     };
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.build_context_pack.calls");
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.build_context_pack.calls");
     crate::context_runtime::build_context_pack(state.inner(), request).await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct FndrSubgraphResponse {
+pub struct ContinuumSubgraphResponse {
     pub seed_ids: Vec<String>,
     pub node_count: usize,
     pub edge_count: usize,
 }
 
 #[tauri::command]
-pub async fn fndr_get_memory_subgraph(
+pub async fn continuum_get_memory_subgraph(
     _state: State<'_, Arc<AppState>>,
     seed_ids: Vec<String>,
     _max_hops: Option<u8>,
-) -> Result<FndrSubgraphResponse, String> {
+) -> Result<ContinuumSubgraphResponse, String> {
     // The typed insight-graph table is not yet persisted (see context_runtime
     // run_query notes). Until it lands, this command returns the bounded
     // descriptor so the UI can show "no graph yet" without erroring.
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.get_memory_subgraph.calls");
-    Ok(FndrSubgraphResponse {
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.get_memory_subgraph.calls");
+    Ok(ContinuumSubgraphResponse {
         seed_ids,
         node_count: 0,
         edge_count: 0,
@@ -102,7 +102,7 @@ pub async fn fndr_get_memory_subgraph(
 }
 
 #[tauri::command]
-pub async fn fndr_get_related_memories(
+pub async fn continuum_get_related_memories(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
     limit: Option<usize>,
@@ -115,7 +115,7 @@ pub async fn fndr_get_related_memories(
     else {
         return Ok(Vec::new());
     };
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.get_related_memories.calls");
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.get_related_memories.calls");
     let answer = run_query(
         state.inner(),
         &record.text,
@@ -131,18 +131,18 @@ pub async fn fndr_get_related_memories(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Default)]
-pub struct FndrQualityStatus {
+pub struct ContinuumQualityStatus {
     pub stored_count: u64,
     pub dropped_count: u64,
     pub flagged_count: u64,
 }
 
 #[tauri::command]
-pub async fn fndr_quality_status(
+pub async fn continuum_quality_status(
     state: State<'_, Arc<AppState>>,
-) -> Result<FndrQualityStatus, String> {
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.quality_status.calls");
-    Ok(FndrQualityStatus {
+) -> Result<ContinuumQualityStatus, String> {
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.quality_status.calls");
+    Ok(ContinuumQualityStatus {
         stored_count: state.capture_stats.total_stored(),
         dropped_count: state
             .frames_dropped
@@ -152,19 +152,19 @@ pub async fn fndr_quality_status(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct FndrTimelineEntry {
+pub struct ContinuumTimelineEntry {
     pub memory_id: String,
     pub timestamp: i64,
     pub snippet: String,
 }
 
 #[tauri::command]
-pub async fn fndr_timeline(
+pub async fn continuum_timeline(
     state: State<'_, Arc<AppState>>,
     limit: Option<usize>,
     project: Option<String>,
-) -> Result<Vec<FndrTimelineEntry>, String> {
-    crate::telemetry::runtime_metrics::bump("fndr.mcp.timeline.calls");
+) -> Result<Vec<ContinuumTimelineEntry>, String> {
+    crate::telemetry::runtime_metrics::bump("continuum.mcp.timeline.calls");
     let events = state
         .store
         .list_activity_events(limit.unwrap_or(20), project.as_deref())
@@ -172,7 +172,7 @@ pub async fn fndr_timeline(
         .map_err(|e| e.to_string())?;
     Ok(events
         .into_iter()
-        .map(|e| FndrTimelineEntry {
+        .map(|e| ContinuumTimelineEntry {
             memory_id: e.memory_id,
             timestamp: e.end_time,
             snippet: e.title,

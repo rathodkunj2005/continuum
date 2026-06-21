@@ -78,13 +78,13 @@ function StepWelcome({
             <span className="ob-icon">⌘</span>
             <h1 className="ob-title">Your memory, on your Mac.</h1>
             <p className="ob-subtitle">
-                FNDR remembers what you&apos;ve worked on so you don&apos;t have to.
+                Continuum remembers what you&apos;ve worked on so you don&apos;t have to.
                 Synthesize meetings and track tasks — all instantly.
                 <br /><br />
                 Everything runs on your computer. Nothing leaves it. Ever.
             </p>
             <label className="ob-name-label" htmlFor="ob-display-name">
-                What should FNDR call you?
+                What should Continuum call you?
             </label>
             <input
                 id="ob-display-name"
@@ -118,7 +118,7 @@ function StepBiometrics({ state, onSave }: { state: OnboardingState; onSave: (s:
         setLoading(true);
         setError(null);
         try {
-            const ok = await requestBiometricAuth("Unlock FNDR — your private screen history");
+            const ok = await requestBiometricAuth("Unlock Continuum — your private screen history");
             if (ok) {
                 const next = { ...state, step: "privacy_promise" as OnboardingStep, biometric_enabled: true };
                 onSave(next);
@@ -138,9 +138,9 @@ function StepBiometrics({ state, onSave }: { state: OnboardingState; onSave: (s:
     return (
         <>
             <span className="ob-icon">🔐</span>
-            <h1 className="ob-title">Lock FNDR with Touch ID</h1>
+            <h1 className="ob-title">Lock Continuum with Touch ID</h1>
             <p className="ob-subtitle">
-                FNDR stores everything you see on screen.
+                Continuum stores everything you see on screen.
                 Before we start, let's make sure only you can open it.
             </p>
             {error && <div className="ob-error-box">{error}</div>}
@@ -159,12 +159,12 @@ function StepPrivacyPromise({ state, onSave }: { state: OnboardingState; onSave:
     return (
         <>
             <span className="ob-icon">🔒</span>
-            <h1 className="ob-title">What FNDR sees (and doesn't share)</h1>
+            <h1 className="ob-title">What Continuum sees (and doesn't share)</h1>
             <div className="ob-privacy-list">
                 {[
                     {
                         icon: "✅",
-                        title: "What FNDR stores",
+                        title: "What Continuum stores",
                         body: "Text, window metadata, and snapshots of your screen. This is indexed into a local LanceDB store on your Mac.",
                     },
                     {
@@ -241,7 +241,7 @@ function StepPermissions({ state, onSave }: { state: OnboardingState; onSave: (s
         <>
             <span className="ob-icon">🛡️</span>
             <h1 className="ob-title">Grant a few permissions</h1>
-            <p className="ob-subtitle">FNDR needs permission to see your screen. Everything stays local.</p>
+            <p className="ob-subtitle">Continuum needs permission to see your screen. Everything stays local.</p>
 
             {[
                 {
@@ -296,7 +296,7 @@ function StepPermissions({ state, onSave }: { state: OnboardingState; onSave: (s
                 disabled={!canContinue}
                 title={canContinue ? undefined : "Screen Recording is required to continue"}
             >
-                {canContinue ? "Open FNDR →" : "Grant Screen Recording to continue"}
+                {canContinue ? "Open Continuum →" : "Grant Screen Recording to continue"}
             </button>
             <button
                 className="ob-btn-ghost"
@@ -320,7 +320,7 @@ function StepModelDownload({ state, onSave }: { state: OnboardingState; onSave: 
     async function activateModel(modelId: string) {
         const runtime = await refreshAiModels();
         if (!runtime.ai_model_available) {
-            throw new Error(`FNDR could not find the local model files for ${modelId}.`);
+            throw new Error(`Continuum could not find the local model files for ${modelId}.`);
         }
         return runtime;
     }
@@ -369,7 +369,7 @@ function StepModelDownload({ state, onSave }: { state: OnboardingState; onSave: 
                 }
             } catch (refreshError) {
                 if (!cancelled) {
-                    setError(`Model download finished, but FNDR could not activate it: ${String(refreshError)}`);
+                    setError(`Model download finished, but Continuum could not activate it: ${String(refreshError)}`);
                 }
             } finally {
                 if (!cancelled) {
@@ -407,7 +407,7 @@ function StepModelDownload({ state, onSave }: { state: OnboardingState; onSave: 
                 await activateModel(selected.id);
                 onSave({ ...state, step: "permissions", model_downloaded: true, model_id: selected.id });
             } catch (refreshError) {
-                setError(`FNDR found the model on disk, but could not activate it: ${String(refreshError)}`);
+                setError(`Continuum found the model on disk, but could not activate it: ${String(refreshError)}`);
             } finally {
                 setIsActivatingModel(false);
             }
@@ -431,7 +431,7 @@ function StepModelDownload({ state, onSave }: { state: OnboardingState; onSave: 
             <span className="ob-icon">🧠</span>
             <h1 className="ob-title">Select your local AI model</h1>
             <p className="ob-subtitle">
-                Choose the &apos;brain&apos; for your FNDR. Qwen3-VL (4B) is recommended for best-in-class 
+                Choose the &apos;brain&apos; for your Continuum. Qwen3-VL (4B) is recommended for best-in-class 
                 summaries, memory Q&amp;A, and screen understanding.
                 <br /><br />
                 Optional helpers for transcription and TTS are loaded only when needed.
@@ -478,7 +478,7 @@ function StepModelDownload({ state, onSave }: { state: OnboardingState; onSave: 
                         {
                             icon: "🕸",
                             title: "Tasks",
-                            body: "FNDR extracts reminders and converts them into local tasks automatically.",
+                            body: "Continuum extracts reminders and converts them into local tasks automatically.",
                         },
                     ].map(({ icon, title, body }) => (
                         <div className="ob-privacy-item" key={title}>
@@ -515,7 +515,7 @@ function StepModelDownload({ state, onSave }: { state: OnboardingState; onSave: 
                     <span className="ob-icon pulse" style={{ display: "inline-block", fontSize: 24, marginBottom: 12 }}>⚙️</span>
                     <div className="ob-download-title">
                         {isActivatingModel
-                            ? "Loading model into FNDR..."
+                            ? "Loading model into Continuum..."
                             : activeDownloadStatus?.state === "finalizing"
                                 ? "Finalizing model file..."
                                 : "Preparing Download..."}

@@ -1,4 +1,4 @@
-//! LanceDB-backed storage for FNDR memory records.
+//! LanceDB-backed storage for Continuum memory records.
 //!
 //! Replaces the JSON-based simple_store with a proper vector database.
 //! All methods that touch LanceDB are async.

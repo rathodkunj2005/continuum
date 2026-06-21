@@ -525,7 +525,7 @@ export function StatsPanel({ isVisible, onClose }: StatsPanelProps) {
         <div className="stats-page">
             <header className="stats-page-header">
                 <div>
-                    <h2>FNDR Stats Intelligence</h2>
+                    <h2>Continuum Stats Intelligence</h2>
                     <p>Behavioral telemetry with context, cadence, and signal quality in one view.</p>
                 </div>
                 <div className="stats-page-actions">

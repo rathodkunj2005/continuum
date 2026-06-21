@@ -54,7 +54,7 @@ pub struct MemorySynthesisOutput {
     pub importance_score: f32,
 }
 
-pub const MEMORY_SYNTHESIS_PROMPT: &str = r#"You are FNDR's memory model. Write a structured, searchable memory that would let a future version of the user recall what they were doing and why it mattered — like a journal entry, not a screenshot description.
+pub const MEMORY_SYNTHESIS_PROMPT: &str = r#"You are Continuum's memory model. Write a structured, searchable memory that would let a future version of the user recall what they were doing and why it mattered — like a journal entry, not a screenshot description.
 
 Available evidence: OCR text, app name, window title, URL, timestamp, source type, image pixels (if attached).
 

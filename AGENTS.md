@@ -1,10 +1,10 @@
-# FNDR — mandatory agent defaults
+# Continuum — mandatory agent defaults
 
 These rules apply to **every** AI-assisted change in this repository (Cursor, Claude Code, OpenAI Codex, Google Antigravity, and other agents that read this file). **The user should not have to name a skill.** Pick the matching workflow from `.agent-skills/portable-engineering/` automatically and follow it end-to-end for the current task.
 
 ## Product context
 
-FNDR is a macOS desktop app: local screen-context memory, search, meetings, tasks, and MCP integrations. Stack: **React + TypeScript** (`src/`), **Tauri 2 + Rust** (`src-tauri/`), LanceDB, local embeddings, optional local GGUF. Authoritative overview: `README.md` and `docs/architecture/ARCHITECTURE.md`.
+Continuum is a macOS desktop app: local screen-context memory, search, meetings, tasks, and MCP integrations. Stack: **React + TypeScript** (`src/`), **Tauri 2 + Rust** (`src-tauri/`), LanceDB, local embeddings, optional local GGUF. Authoritative overview: `README.md` and `docs/architecture/ARCHITECTURE.md`.
 
 ## Repo map for agents
 

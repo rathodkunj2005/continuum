@@ -6,7 +6,7 @@
 //!
 //! The session is loaded lazily on first call and shared process-wide via a
 //! mutex-guarded `OnceLock`. Default weights: Xenova `onnx/vision_model_q4.onnx`
-//! (placed next to BGE assets). Override with `FNDR_CLIP_VISION_ONNX` (absolute
+//! (placed next to BGE assets). Override with `CONTINUUM_CLIP_VISION_ONNX` (absolute
 //! path to any compatible vision ONNX).
 
 use crate::config::DEFAULT_IMAGE_EMBEDDING_DIM;
@@ -131,13 +131,13 @@ impl ClipVisionSession {
 
 /// Resolve ONNX file: env override, else `models_dir/clip-vit-base-patch32-vision_q4.onnx`.
 pub fn resolve_clip_onnx_path(models_dir: &Path) -> Result<PathBuf, String> {
-    if let Ok(p) = std::env::var("FNDR_CLIP_VISION_ONNX") {
+    if let Ok(p) = std::env::var("CONTINUUM_CLIP_VISION_ONNX") {
         let path = PathBuf::from(p);
         if path.is_file() {
             return Ok(path);
         }
         return Err(format!(
-            "FNDR_CLIP_VISION_ONNX is set but not a file: {}",
+            "CONTINUUM_CLIP_VISION_ONNX is set but not a file: {}",
             path.display()
         ));
     }
@@ -207,10 +207,10 @@ mod tests {
     }
 
     /// Resolve the on-disk CLIP weights the same way `embed_imported_image` does
-    /// at runtime: honor `FNDR_CLIP_VISION_ONNX`, otherwise look in the standard
+    /// at runtime: honor `CONTINUUM_CLIP_VISION_ONNX`, otherwise look in the standard
     /// macOS app-data models directory.
     fn try_resolve_clip_for_test() -> Option<PathBuf> {
-        if let Ok(p) = std::env::var("FNDR_CLIP_VISION_ONNX") {
+        if let Ok(p) = std::env::var("CONTINUUM_CLIP_VISION_ONNX") {
             let path = PathBuf::from(p);
             if path.is_file() {
                 return path.parent().map(|p| p.to_path_buf());
@@ -220,7 +220,7 @@ mod tests {
         let dir = PathBuf::from(home)
             .join("Library")
             .join("Application Support")
-            .join("com.fndr.app")
+            .join("com.continuum.app")
             .join("models");
         if dir.join(CLIP_VISION_ONNX_FILENAME).is_file() {
             Some(dir)
@@ -232,7 +232,7 @@ mod tests {
     /// Exercises the full `embed_imported_image` path against the on-disk CLIP
     /// weights. Marked `#[ignore]` so CI does not require the ~64 MB ONNX file;
     /// run locally with:
-    ///     `cargo test -p fndr embedding::clip_vision -- --ignored`.
+    ///     `cargo test -p continuum embedding::clip_vision -- --ignored`.
     #[test]
     #[ignore]
     fn embed_imported_image_produces_unit_norm_512d() {

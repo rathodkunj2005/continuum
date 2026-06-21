@@ -20,7 +20,7 @@ export function BiometricLockScreen({
         setLoading(true);
         setError(null);
         try {
-            const ok = await requestBiometricAuth("Unlock FNDR - your private screen history");
+            const ok = await requestBiometricAuth("Unlock Continuum - your private screen history");
             if (ok) {
                 onUnlock();
             } else {
@@ -46,8 +46,8 @@ export function BiometricLockScreen({
     return (
         <div className="biometric-lock-overlay">
             <div className="biometric-lock-card">
-                <div className="biometric-lock-icon">FNDR</div>
-                <h1 className="biometric-lock-title">FNDR is Locked</h1>
+                <div className="biometric-lock-icon">Continuum</div>
+                <h1 className="biometric-lock-title">Continuum is Locked</h1>
                 <p className="biometric-lock-subtitle">
                     Authenticate with Touch ID or your system password to access your memories.
                 </p>

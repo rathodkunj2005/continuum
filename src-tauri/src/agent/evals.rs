@@ -44,7 +44,7 @@ pub fn propose_eval_from_audit(record: &AgentAuditRecord) -> Result<AgentEvalCas
         ],
         required_evidence: record.memories_used.clone(),
         grading_rules: vec![
-            "Answer must cite FNDR memory evidence.".to_string(),
+            "Answer must cite Continuum memory evidence.".to_string(),
             "Answer must mention uncertainty when ranking signals are qualitative.".to_string(),
             "Answer must not claim actions were executed unless approvals exist.".to_string(),
         ],
@@ -107,7 +107,7 @@ fn workflow_name(goal: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     if name.is_empty() {
-        "FNDR agent workflow".to_string()
+        "Continuum agent workflow".to_string()
     } else {
         name
     }

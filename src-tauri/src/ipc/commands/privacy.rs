@@ -68,7 +68,7 @@ pub async fn delete_all_data(state: State<'_, Arc<AppState>>) -> Result<(), Stri
         }
     }
 
-    tracing::info!("All FNDR data deleted");
+    tracing::info!("All Continuum data deleted");
     Ok(())
 }
 

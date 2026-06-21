@@ -1,6 +1,6 @@
-//! FNDR Library
+//! Continuum Library
 //!
-//! Core functionality for the FNDR memory search application.
+//! Core functionality for the Continuum memory search application.
 #![recursion_limit = "512"]
 
 pub mod accessibility;
@@ -97,7 +97,7 @@ pub struct CapturePipelineStats {
     pub evaluated: AtomicU64,
     /// User blocklist (app name / URL / title patterns from settings).
     pub skipped_blocklist: AtomicU64,
-    /// FNDR is frontmost — we never capture our own UI (privacy + recursion).
+    /// Continuum is frontmost — we never capture our own UI (privacy + recursion).
     pub skipped_self_app: AtomicU64,
     /// Frames blocked by `classify_capture_surface_policy::SkipFrame`
     /// or by the browser semantic shape gate (nav-heavy, low signal).
@@ -149,7 +149,7 @@ pub struct LastSkipEntry {
 /// `continue` path in the capture loop bumps the right counter once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
-    /// FNDR itself is the active app; capture is intentionally disabled.
+    /// Continuum itself is the active app; capture is intentionally disabled.
     SelfApp,
     Blocklist,
     SurfacePolicy,
@@ -418,7 +418,7 @@ impl AppState {
         };
         if overall >= 0.5 {
             tracing::info!(
-                target: "fndr::graph_queue",
+                target: "continuum::graph_queue",
                 memory_id = %memory_id,
                 node_count,
                 edge_count,
@@ -429,7 +429,7 @@ impl AppState {
             self.pending_graph_updates.lock().push(update);
         } else {
             tracing::info!(
-                target: "fndr::graph_queue",
+                target: "continuum::graph_queue",
                 memory_id = %memory_id,
                 node_count,
                 edge_count,
@@ -448,7 +448,7 @@ impl AppState {
         if !memory_review::should_enqueue_review(record) {
             if let Some(reason) = memory_review::review_skip_reason(record) {
                 tracing::debug!(
-                    target: "fndr::memory_review",
+                    target: "continuum::memory_review",
                     memory_id = %record.id,
                     reason,
                     "memory_review not queued"
@@ -463,7 +463,7 @@ impl AppState {
         };
         let inserted = self.pending_memory_reviews.enqueue(job);
         tracing::info!(
-            target: "fndr::memory_review",
+            target: "continuum::memory_review",
             memory_id = %record.id,
             inserted,
             queue_depth = self.pending_memory_reviews.len(),
@@ -665,8 +665,8 @@ mod tests {
     #[test]
     fn capture_stats_self_app_counts_separately_from_blocklist() {
         let stats = CapturePipelineStats::default();
-        stats.record_skip(SkipReason::SelfApp, "FNDR");
-        stats.record_skip(SkipReason::SelfApp, "FNDR");
+        stats.record_skip(SkipReason::SelfApp, "Continuum");
+        stats.record_skip(SkipReason::SelfApp, "Continuum");
         stats.record_skip(SkipReason::Blocklist, "1Password");
         assert_eq!(stats.skipped_self_app.load(Ordering::Relaxed), 2);
         assert_eq!(stats.skipped_blocklist.load(Ordering::Relaxed), 1);

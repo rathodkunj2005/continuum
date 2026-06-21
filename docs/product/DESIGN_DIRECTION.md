@@ -1,12 +1,12 @@
-# FNDR Design Direction
+# Continuum Design Direction
 
-> A living document describing the architecture decisions, design principles, and future roadmap for FNDR.
+> A living document describing the architecture decisions, design principles, and future roadmap for Continuum.
 
 ---
 
 ## Vision
 
-FNDR is a **local-first, privacy-focused memory assistant** for macOS. It continuously captures screen activity, extracts meaning using on-device AI, and builds a searchable knowledge graph—all without sending data to the cloud.
+Continuum is a **local-first, privacy-focused memory assistant** for macOS. It continuously captures screen activity, extracts meaning using on-device AI, and builds a searchable knowledge graph—all without sending data to the cloud.
 
 **Core Principle**: Your data stays on your machine. Intelligence happens locally.
 
@@ -110,7 +110,7 @@ Screen Capture → Deduplication → OCR → VLM Analysis → LLM Summary
 ## Agent System
 
 ### Architecture
-- **Hermes runtime**: Primary native agent path surfaced in the FNDR Agent panel.
+- **Hermes runtime**: Primary native agent path surfaced in the Continuum Agent panel.
 - **agent_runner.py**: Legacy Anthropic subprocess fallback for local tool-use experiments.
 - **Communication**: JSON over stdin/stdout from Tauri subprocess where the fallback is used.
 

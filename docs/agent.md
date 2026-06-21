@@ -1,6 +1,6 @@
-# FNDR Agent
+# Continuum Agent
 
-FNDR Agent is the local control-plane layer over FNDR memory. It is not a generic chatbot: every run starts by building an `AgentContextPack`, applying privacy scope, and checking a mode-specific tool policy.
+Continuum Agent is the local control-plane layer over Continuum memory. It is not a generic chatbot: every run starts by building an `AgentContextPack`, applying privacy scope, and checking a mode-specific tool policy.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ Implemented code paths:
 - `src-tauri/src/agent/audit.rs`: append-only JSONL audit and retrieval feedback ledger.
 - `src-tauri/src/agent/skills.rs`: user-reviewed skill candidate shape and deterministic draft generator.
 - `src-tauri/src/agent/evals.rs`: local eval case shape and deterministic draft generator.
-- `src-tauri/src/agent/prompts.rs`: FNDR-specific MCP prompt registry.
+- `src-tauri/src/agent/prompts.rs`: Continuum-specific MCP prompt registry.
 - `src-tauri/src/ipc/commands/agent.rs`: Tauri commands for UI access.
 
 ## Modes

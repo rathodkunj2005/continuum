@@ -664,7 +664,7 @@ mod tests {
     fn test_ocr_chunking_removes_repeated_garbage_lines() {
         let chunker = TextChunker::new();
         let repeated = "syncing status syncing status\n".repeat(12);
-        let text = format!("{repeated}\nPlanning launch checklist for FNDR search pipeline");
+        let text = format!("{repeated}\nPlanning launch checklist for Continuum search pipeline");
         let chunks = chunker.chunk_ocr_text("Chrome", "Launch Plan", &text);
         let merged = chunks.join("\n").to_lowercase();
         assert_eq!(merged.matches("syncing status syncing status").count(), 1);
@@ -686,7 +686,7 @@ mod tests {
     #[test]
     fn test_ocr_chunking_drops_chrome_lines() {
         let chunker = TextChunker::new();
-        let text = "New Tab\nHome\nTrending\nPlanning launch checklist for FNDR search pipeline";
+        let text = "New Tab\nHome\nTrending\nPlanning launch checklist for Continuum search pipeline";
         let chunks = chunker.chunk_ocr_text("Chrome", "New Tab", text);
         let merged = chunks.join("\n").to_lowercase();
         assert!(merged.contains("planning launch checklist"));

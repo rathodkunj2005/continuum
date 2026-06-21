@@ -48,7 +48,7 @@ export type LifecycleStatus =
     | "VISUAL_FAILED";
 
 /**
- * Canonical FNDR memory card. Four variants mapped onto a single component
+ * Canonical Continuum memory card. Four variants mapped onto a single component
  * so the immersive scroll, the vault list, the expanded modal, and the hero
  * card all share one surface.
  *
@@ -83,8 +83,8 @@ export function MemoryCard({
     const stampMeta = STAMP_META[status];
 
     const cls = [
-        "fndr-mc",
-        `fndr-mc--${variant}`,
+        "continuum-mc",
+        `continuum-mc--${variant}`,
         className ?? "",
     ]
         .filter(Boolean)
@@ -110,27 +110,27 @@ export function MemoryCard({
                     }
                 }}
             >
-                <span className="fndr-mc-bar" aria-hidden="true" />
-                <span className="fndr-mc-c-frame">FRAME {frameId}</span>
-                <div className="fndr-mc-c-main">
-                    <span className="fndr-mc-c-title">{card.title}</span>
+                <span className="continuum-mc-bar" aria-hidden="true" />
+                <span className="continuum-mc-c-frame">FRAME {frameId}</span>
+                <div className="continuum-mc-c-main">
+                    <span className="continuum-mc-c-title">{card.title}</span>
                     {previewText ? (
-                        <span className="fndr-mc-c-preview" title={previewText}>
+                        <span className="continuum-mc-c-preview" title={previewText}>
                             {previewText}
                         </span>
                     ) : null}
                 </div>
                 {/* source area: app name + activity/files chips */}
-                <div className="fndr-mc-c-source" aria-label="app and context">
-                    <em className="fndr-mc-c-source-app">{card.app_name}</em>
+                <div className="continuum-mc-c-source" aria-label="app and context">
+                    <em className="continuum-mc-c-source-app">{card.app_name}</em>
                     {card.activity_type && card.activity_type !== "other" && (
-                        <span className="fndr-mc-c-chip fndr-mc-c-chip--activity" aria-label={`activity: ${card.activity_type}`}>
+                        <span className="continuum-mc-c-chip continuum-mc-c-chip--activity" aria-label={`activity: ${card.activity_type}`}>
                             {card.activity_type}
                         </span>
                     )}
                     {Array.isArray(card.files_touched) && card.files_touched.length > 0 && (
                         <span
-                            className="fndr-mc-c-chip fndr-mc-c-chip--files"
+                            className="continuum-mc-c-chip continuum-mc-c-chip--files"
                             title={card.files_touched.join("\n")}
                             aria-label={`${card.files_touched.length} file${card.files_touched.length !== 1 ? "s" : ""}`}
                         >
@@ -140,12 +140,12 @@ export function MemoryCard({
                         </span>
                     )}
                 </div>
-                <span className="fndr-mc-c-time">
-                    <span className="fndr-mc-c-day">{dayLabel}</span>
-                    <span className="fndr-mc-c-clock">{timeLabel}</span>
+                <span className="continuum-mc-c-time">
+                    <span className="continuum-mc-c-day">{dayLabel}</span>
+                    <span className="continuum-mc-c-clock">{timeLabel}</span>
                 </span>
                 <CompactSurfacingGlyph card={card} />
-                <span className="fndr-mc-c-threads">
+                <span className="continuum-mc-c-threads">
                     {threads.length > 0
                         ? `${threads.length}`
                         : threadCountHint !== undefined
@@ -170,7 +170,7 @@ export function MemoryCard({
         >
             <DossierCorners />
 
-            <header className="fndr-mc-strip">
+            <header className="continuum-mc-strip">
                 <Stamp
                     tone={stampMeta.tone}
                     rotate={-1}
@@ -184,29 +184,29 @@ export function MemoryCard({
                         CONFIDENTIAL
                     </Stamp>
                 )}
-                <span className="fndr-mc-frame-no">FRAME {frameId}</span>
-                <span className="fndr-mc-ts">
+                <span className="continuum-mc-frame-no">FRAME {frameId}</span>
+                <span className="continuum-mc-ts">
                     {dayLabel} · {timeLabel}
                 </span>
             </header>
 
             {headerSlot}
 
-            <h3 className="fndr-mc-title">{card.title}</h3>
+            <h3 className="continuum-mc-title">{card.title}</h3>
 
             {previewText && (
-                <p className="fndr-mc-preview">
+                <p className="continuum-mc-preview">
                     &ldquo;{previewText}&rdquo;
                 </p>
             )}
 
-            <div className="fndr-mc-source">
+            <div className="continuum-mc-source">
                 {card.app_name}
                 {card.window_title && variant === "expanded" ? ` · ${card.window_title}` : null}
             </div>
 
             {threads.length > 0 && (
-                <ul className="fndr-mc-threads">
+                <ul className="continuum-mc-threads">
                     {threads.map((t) => (
                         <li key={t}>{t}</li>
                     ))}
@@ -220,7 +220,7 @@ export function MemoryCard({
                     {(card.session_duration_mins ?? 0) > 0 ||
                     card.timeline_action_class ||
                     card.source_count > 1 ? (
-                        <div className="fndr-mc-meta-row">
+                        <div className="continuum-mc-meta-row">
                             {card.source_count > 1 && (
                                 <Pill tone="muted" noDot>
                                     {card.source_count} captures
@@ -241,22 +241,22 @@ export function MemoryCard({
                     ) : null}
 
                     {insightsSlot && (
-                        <div className="fndr-mc-slot fndr-mc-slot--insights">
+                        <div className="continuum-mc-slot continuum-mc-slot--insights">
                             {insightsSlot}
                         </div>
                     )}
                     {evidenceSlot && (
-                        <div className="fndr-mc-slot fndr-mc-slot--evidence">
+                        <div className="continuum-mc-slot continuum-mc-slot--evidence">
                             {evidenceSlot}
                         </div>
                     )}
                     {relatedSlot && (
-                        <div className="fndr-mc-slot fndr-mc-slot--related">
+                        <div className="continuum-mc-slot continuum-mc-slot--related">
                             {relatedSlot}
                         </div>
                     )}
 
-                    <div className="fndr-mc-actions">
+                    <div className="continuum-mc-actions">
                         {onOpenInGraph && (
                             <Button mono variant="secondary" onClick={() => onOpenInGraph(card)}>
                                 See in graph
@@ -273,7 +273,7 @@ export function MemoryCard({
                             </Button>
                         )}
                         {onDelete && (
-                            <div className="fndr-mc-actions-danger">
+                            <div className="continuum-mc-actions-danger">
                                 <Button
                                     mono
                                     variant="ghost"
@@ -473,7 +473,7 @@ const ROUTE_GLYPHS: Record<string, string> = {
 function CompactSurfacingGlyph({ card }: { card: MemoryCardData }) {
     const reason = card.surfacing_reason;
     if (!reason || !reason.routes || reason.routes.length === 0) {
-        return <span className="fndr-mc-c-route" aria-hidden="true" />;
+        return <span className="continuum-mc-c-route" aria-hidden="true" />;
     }
     const primary = reason.routes[0];
     const glyph = ROUTE_GLYPHS[primary] ?? primary.slice(0, 1).toUpperCase();
@@ -487,7 +487,7 @@ function CompactSurfacingGlyph({ card }: { card: MemoryCardData }) {
         .filter(Boolean)
         .join("\n");
     return (
-        <span className="fndr-mc-c-route" title={tooltipLines} data-route={primary}>
+        <span className="continuum-mc-c-route" title={tooltipLines} data-route={primary}>
             {glyph}
         </span>
     );

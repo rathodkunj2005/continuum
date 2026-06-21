@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST_PATH="$REPO_ROOT/src-tauri/Cargo.toml"
 TARGET_DIR="$REPO_ROOT/src-tauri/target"
-RUNTIME_DIR="${HOME}/Library/Application Support/com.fndr.app"
+RUNTIME_DIR="${HOME}/Library/Application Support/com.continuum.app"
 
 DRY_RUN=0
 ASSUME_YES=0
@@ -17,7 +17,7 @@ usage() {
 Usage: scripts/clean-dev-build-cache.sh [--dry-run] [--yes] [--runtime] [--models] [--all]
 
 Safely removes Rust/Tauri developer build artifacts with cargo clean.
-By default this does not delete FNDR runtime data, memory cards, LanceDB,
+By default this does not delete Continuum runtime data, memory cards, LanceDB,
 summaries, models, screenshots, or app settings.
 
 Options:
@@ -84,7 +84,7 @@ size_of_glob() {
     fi
 }
 
-echo "FNDR developer build cache cleanup"
+echo "Continuum developer build cache cleanup"
 echo
 echo "Build cache target:"
 echo "  src-tauri/target: $(size_of "$TARGET_DIR")"
@@ -113,7 +113,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 if [[ "$ASSUME_YES" -ne 1 ]]; then
-    printf "Remove selected FNDR generated artifacts now? This will make the next build/model launch slower. [y/N] "
+    printf "Remove selected Continuum generated artifacts now? This will make the next build/model launch slower. [y/N] "
     read -r reply
     case "$reply" in
         y|Y|yes|YES)
@@ -152,10 +152,10 @@ if [[ "${CLEAN_MODELS:-0}" -eq 1 ]]; then
         "$RUNTIME_DIR/models" \
         "$RUNTIME_DIR/speech_models" \
         "$REPO_ROOT/src-tauri/models" \
-        "${HOME}/Library/Application Support/com.fndr.FNDR/models"
+        "${HOME}/Library/Application Support/com.continuum.Continuum/models"
 fi
 
-rm -rf "${HOME}/Library/Caches/com.fndr.app" "${HOME}/Library/Caches/fndr"
+rm -rf "${HOME}/Library/Caches/com.continuum.app" "${HOME}/Library/Caches/continuum"
 
 echo
 echo "Cleanup complete."

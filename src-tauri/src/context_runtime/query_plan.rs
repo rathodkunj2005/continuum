@@ -186,7 +186,7 @@ pub fn plan(query: &str, hints: &PlanHints) -> QueryPlan {
         budget_tokens: hints.budget_tokens.unwrap_or(DEFAULT_BUDGET_TOKENS),
     };
     runtime_metrics::record_ms(
-        "fndr.retrieval.planner.ms",
+        "continuum.retrieval.planner.ms",
         started.elapsed().as_millis() as u64,
     );
     plan
@@ -511,7 +511,7 @@ mod tests {
         for query in [
             "why is the planner debounce 250ms",
             "debug the LanceDB schema error",
-            "resume work on FNDR today",
+            "resume work on Continuum today",
             "where did I mention ScreenCaptureKit",
             "how do I run cargo test for graph_index.rs",
             "what is related to MCP retrieval feedback",

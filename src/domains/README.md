@@ -1,6 +1,6 @@
 # `src/domains` — product UI by domain
 
-FNDR UI is grouped by **product domain** (search, memory vault, timeline, workspace panels). This replaces a single flat `components/` tree.
+Continuum UI is grouped by **product domain** (search, memory vault, timeline, workspace panels). This replaces a single flat `components/` tree.
 
 | Directory | Responsibility |
 | --- | --- |

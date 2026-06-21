@@ -102,8 +102,8 @@ mod tests {
     #[test]
     fn scrub_or_fallback_removes_internal_voice() {
         let (summary, filtered) = clean_or_fallback_display_summary(
-            "You reviewed FNDR src-tauri memory_compaction while noting Refactor ideas",
-            "FNDR Refactor",
+            "You reviewed Continuum src-tauri memory_compaction while noting Refactor ideas",
+            "Continuum Refactor",
             Some("https://github.com/org/repo"),
             1_700_000_000_000,
         );

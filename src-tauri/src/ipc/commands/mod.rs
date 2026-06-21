@@ -60,8 +60,8 @@ pub use debug::{get_memory_timeline_thread, inspect_memory_pipeline};
 
 pub mod retrieval;
 pub use retrieval::{
-    fndr_answer, fndr_build_context_pack, fndr_get_memory_subgraph, fndr_get_related_memories,
-    fndr_quality_status, fndr_search, fndr_timeline,
+    continuum_answer, continuum_build_context_pack, continuum_get_memory_subgraph, continuum_get_related_memories,
+    continuum_quality_status, continuum_search, continuum_timeline,
 };
 
 mod companion;
@@ -128,7 +128,7 @@ mod daily_summary_tests {
                 "2",
                 start + 10 * 60_000,
                 "Discord",
-                "FNDR team chat",
+                "Continuum team chat",
                 "Checked a short team follow-up.",
                 None,
             ),
@@ -288,7 +288,7 @@ mod daily_summary_tests {
             agent_usefulness_score: 0.64,
             evidence_confidence: 0.28,
             ocr_noise_score: 0.25,
-            dedup_fingerprint: "fndr:debug:ocr".to_string(),
+            dedup_fingerprint: "continuum:debug:ocr".to_string(),
             ..Default::default()
         };
 

@@ -1,6 +1,6 @@
 # 003: Hybrid Search Ranking
 
-FNDR uses hybrid search because neither vector search nor keyword search is reliable enough alone for screen memory. OCR text can be noisy, short, duplicated, or missing the exact words a user asks for. At the same time, semantic embeddings can blur precise identifiers such as numbers, filenames, URLs, and product names.
+Continuum uses hybrid search because neither vector search nor keyword search is reliable enough alone for screen memory. OCR text can be noisy, short, duplicated, or missing the exact words a user asks for. At the same time, semantic embeddings can blur precise identifiers such as numbers, filenames, URLs, and product names.
 
 The stable ranking path runs semantic retrieval over the main text embedding, optional snippet-vector retrieval when the query has enough terms, and keyword retrieval over lexical text. The candidates are fused by memory id, scored with configurable vector, snippet, and keyword weights, then reranked with query intent, term coverage, source alignment, OCR confidence, noise score, recency, decay score, and light diversity.
 

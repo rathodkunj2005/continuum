@@ -36,7 +36,7 @@ pub fn preflight_screen_capture_access() -> (bool, String) {
             let detail = if ok {
                 "Screen Recording access preflight OK.".to_string()
             } else {
-                "Open System Settings → Privacy & Security → Screen Recording → enable FNDR, then restart the app.".to_string()
+                "Open System Settings → Privacy & Security → Screen Recording → enable Continuum, then restart the app.".to_string()
             };
             (ok, detail)
         },

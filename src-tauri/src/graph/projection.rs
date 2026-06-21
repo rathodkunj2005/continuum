@@ -131,7 +131,7 @@ fn compute_stable_anchor(_label: &str, index: usize) -> Anchor3D {
 }
 
 fn compute_community_color(label: &str) -> String {
-    // Map canonical labels to design tokens (these should exist in FNDR design system)
+    // Map canonical labels to design tokens (these should exist in Continuum design system)
     match label {
         "Work/Code" => "token-blue",
         "Research" => "token-green",
@@ -167,7 +167,7 @@ mod tests {
                 id: "mem1".to_string(),
                 node_type: NodeType::Memory,
                 title: "Code review".to_string(),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 community_id: None,
                 importance_score: Some(0.8),
                 ..Default::default()
@@ -186,7 +186,7 @@ mod tests {
         let communities = derive_communities(&nodes);
 
         assert_eq!(communities.len(), 2);
-        assert!(communities.iter().any(|c| c.label.contains("FNDR")));
+        assert!(communities.iter().any(|c| c.label.contains("Continuum")));
         assert!(communities.iter().any(|c| c.label.contains("Portal")));
     }
 

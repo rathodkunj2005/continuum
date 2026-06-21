@@ -1,16 +1,16 @@
 {
   "name": "long_page_with_urls",
   "app_name": "Google Chrome",
-  "window_title": "FNDR architecture overview - Notion",
-  "raw_text": "FNDR architecture overview\n\nFNDR is a privacy-first local memory app. The capture pipeline writes OCR text into LanceDB, which is the durable source of truth for all retrieval routes. The embedding contract has two tiers: v4 MiniLM 384 remains the readable parent fallback, and v5 BGE 1024 is the additive forward target for chunk-first retrieval.\n\nhttps://github.com/fndr-team/fndr\n\nThe agentic graph RAG layer composes typed graph paths over the LanceDB store. Each memory carries a deterministic surfacing reason that explains why it appeared for a given query. Chunk evidence is attached to the SearchResult when the chunk route contributes to fusion.\n\nhttps://lancedb.com/docs\n\nThe meeting capture pipeline isolates a transcript per session and emits segment-level memories. Each segment is independently chunked so a single phrase that appears mid-meeting can still surface through chunk-first ANN.\n\nhttps://docs.fndr.local/meetings",
+  "window_title": "Continuum architecture overview - Notion",
+  "raw_text": "Continuum architecture overview\n\nContinuum is a privacy-first local memory app. The capture pipeline writes OCR text into LanceDB, which is the durable source of truth for all retrieval routes. The embedding contract has two tiers: v4 MiniLM 384 remains the readable parent fallback, and v5 BGE 1024 is the additive forward target for chunk-first retrieval.\n\nhttps://github.com/continuum-team/continuum\n\nThe agentic graph RAG layer composes typed graph paths over the LanceDB store. Each memory carries a deterministic surfacing reason that explains why it appeared for a given query. Chunk evidence is attached to the SearchResult when the chunk route contributes to fusion.\n\nhttps://lancedb.com/docs\n\nThe meeting capture pipeline isolates a transcript per session and emits segment-level memories. Each segment is independently chunked so a single phrase that appears mid-meeting can still surface through chunk-first ANN.\n\nhttps://docs.continuum.local/meetings",
   "expected_min_chunks": 2,
   "expected_max_chunks": 6,
   "must_contain": [
-    "FNDR architecture overview",
+    "Continuum architecture overview",
     "v4 MiniLM 384",
     "v5 BGE 1024",
     "chunk-first ANN",
-    "https://github.com/fndr-team/fndr",
+    "https://github.com/continuum-team/continuum",
     "https://lancedb.com/docs"
   ],
   "must_not_contain": []

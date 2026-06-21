@@ -79,9 +79,9 @@ pub fn verify(plan: &QueryPlan, fused: &[FusedHit], evidence: &EvidencePack) -> 
 
 fn record(outcome: VerifyOutcome) -> VerifyOutcome {
     let counter = match &outcome {
-        VerifyOutcome::Grounded { .. } => "fndr.retrieval.verify.grounded",
-        VerifyOutcome::PartialAnswer { .. } => "fndr.retrieval.verify.partial",
-        VerifyOutcome::NotEnoughEvidence { .. } => "fndr.retrieval.verify.no_evidence",
+        VerifyOutcome::Grounded { .. } => "continuum.retrieval.verify.grounded",
+        VerifyOutcome::PartialAnswer { .. } => "continuum.retrieval.verify.partial",
+        VerifyOutcome::NotEnoughEvidence { .. } => "continuum.retrieval.verify.no_evidence",
     };
     runtime_metrics::bump(counter);
     outcome

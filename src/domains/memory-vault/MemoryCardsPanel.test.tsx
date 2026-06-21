@@ -40,7 +40,7 @@ function card(index: number): MemoryCard {
         title: `Memory ${index}`,
         summary: `Worked through memory loading issue ${index}.`,
         action: "Reviewed memory loading",
-        context: ["FNDR"],
+        context: ["Continuum"],
         timestamp: Date.now() - index,
         app_name: "VS Code",
         window_title: `Memory ${index}`,

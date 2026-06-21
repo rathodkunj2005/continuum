@@ -1,6 +1,6 @@
 //! Search-related Tauri commands and helpers.
 
-use super::common::{shared_embedder, strip_internal_fndr_results, truncate_chars};
+use super::common::{shared_embedder, strip_internal_continuum_results, truncate_chars};
 use crate::graph::graph_store::GraphStore;
 use crate::privacy::Blocklist;
 use crate::search::{
@@ -86,7 +86,7 @@ pub(super) async fn run_search_query(
         }
     };
 
-    Ok(strip_internal_fndr_results(results))
+    Ok(strip_internal_continuum_results(results))
 }
 
 pub(super) fn cache_is_fresh(computed_at_ms: i64) -> bool {
@@ -598,7 +598,7 @@ pub async fn list_memory_cards(
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut cards: Vec<MemoryCard> = strip_internal_fndr_results(results)
+    let mut cards: Vec<MemoryCard> = strip_internal_continuum_results(results)
         .into_iter()
         .map(memory_card_from_result)
         .collect();

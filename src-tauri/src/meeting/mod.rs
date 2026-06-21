@@ -1119,7 +1119,7 @@ async fn finalize_meeting_analysis(
     }
 
     if let Some(state) = app_state {
-        let _ = ingest_transcript_into_fndr_memory(state, &transcript, None).await;
+        let _ = ingest_transcript_into_continuum_memory(state, &transcript, None).await;
     }
     if let Err(err) = store.purge_audio_chunks(meeting_id).await {
         tracing::warn!("Failed to purge meeting audio chunks: {}", err);
@@ -1545,13 +1545,13 @@ fn is_actionable_task_item(value: &str) -> bool {
 
 fn spawn_ffmpeg_recorder(segment_pattern: &Path) -> Result<Child, String> {
     let ffmpeg_path = resolve_ffmpeg_binary().ok_or_else(|| {
-        "ffmpeg was not found. Install ffmpeg and restart FNDR to use meeting recording."
+        "ffmpeg was not found. Install ffmpeg and restart Continuum to use meeting recording."
             .to_string()
     })?;
 
     if !ffmpeg_path.exists() && ffmpeg_path.as_os_str() != "ffmpeg" {
         return Err(
-            "ffmpeg was not found. Install ffmpeg and restart FNDR to use meeting recording."
+            "ffmpeg was not found. Install ffmpeg and restart Continuum to use meeting recording."
                 .to_string(),
         );
     }
@@ -1653,7 +1653,7 @@ struct MacAudioCapturePlan {
 
 #[cfg(target_os = "macos")]
 fn resolve_macos_audio_capture_plan() -> MacAudioCapturePlan {
-    if let Ok(explicit) = std::env::var("FNDR_MEETING_AUDIO_DEVICE") {
+    if let Ok(explicit) = std::env::var("CONTINUUM_MEETING_AUDIO_DEVICE") {
         let trimmed = explicit.trim().trim_start_matches(':');
         if !trimmed.is_empty() {
             return MacAudioCapturePlan {
@@ -1859,8 +1859,8 @@ async fn transcribe_segment(
     model: &str,
     app_data_dir: &Path,
 ) -> Result<String, String> {
-    if let Ok(custom_cmd) = std::env::var("FNDR_MEETING_TRANSCRIBE_COMMAND")
-        .or_else(|_| std::env::var("FNDR_PARAKEET_COMMAND"))
+    if let Ok(custom_cmd) = std::env::var("CONTINUUM_MEETING_TRANSCRIBE_COMMAND")
+        .or_else(|_| std::env::var("CONTINUUM_PARAKEET_COMMAND"))
     {
         let audio = segment_path.to_path_buf();
         let model_name = model.to_string();
@@ -1869,10 +1869,10 @@ async fn transcribe_segment(
             Command::new("sh")
                 .arg("-c")
                 .arg(custom_cmd)
-                .env("FNDR_AUDIO_PATH", audio.to_string_lossy().to_string())
-                .env("FNDR_TRANSCRIPT_MODEL", model_name)
+                .env("CONTINUUM_AUDIO_PATH", audio.to_string_lossy().to_string())
+                .env("CONTINUUM_TRANSCRIPT_MODEL", model_name)
                 .env(
-                    "FNDR_TRANSCRIPT_APP_DATA_DIR",
+                    "CONTINUUM_TRANSCRIPT_APP_DATA_DIR",
                     app_data.to_string_lossy().to_string(),
                 )
                 .output()
@@ -1920,8 +1920,8 @@ fn normalize_transcribed_text(raw: &str) -> String {
 }
 
 fn detect_transcription_backend() -> String {
-    if std::env::var("FNDR_MEETING_TRANSCRIBE_COMMAND").is_ok()
-        || std::env::var("FNDR_PARAKEET_COMMAND").is_ok()
+    if std::env::var("CONTINUUM_MEETING_TRANSCRIBE_COMMAND").is_ok()
+        || std::env::var("CONTINUUM_PARAKEET_COMMAND").is_ok()
     {
         return "custom-transcriber".to_string();
     }
@@ -2095,7 +2095,7 @@ fn should_retry_segment_text(text: &str) -> bool {
         || trimmed.contains("Custom meeting transcription command returned empty output")
 }
 
-async fn ingest_transcript_into_fndr_memory(
+async fn ingest_transcript_into_continuum_memory(
     app_state: Arc<AppState>,
     transcript: &MeetingTranscript,
     transcript_path: Option<&str>,
@@ -2122,14 +2122,14 @@ async fn ingest_transcript_into_fndr_memory(
         &lexical_shadow,
     );
     let support_texts = support_embedding_texts(
-        "FNDR Meetings",
+        "Continuum Meetings",
         &transcript.meeting.title,
         &full_text_for_embedding,
         &lexical_shadow,
     );
     let (embedding, snippet_embedding, support_embedding) = transcript_embeddings_for_embedder(
         shared_meeting_embedder(),
-        "FNDR Meetings",
+        "Continuum Meetings",
         &transcript.meeting.title,
         &full_text_for_embedding,
         &compact_summary_text,
@@ -2140,8 +2140,8 @@ async fn ingest_transcript_into_fndr_memory(
         id: Uuid::new_v4().to_string(),
         timestamp: now,
         day_bucket: chrono::Local::now().format("%Y-%m-%d").to_string(),
-        app_name: "FNDR Meetings".to_string(),
-        bundle_id: Some("com.fndr.meetings".to_string()),
+        app_name: "Continuum Meetings".to_string(),
+        bundle_id: Some("com.continuum.meetings".to_string()),
         window_title: transcript.meeting.title.clone(),
         session_id: format!("meeting-{}", transcript.meeting.id),
         text: String::new(),
@@ -2252,7 +2252,7 @@ fn command_exists(bin: &str) -> bool {
 }
 
 fn resolve_ffmpeg_binary() -> Option<PathBuf> {
-    if let Ok(custom) = std::env::var("FNDR_FFMPEG_PATH") {
+    if let Ok(custom) = std::env::var("CONTINUUM_FFMPEG_PATH") {
         let p = PathBuf::from(custom);
         if p.exists() {
             return Some(p);
@@ -2333,7 +2333,7 @@ mod tests {
 
     #[test]
     fn collect_segment_files_filters_and_sorts_wavs() {
-        let root = std::env::temp_dir().join(format!("fndr-meeting-test-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("continuum-meeting-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp dir");
 
         let mut a = fs::File::create(root.join("segment_00010.wav")).expect("create wav a");
@@ -2461,14 +2461,14 @@ Carlos must test the meeting feature in three scenarios and send results by Frid
     #[test]
     fn transcript_embeddings_stay_zero_without_semantic_backend() {
         let support_texts = support_embedding_texts(
-            "FNDR Meetings",
+            "Continuum Meetings",
             "Weekly sync",
             "Reviewed roadmap updates and owners.",
             "Reviewed roadmap updates",
         );
         let (embedding, snippet_embedding, support_embedding) = transcript_embeddings_for_embedder(
             None,
-            "FNDR Meetings",
+            "Continuum Meetings",
             "Weekly sync",
             "Reviewed roadmap updates and owners.",
             "Reviewed roadmap updates",
@@ -2490,14 +2490,14 @@ Carlos must test the meeting feature in three scenarios and send results by Frid
         }
 
         let support_texts = support_embedding_texts(
-            "FNDR Meetings",
+            "Continuum Meetings",
             "Weekly sync",
             "Reviewed roadmap updates and owners.",
             "Reviewed roadmap updates",
         );
         let (embedding, snippet_embedding, support_embedding) = transcript_embeddings_for_embedder(
             Some(&embedder),
-            "FNDR Meetings",
+            "Continuum Meetings",
             "Weekly sync",
             "Reviewed roadmap updates and owners.",
             "Reviewed roadmap updates",

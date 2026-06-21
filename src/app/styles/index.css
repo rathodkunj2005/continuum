@@ -2,9 +2,9 @@
 @import "../../shared/components/atoms/atoms.css";
 
 /* =============================================================
-   FNDR — global theme tokens (v2 handoff).
+   Continuum — global theme tokens (v2 handoff).
 
-   The film-paper.css import above defines the FNDR design-system
+   The film-paper.css import above defines the Continuum design-system
    tokens (--bg, --fg, --accent, --font-display/body/mono, --t-*,
    --s-*). This file maps the existing app's legacy tokens
    (--bg-primary, --text-primary, --radius-md, etc.) onto those new
@@ -47,7 +47,7 @@
     --shadow-color: rgba(0, 0, 0, 0.45);
     --focus-ring: color-mix(in srgb, var(--accent) 48%, transparent);
 
-    /* Radii — dropped to FNDR archival scale (was 16 / 22 / 28). */
+    /* Radii — dropped to Continuum archival scale (was 16 / 22 / 28). */
     --radius-sm: var(--film-radius-sm);   /* 4px */
     --radius-md: var(--film-radius-md);   /* 8px */
     --radius-lg: var(--film-radius-lg);   /* 12px */

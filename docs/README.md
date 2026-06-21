@@ -1,4 +1,4 @@
-# FNDR documentation
+# Continuum documentation
 
 Use this index to find the right document quickly. **Authoritative agent vocabulary** lives in [`CONTEXT.md`](../CONTEXT.md) together with [`AGENTS.md`](../AGENTS.md) at the repository root.
 
@@ -10,7 +10,7 @@ Use this index to find the right document quickly. **Authoritative agent vocabul
 | [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | Capture → search → UI pipeline and core Rust modules |
 | [`product/DESIGN_DIRECTION.md`](product/DESIGN_DIRECTION.md) | UX and visual direction |
 | [`mcp.md`](mcp.md) | MCP tools, modes, privacy model, and agent-facing additions |
-| [`agent.md`](agent.md) | FNDR Agent architecture, modes, provider strategy, and safety |
+| [`agent.md`](agent.md) | Continuum Agent architecture, modes, provider strategy, and safety |
 | [`agent-context-pack.md`](agent-context-pack.md) | Typed context pack schema, ranking, redaction, and provenance |
 | [`skills-and-evals.md`](skills-and-evals.md) | Skill lifecycle, eval case shape, and approval requirements |
 

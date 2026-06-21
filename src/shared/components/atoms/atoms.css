@@ -1,12 +1,12 @@
 /* =============================================================
-   FNDR Atoms — shared primitives used by MemoryCard,
+   Continuum Atoms — shared primitives used by MemoryCard,
    CommandPalette, KnowledgeGraph chrome, immersive sections.
 
-   Reference: /tmp/fndr-design-v2/design_handoff_fndr_immersive/ui_kits/macos/Atoms.jsx
+   Reference: /tmp/continuum-design-v2/design_handoff_continuum_immersive/ui_kits/macos/Atoms.jsx
    ============================================================= */
 
 /* ── DossierCorner ──────────────────────────────────────────── */
-.fndr-dossier-corner {
+.continuum-dossier-corner {
     position: absolute;
     width: 10px;
     height: 10px;
@@ -16,25 +16,25 @@
     opacity: 0.5;
     pointer-events: none;
 }
-.fndr-dossier-corner--tl {
+.continuum-dossier-corner--tl {
     top: 8px;
     left: 8px;
     border-top-width: 1px;
     border-left-width: 1px;
 }
-.fndr-dossier-corner--tr {
+.continuum-dossier-corner--tr {
     top: 8px;
     right: 8px;
     border-top-width: 1px;
     border-right-width: 1px;
 }
-.fndr-dossier-corner--bl {
+.continuum-dossier-corner--bl {
     bottom: 8px;
     left: 8px;
     border-bottom-width: 1px;
     border-left-width: 1px;
 }
-.fndr-dossier-corner--br {
+.continuum-dossier-corner--br {
     bottom: 8px;
     right: 8px;
     border-bottom-width: 1px;
@@ -42,7 +42,7 @@
 }
 
 /* ── Stamp (rotated archival badge) ─────────────────────────── */
-.fndr-stamp {
+.continuum-stamp {
     display: inline-block;
     font-family: var(--font-mono);
     font-weight: 600;
@@ -57,20 +57,20 @@
     transform: rotate(-2deg);
     white-space: nowrap;
 }
-.fndr-stamp--developed,
-.fndr-stamp--amber {
+.continuum-stamp--developed,
+.continuum-stamp--amber {
     border-color: var(--accent);
     color: var(--accent);
     transform: rotate(2deg);
 }
-.fndr-stamp--muted {
+.continuum-stamp--muted {
     border-color: var(--fg-3);
     color: var(--fg-3);
     transform: rotate(-1deg);
 }
 
 /* ── Pill (mono cap tag) ───────────────────────────────────── */
-.fndr-pill {
+.continuum-pill {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -87,7 +87,7 @@
     background: transparent;
     white-space: nowrap;
 }
-.fndr-pill::before {
+.continuum-pill::before {
     content: "";
     display: inline-block;
     width: 6px;
@@ -96,42 +96,42 @@
     background: var(--fg-3);
     flex-shrink: 0;
 }
-.fndr-pill[data-no-dot="true"]::before {
+.continuum-pill[data-no-dot="true"]::before {
     display: none;
 }
-.fndr-pill--live {
+.continuum-pill--live {
     border-color: var(--accent);
     color: var(--accent);
     box-shadow: var(--halation-soft);
 }
-.fndr-pill--live::before {
+.continuum-pill--live::before {
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent);
 }
-.fndr-pill--alarm {
+.continuum-pill--alarm {
     border-color: var(--alarm);
     color: var(--alarm);
 }
-.fndr-pill--alarm::before {
+.continuum-pill--alarm::before {
     background: var(--alarm);
 }
-.fndr-pill--muted {
+.continuum-pill--muted {
     color: var(--fg-3);
 }
-.fndr-pill--muted::before {
+.continuum-pill--muted::before {
     background: var(--fg-4);
 }
-.fndr-pill--solid {
+.continuum-pill--solid {
     background: var(--accent);
     color: var(--bg);
     border-color: var(--accent);
 }
-.fndr-pill--solid::before {
+.continuum-pill--solid::before {
     background: var(--bg);
 }
 
 /* ── Button ─────────────────────────────────────────────────── */
-.fndr-button {
+.continuum-button {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -150,51 +150,51 @@
     white-space: nowrap;
     user-select: none;
 }
-.fndr-button:focus-visible {
+.continuum-button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
-.fndr-button:active {
+.continuum-button:active {
     transform: scale(0.985);
     opacity: 0.92;
 }
-.fndr-button--primary {
+.continuum-button--primary {
     background: var(--accent);
     color: var(--bg);
     box-shadow: var(--halation-soft);
     border-color: transparent;
 }
-.fndr-button--primary:hover {
+.continuum-button--primary:hover {
     background: var(--accent-2);
     box-shadow: var(--halation);
 }
-.fndr-button--secondary {
+.continuum-button--secondary {
     background: transparent;
     border-color: var(--hairline-strong);
     color: var(--fg);
 }
-.fndr-button--secondary:hover {
+.continuum-button--secondary:hover {
     background: var(--bg-3);
     border-color: var(--fg-2);
 }
-.fndr-button--ghost {
+.continuum-button--ghost {
     background: transparent;
     color: var(--fg-2);
 }
-.fndr-button--ghost:hover {
+.continuum-button--ghost:hover {
     background: var(--bg-3);
     color: var(--fg);
 }
-.fndr-button--alarm {
+.continuum-button--alarm {
     background: transparent;
     color: var(--alarm);
     border-color: var(--alarm);
 }
-.fndr-button--alarm:hover {
+.continuum-button--alarm:hover {
     background: var(--alarm);
     color: var(--fg);
 }
-.fndr-button--mono {
+.continuum-button--mono {
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.18em;
@@ -203,7 +203,7 @@
 }
 
 /* ── Icon ─────────────────────────────────────────────────────── */
-.fndr-icon {
+.continuum-icon {
     vertical-align: -0.125em;
     flex-shrink: 0;
 }

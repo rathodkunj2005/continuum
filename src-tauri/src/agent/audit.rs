@@ -267,7 +267,7 @@ pub fn audit_record_from_success(
                 url: memory.url.clone(),
                 timestamp: memory.timestamp,
                 confidence: memory.confidence,
-                semantic_relevance: "Used existing FNDR context-runtime retrieval; exact semantic score is not exposed yet.".to_string(),
+                semantic_relevance: "Used existing Continuum context-runtime retrieval; exact semantic score is not exposed yet.".to_string(),
                 keyword_match: qualitative_keyword_signal(&request.user_goal, &memory.summary),
                 recency: qualitative_recency(memory.timestamp),
                 project_match: pack
@@ -320,14 +320,14 @@ pub fn explanation_from_audit(record: &AgentAuditRecord) -> RetrievalExplanation
         dropped_context: record.dropped_context.clone(),
         redacted_context: record.redactions_applied.clone(),
         privacy_policy_reasons: vec![
-            "FNDR Agent is local-first and read-only by default.".to_string(),
+            "Continuum Agent is local-first and read-only by default.".to_string(),
             "Raw screenshots are never written to agent audit logs.".to_string(),
             "Blocklisted and sensitive contexts are excluded before agent context exposure."
                 .to_string(),
         ],
         limitations: vec![
             "Exact semantic, keyword, graph, and fusion scores are not exposed by the current context runtime.".to_string(),
-            "Ranking-signal fields are qualitative unless FNDR storage exposes a concrete score.".to_string(),
+            "Ranking-signal fields are qualitative unless Continuum storage exposes a concrete score.".to_string(),
         ],
     }
 }
@@ -498,7 +498,7 @@ mod tests {
 
     fn temp_agent_dir(label: &str) -> PathBuf {
         let base = std::env::temp_dir().join(format!(
-            "fndr-agent-audit-{label}-{}",
+            "continuum-agent-audit-{label}-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .expect("system time")

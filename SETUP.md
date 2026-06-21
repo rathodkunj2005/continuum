@@ -1,4 +1,4 @@
-# FNDR Setup Guide
+# Continuum Setup Guide
 
 ## Prerequisites
 - macOS 13.0+
@@ -21,7 +21,7 @@ Memory search requires the All-MiniLM-L6-v2 embedding model:
 ./scripts/bootstrap/download-minilm.sh
 ```
 
-Models download to: `~/Library/Application Support/com.fndr.FNDR/models/`
+Models download to: `~/Library/Application Support/com.continuum.Continuum/models/`
 
 **Note:** One-time setup. Models persist across rebuilds and cache clears.
 
@@ -34,7 +34,7 @@ The app opens at `http://127.0.0.1:1420`
 
 ## Local Models
 
-FNDR uses two local models, both running on your Mac with no external API calls:
+Continuum uses two local models, both running on your Mac with no external API calls:
 
 ### 1. All-MiniLM-L6-v2 (Embedding/Search)
 - **Purpose:** Memory search with semantic understanding
@@ -66,7 +66,7 @@ npm run tauri dev
 ```
 
 ### Models missing after full system cache clear
-Models are stored in `~/Library/Application Support/com.fndr.FNDR/models/` (outside dev cache), so they normally persist. If missing, re-run the download script:
+Models are stored in `~/Library/Application Support/com.continuum.Continuum/models/` (outside dev cache), so they normally persist. If missing, re-run the download script:
 ```bash
 ./scripts/bootstrap/download-minilm.sh
 ```

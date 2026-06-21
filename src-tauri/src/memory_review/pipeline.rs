@@ -619,7 +619,7 @@ mod tests {
         ReviewInput {
             memory_id: memory_id.to_string(),
             app_name: "Visual Studio Code".to_string(),
-            window_title: "fndr/chunk_route.rs".to_string(),
+            window_title: "continuum/chunk_route.rs".to_string(),
             url: None,
             clean_text: clean_text.to_string(),
             current_memory_context: String::new(),
@@ -762,7 +762,7 @@ mod tests {
         record.id = "mem-success".to_string();
         record.timestamp = 1_700_000_000_000;
         record.app_name = "Chrome".to_string();
-        record.window_title = "FNDR architecture - Notion".to_string();
+        record.window_title = "Continuum architecture - Notion".to_string();
         record.clean_text =
             "The chunk-first route runs ANN against memory_chunks_v1_bge_1024.".to_string();
         record.snippet = "Chunk-first ANN route".to_string();

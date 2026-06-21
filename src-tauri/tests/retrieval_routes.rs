@@ -1,12 +1,12 @@
-use fndr_lib::config::{SearchConfig, DEFAULT_IMAGE_EMBEDDING_DIM};
-use fndr_lib::context_runtime::query_plan::{
+use continuum_lib::config::{SearchConfig, DEFAULT_IMAGE_EMBEDDING_DIM};
+use continuum_lib::context_runtime::query_plan::{
     plan, EntityHint, EntityHintKind, GraphExpansion, PlanHints, Route, TimeWindow,
 };
-use fndr_lib::context_runtime::retrieval_routes::{RouteCtx, RouteRunner};
-use fndr_lib::embedding::{Embedder, EMBEDDING_DIM};
-use fndr_lib::graph::graph_index::GraphIndex;
-use fndr_lib::graph::schema::{GraphEdge, GraphEdgeType, GraphNode, GraphNodeType};
-use fndr_lib::storage::{MemoryRecord, Store};
+use continuum_lib::context_runtime::retrieval_routes::{RouteCtx, RouteRunner};
+use continuum_lib::embedding::{Embedder, EMBEDDING_DIM};
+use continuum_lib::graph::graph_index::GraphIndex;
+use continuum_lib::graph::schema::{GraphEdge, GraphEdgeType, GraphNode, GraphNodeType};
+use continuum_lib::storage::{MemoryRecord, Store};
 use uuid::Uuid;
 
 fn record(id: &str, text: &str, timestamp: i64, embedding: Vec<f32>) -> MemoryRecord {
@@ -25,8 +25,8 @@ fn record(id: &str, text: &str, timestamp: i64, embedding: Vec<f32>) -> MemoryRe
         support_embedding: vec![0.0; EMBEDDING_DIM],
         image_embedding: vec![0.0; DEFAULT_IMAGE_EMBEDDING_DIM],
         decay_score: 1.0,
-        project: "FNDR".to_string(),
-        entities: vec!["FNDR".to_string()],
+        project: "Continuum".to_string(),
+        entities: vec!["Continuum".to_string()],
         ..Default::default()
     }
 }
@@ -61,17 +61,17 @@ fn edge(source: u128, target: u128, edge_type: GraphEdgeType) -> GraphEdge {
 
 #[test]
 fn dispatch_runs_all_five_routes_and_graph_returns_path() {
-    std::env::set_var("FNDR_ALLOW_MOCK_EMBEDDER", "1");
+    std::env::set_var("CONTINUUM_ALLOW_MOCK_EMBEDDER", "1");
     let now = chrono::Utc::now().timestamp_millis();
     let dir = tempfile::tempdir().expect("tempdir");
     let store = Store::new(dir.path()).expect("store");
     let embedder = Embedder::new().expect("embedder");
 
     let texts = [
-        "FNDR planner alpha vector keyword seed memory",
+        "Continuum planner alpha vector keyword seed memory",
         "Connected graph evidence reached from the planner seed",
-        "Temporal route note from today for FNDR",
-        "FNDR project entity route anchor",
+        "Temporal route note from today for Continuum",
+        "Continuum project entity route anchor",
     ];
     let embeddings = embedder
         .embed_batch(
@@ -101,21 +101,21 @@ fn dispatch_runs_all_five_routes_and_graph_returns_path() {
             GraphNodeType::Concept,
             "m-graph",
         ),
-        node(3, "FNDR", GraphNodeType::Project, "m-entity"),
+        node(3, "Continuum", GraphNodeType::Project, "m-entity"),
     ];
     let graph_edges = vec![edge(1, 2, GraphEdgeType::SameTaskAs)];
     let graph_index = GraphIndex::build(&graph_nodes, &graph_edges);
 
     let mut query_plan = plan(
-        "FNDR planner alpha today",
+        "Continuum planner alpha today",
         &PlanHints {
             now_ms: Some(now),
             ..Default::default()
         },
     );
-    query_plan.target_project = Some("FNDR".to_string());
+    query_plan.target_project = Some("Continuum".to_string());
     query_plan.target_entities = vec![EntityHint {
-        label: "FNDR".to_string(),
+        label: "Continuum".to_string(),
         kind: EntityHintKind::Concept,
     }];
     query_plan.time_window = Some(TimeWindow {

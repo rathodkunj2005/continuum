@@ -19,7 +19,7 @@ import { MemoryCard as MemoryCardComponent } from "./MemoryCard";
 import { ExpandedMemoryCard } from "./ExpandedMemoryCard";
 import { KnowledgeGraph3D, GraphErrorBoundary } from "@/features/graph/components";
 
-const VAULT_BROWSE_STORAGE_KEY = "fndr.memoryVault.browseMode";
+const VAULT_BROWSE_STORAGE_KEY = "continuum.memoryVault.browseMode";
 
 function readStoredBrowseMode(): "list" | "graph" | "project" {
     try {
@@ -932,7 +932,7 @@ export function MemoryCardsPanel({
                         insightsSlot={
                             <>
                                 <InsightLayers card={expandedCard} evalUi={debugOpen} />
-                                <div className="fndr-emc-extra-actions">
+                                <div className="continuum-emc-extra-actions">
                                     <button
                                         type="button"
                                         className="ui-action-btn"

@@ -1,6 +1,6 @@
-# FNDR Agent Context Pack
+# Continuum Agent Context Pack
 
-`AgentContextPack` is the typed boundary between FNDR memory and any agent runtime. It is built from the existing `context_runtime::build_context_pack` path, then narrowed for agent use.
+`AgentContextPack` is the typed boundary between Continuum memory and any agent runtime. It is built from the existing `context_runtime::build_context_pack` path, then narrowed for agent use.
 
 ## Schema
 
@@ -15,11 +15,11 @@ Key fields:
 - `allowed_tools`: mode-derived policy entries from `src-tauri/src/agent/policy.rs`.
 - `disallowed_context`: reasons context was dropped or redacted.
 - `token_budget`: requested/max/used budget and dropped item count.
-- `confidence`, `evidence_summary`, `source_context_pack_id`: provenance back to the underlying FNDR context pack.
+- `confidence`, `evidence_summary`, `source_context_pack_id`: provenance back to the underlying Continuum context pack.
 
 ## Ranking And Budgeting
 
-The first slice reuses FNDR's existing context runtime ranking: semantic search when a goal is present, recent context fallback when it is not, project enrichment, graph context, decisions, failures, tasks, and section budgets.
+The first slice reuses Continuum's existing context runtime ranking: semantic search when a goal is present, recent context fallback when it is not, project enrichment, graph context, decisions, failures, tasks, and section budgets.
 
 The agent wrapper then applies an 8GB-safe default budget:
 
@@ -30,7 +30,7 @@ The agent wrapper then applies an 8GB-safe default budget:
 
 ## Redaction
 
-Raw evidence is off by default. Evidence snippets are truncated unless `include_raw_evidence` is explicitly requested. Blocklisted apps/domains, FNDR's own UI, and sensitive banking-style contexts are excluded before context reaches the agent.
+Raw evidence is off by default. Evidence snippets are truncated unless `include_raw_evidence` is explicitly requested. Blocklisted apps/domains, Continuum's own UI, and sensitive banking-style contexts are excluded before context reaches the agent.
 
 Dropped context is recorded in `disallowed_context`; it is not silently hidden from the user.
 
@@ -57,7 +57,7 @@ The UI and MCP responses expose the memory count, confidence, source context pac
 - privacy and policy reasons
 - limitations
 
-The current context runtime does not expose exact semantic, keyword, graph, or fusion scores. When scores are unavailable, FNDR returns qualitative evidence rather than fabricating numbers.
+The current context runtime does not expose exact semantic, keyword, graph, or fusion scores. When scores are unavailable, Continuum returns qualitative evidence rather than fabricating numbers.
 
 ## Audit Relationship
 

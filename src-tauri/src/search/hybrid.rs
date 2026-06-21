@@ -2183,7 +2183,7 @@ mod tests {
         let a = sr(
             "1",
             "Title",
-            "Reviewed onboarding checklist for FNDR launch",
+            "Reviewed onboarding checklist for Continuum launch",
             0.8,
         );
         let mut b = a.clone();

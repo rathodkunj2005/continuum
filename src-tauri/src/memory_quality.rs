@@ -413,7 +413,7 @@ mod tests {
         let record = MemoryRecord {
             app_name: "Codex".to_string(),
             window_title: "capture/mod.rs".to_string(),
-            project: "FNDR".to_string(),
+            project: "Continuum".to_string(),
             topic: "memory cards".to_string(),
             activity_type: "debugging".to_string(),
             clean_text: "Investigated OCR quality regressions in capture loop".to_string(),
@@ -449,7 +449,7 @@ mod tests {
             intent_score: 0.85,
             agent_usefulness_score: 0.8,
             ocr_noise_score: 0.2,
-            dedup_fingerprint: "fndr:capture:ocr".to_string(),
+            dedup_fingerprint: "continuum:capture:ocr".to_string(),
             ..Default::default()
         };
         let outcome = classify_storage_outcome(&record, &cfg);

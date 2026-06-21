@@ -1,8 +1,8 @@
-# FNDR Memory Graph 3D Implementation Plan
+# Continuum Memory Graph 3D Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement a 3D neural network visualization for FNDR memories with a hybrid orbital-community layout, progressive disclosure, and agent integration.
+**Goal:** Implement a 3D neural network visualization for Continuum memories with a hybrid orbital-community layout, progressive disclosure, and agent integration.
 
 **Architecture:** Two phases—backend graph projection (Rust/Tauri) produces graph-ready data; frontend ThreeJS rendering (React) consumes it via clean data contracts. No frontend derivation from raw memory cards.
 
@@ -336,7 +336,7 @@ fn compute_stable_anchor(label: &str, index: usize) -> Anchor3D {
 }
 
 fn compute_community_color(label: &str) -> String {
-    // Map canonical labels to design tokens (these should exist in FNDR design system)
+    // Map canonical labels to design tokens (these should exist in Continuum design system)
     match label {
         "Work/Code" => "token-blue",
         "Research" => "token-green",
@@ -378,7 +378,7 @@ mod tests {
                 id: "mem1".to_string(),
                 node_type: NodeType::Memory,
                 title: "Code review".to_string(),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 community_id: None,
                 importance_score: Some(0.8),
                 ..Default::new()
@@ -397,7 +397,7 @@ mod tests {
         let communities = derive_communities(&nodes);
         
         assert_eq!(communities.len(), 2);
-        assert!(communities.iter().any(|c| c.label.contains("FNDR")));
+        assert!(communities.iter().any(|c| c.label.contains("Continuum")));
         assert!(communities.iter().any(|c| c.label.contains("Portal")));
     }
     
@@ -566,14 +566,14 @@ mod tests {
                 id: "mem1".to_string(),
                 node_type: crate::graph::types::NodeType::Memory,
                 title: "Task 1".to_string(),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 ..Default::new()
             },
             GraphNode {
                 id: "mem2".to_string(),
                 node_type: crate::graph::types::NodeType::Memory,
                 title: "Task 2".to_string(),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 ..Default::new()
             },
         ];
@@ -737,11 +737,11 @@ mod tests {
         let node = GraphNode {
             id: "test".to_string(),
             node_type: crate::graph::types::NodeType::Memory,
-            title: "FNDR Graph Implementation".to_string(),
+            title: "Continuum Graph Implementation".to_string(),
             ..Default::new()
         };
         
-        let score = compute_relevance_score(&node, "FNDR");
+        let score = compute_relevance_score(&node, "Continuum");
         assert!(score > 0.5);
         
         let score = compute_relevance_score(&node, "unrelated");
@@ -792,7 +792,7 @@ git commit -m "feat(graph): implement scoring functions for importance, confiden
 - Create: `src-tauri/src/graph/privacy.rs`
 
 **Context:**
-Privacy filtering removes sensitive fields and respects existing FNDR privacy settings.
+Privacy filtering removes sensitive fields and respects existing Continuum privacy settings.
 
 - [ ] **Step 1: Create privacy.rs**
 
@@ -1041,13 +1041,13 @@ mod tests {
     
     #[tokio::test]
     async fn test_get_memory_graph_context_with_query() {
-        let result = get_memory_graph_context(None, Some("FNDR".to_string())).await;
+        let result = get_memory_graph_context(None, Some("Continuum".to_string())).await;
         
         assert!(result.is_ok());
         let graph = result.unwrap();
         assert_eq!(
             graph.active_focus.as_ref().unwrap().query,
-            Some("FNDR".to_string())
+            Some("Continuum".to_string())
         );
     }
 }
@@ -1127,14 +1127,14 @@ Update the generate_handler! macro to include:
 ```rust
 tauri::generate_handler![
     // ... existing commands ...
-    fndr::graph::commands::get_memory_graph_atlas,
-    fndr::graph::commands::get_memory_graph_context,
-    fndr::graph::commands::get_graph_node_neighborhood,
-    fndr::graph::commands::get_graph_communities,
+    continuum::graph::commands::get_memory_graph_atlas,
+    continuum::graph::commands::get_memory_graph_context,
+    continuum::graph::commands::get_graph_node_neighborhood,
+    continuum::graph::commands::get_graph_communities,
 ]
 ```
 
-(Adjust the crate path `fndr::` to match your actual crate name.)
+(Adjust the crate path `continuum::` to match your actual crate name.)
 
 - [ ] **Step 3: Verify compilation**
 
@@ -1181,7 +1181,7 @@ mod integration_tests {
                 id: "mem1".to_string(),
                 node_type: types::NodeType::Memory,
                 title: "Task 1".to_string(),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 importance_score: Some(0.8),
                 ..Default::new()
             },
@@ -1189,7 +1189,7 @@ mod integration_tests {
                 id: "mem2".to_string(),
                 node_type: types::NodeType::Memory,
                 title: "Task 2".to_string(),
-                project: Some("FNDR".to_string()),
+                project: Some("Continuum".to_string()),
                 importance_score: Some(0.6),
                 ..Default::new()
             },
@@ -1678,7 +1678,7 @@ export const LABEL_CONFIG = {
   topImportanceShown: 5,
 } as const
 
-// Community colors (map to FNDR design tokens)
+// Community colors (map to Continuum design tokens)
 export const COMMUNITY_COLORS: Record<string, string> = {
   "Work/Code": "#5B7FFF", // token-blue
   Research: "#7FFF5B", // token-green
@@ -2023,7 +2023,7 @@ Due to length constraints, I'll provide a summary of the remaining tasks. The co
 **Task 34:** Add empty/loading/error states
 **Task 35:** Write unit tests for layout/data logic
 **Task 36:** Write integration tests for modes/interactions
-**Task 37:** Final polish, verify FNDR aesthetic
+**Task 37:** Final polish, verify Continuum aesthetic
 **Task 38:** Typecheck, lint, build, full test pass
 
 ---

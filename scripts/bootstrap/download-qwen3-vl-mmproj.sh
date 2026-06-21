@@ -4,7 +4,7 @@
 # Default models_dir matches download-local-llm.sh (macOS app support).
 set -euo pipefail
 
-MODEL_DIR="${1:-$HOME/Library/Application Support/com.fndr.app/models}"
+MODEL_DIR="${1:-$HOME/Library/Application Support/com.continuum.app/models}"
 VARIANT="${2:-Q8_0}"
 
 case "$VARIANT" in

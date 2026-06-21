@@ -26,7 +26,7 @@ function makeCard(overrides: Partial<MemoryCardData> = {}): MemoryCardData {
         title: "Lifecycle stress test",
         summary: "Captured activity in VS Code.",
         action: "Reviewed key details",
-        context: ["FNDR"],
+        context: ["Continuum"],
         timestamp: new Date("2026-05-21T10:30:00Z").getTime(),
         app_name: "VS Code",
         window_title: "src/retrieval/hybrid.rs",

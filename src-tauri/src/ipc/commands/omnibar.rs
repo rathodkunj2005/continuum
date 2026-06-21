@@ -13,7 +13,7 @@ pub const OMNIBAR_SHORTCUT: &str = "Alt+Space";
 pub fn create_omnibar_window<R: tauri::Runtime>(app: &AppHandle<R>) {
     let url = tauri::WebviewUrl::App("omnibar.html".into());
     match tauri::WebviewWindowBuilder::new(app, OMNIBAR_LABEL, url)
-        .title("FNDR")
+        .title("Continuum")
         .inner_size(OMNIBAR_WIDTH, OMNIBAR_HEIGHT)
         .center()
         .decorations(false)

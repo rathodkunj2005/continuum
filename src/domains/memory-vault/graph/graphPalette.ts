@@ -2,7 +2,7 @@
  * Deterministic, palette-aware community coloring.
  *
  * Hues are picked from an amber-leaning slice of the wheel (15–60° + wrap)
- * so colors stay in the FNDR brand neighborhood regardless of community id.
+ * so colors stay in the Continuum brand neighborhood regardless of community id.
  * Saturation and lightness are constants tuned to read on both Old Film
  * (dark) and Archival Paper (light) backgrounds.
  */

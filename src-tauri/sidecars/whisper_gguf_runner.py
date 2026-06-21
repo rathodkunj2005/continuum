@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FNDR Whisper GGUF sidecar.
+"""Continuum Whisper GGUF sidecar.
 
 Usage:
     python3 whisper_gguf_runner.py <model_path> <audio_path> [--voice-command]
@@ -215,7 +215,7 @@ def _run_ffmpeg_convert(src: str, dst: str, filters: str | None = None) -> bool:
 
 
 def _build_audio_candidates(audio_path: str, voice_command_mode: bool) -> list[str]:
-    temp_root = tempfile.mkdtemp(prefix="fndr-whisper-")
+    temp_root = tempfile.mkdtemp(prefix="continuum-whisper-")
 
     raw_wav = os.path.join(temp_root, "input.wav")
     candidates: list[str] = []

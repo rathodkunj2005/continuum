@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn drops_generic_browser_tab_labels() {
-        let raw = "New Tab\nHome\nTrending\nPreparing launch checklist for FNDR search";
+        let raw = "New Tab\nHome\nTrending\nPreparing launch checklist for Continuum search";
         let cleaned = reduce_chrome_noise_for_app("Chrome", raw);
         assert!(!cleaned.to_lowercase().contains("new tab"));
         assert!(!cleaned.to_lowercase().contains("home"));
@@ -793,7 +793,7 @@ mod tests {
 
     #[test]
     fn preserves_terminal_code_lines() {
-        let raw = "cargo test --package fndr\nlet cards: Vec<MemoryCard> = synthesize();\nsrc/main.rs src/lib.rs src/search/mod.rs";
+        let raw = "cargo test --package continuum\nlet cards: Vec<MemoryCard> = synthesize();\nsrc/main.rs src/lib.rs src/search/mod.rs";
         let cleaned = reduce_chrome_noise_for_app("Terminal", raw);
         assert!(cleaned.contains("cargo test"));
         assert!(cleaned.contains("Vec<MemoryCard>"));
@@ -804,10 +804,10 @@ mod tests {
     fn fallback_prefers_window_title() {
         let snippet = concise_fallback_snippet(
             "VSCode",
-            "fndr - download_model.sh",
+            "continuum - download_model.sh",
             "src app.rs src/lib.rs src/main.rs src-tauri/src/graph/mod.rs",
         );
-        assert_eq!(snippet, "fndr - download_model.sh");
+        assert_eq!(snippet, "continuum - download_model.sh");
     }
 
     #[test]

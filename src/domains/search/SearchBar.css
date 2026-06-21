@@ -199,7 +199,7 @@
   margin-top: 1px;
 }
 
-/* Mic uses global .fndr-os-chrome-btn — only recording pulse here */
+/* Mic uses global .continuum-os-chrome-btn — only recording pulse here */
 .voice-btn.recording {
   animation: pulseRecording 1.5s infinite;
 }

@@ -216,7 +216,7 @@ export function PipelineInspectorPanel({
             <div className="pipeline-body">
                 <section className="pipeline-diagram-card">
                     <h3>System Flow Graph</h3>
-                    <svg viewBox="0 0 980 210" className="pipeline-flow-svg" role="img" aria-label="FNDR pipeline flow">
+                    <svg viewBox="0 0 980 210" className="pipeline-flow-svg" role="img" aria-label="Continuum pipeline flow">
                         <defs>
                             <linearGradient id="pipeEdge" x1="0%" y1="0%" x2="100%" y2="0%">
                                 <stop offset="0%" stopColor="rgba(199,206,255,0.55)" />

@@ -1,4 +1,4 @@
-# Slice 3 handoff — Ask FNDR on iPhone
+# Slice 3 handoff — Ask Continuum on iPhone
 
 **Branch:** `companion/slice-2-ios-shell`  
 **Author model:** GPT-5 Codex  
@@ -10,18 +10,18 @@
   - Rust handler: `src-tauri/src/companion/handlers/ask.rs`
   - DTOs: `AskRequest`, `AskResponse`, `CompanionMemoryCard`
 - Route mounted in `src-tauri/src/companion/mod.rs` under authenticated router.
-- Added iOS/FNDRKit support:
+- Added iOS/ContinuumKit support:
   - `CompanionClient.ask(request:)`
-  - DTO decode coverage in `FNDRKitCheck`.
+  - DTO decode coverage in `ContinuumKitCheck`.
 - Added Ask tab implementation:
-  - `apps/ios/FNDR/Ask/AskViewModel.swift`
-  - `apps/ios/FNDR/Ask/AskView.swift`
+  - `apps/ios/Continuum/Ask/AskViewModel.swift`
+  - `apps/ios/Continuum/Ask/AskView.swift`
   - query history + answer style selector + source-card list.
 
 ## Verification
 
 - `cd src-tauri && cargo test companion:: -- --nocapture` ✅
-- `cd apps/ios/FNDRKit && swift run FNDRKitCheck` ✅
+- `cd apps/ios/ContinuumKit && swift run ContinuumKitCheck` ✅
 
 ## Remaining validation gap
 

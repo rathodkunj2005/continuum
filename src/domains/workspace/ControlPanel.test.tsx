@@ -58,6 +58,11 @@ vi.mock("@/shared/ipc/tauri", () => ({
     setRetentionDays: vi.fn(),
     startMcpServer: vi.fn(),
     stopMcpServer: vi.fn(),
+    continuumQualityStatus: vi.fn().mockResolvedValue({
+        stored_count: 0,
+        dropped_count: 0,
+        flagged_count: 0,
+    }),
 }));
 
 vi.mock("@/shared/ipc/onboarding", () => ({

@@ -384,25 +384,25 @@ fn route_name(route: Route) -> &'static str {
 
 fn route_metric_ms(name: &'static str) -> &'static str {
     match name {
-        "vector" => "fndr.retrieval.route.vector.ms",
-        "keyword" => "fndr.retrieval.route.keyword.ms",
-        "temporal" => "fndr.retrieval.route.temporal.ms",
-        "entity" => "fndr.retrieval.route.entity.ms",
-        "graph" => "fndr.retrieval.route.graph.ms",
-        "chunk" => "fndr.retrieval.route.chunk.ms",
-        _ => "fndr.retrieval.route.unknown.ms",
+        "vector" => "continuum.retrieval.route.vector.ms",
+        "keyword" => "continuum.retrieval.route.keyword.ms",
+        "temporal" => "continuum.retrieval.route.temporal.ms",
+        "entity" => "continuum.retrieval.route.entity.ms",
+        "graph" => "continuum.retrieval.route.graph.ms",
+        "chunk" => "continuum.retrieval.route.chunk.ms",
+        _ => "continuum.retrieval.route.unknown.ms",
     }
 }
 
 fn route_metric_hits(name: &'static str) -> &'static str {
     match name {
-        "vector" => "fndr.retrieval.route.vector.hits",
-        "keyword" => "fndr.retrieval.route.keyword.hits",
-        "temporal" => "fndr.retrieval.route.temporal.hits",
-        "entity" => "fndr.retrieval.route.entity.hits",
-        "graph" => "fndr.retrieval.route.graph.hits",
-        "chunk" => "fndr.retrieval.route.chunk.hits",
-        _ => "fndr.retrieval.route.unknown.hits",
+        "vector" => "continuum.retrieval.route.vector.hits",
+        "keyword" => "continuum.retrieval.route.keyword.hits",
+        "temporal" => "continuum.retrieval.route.temporal.hits",
+        "entity" => "continuum.retrieval.route.entity.hits",
+        "graph" => "continuum.retrieval.route.graph.hits",
+        "chunk" => "continuum.retrieval.route.chunk.hits",
+        _ => "continuum.retrieval.route.unknown.hits",
     }
 }
 

@@ -14,7 +14,7 @@ interface PillProps {
 
 /** Mono caps tag — used for threads, filter chips, status capsules. */
 export function Pill({ tone = "neutral", noDot = false, children, className, onClick, title }: PillProps) {
-    const cls = `fndr-pill fndr-pill--${tone}${className ? ` ${className}` : ""}`;
+    const cls = `continuum-pill continuum-pill--${tone}${className ? ` ${className}` : ""}`;
     const props = {
         className: cls,
         "data-no-dot": noDot ? "true" : undefined,

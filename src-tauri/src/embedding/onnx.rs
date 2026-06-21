@@ -520,7 +520,7 @@ impl RealEmbedder {
 
         if !onnx_path.exists() {
             return Err(format!(
-                "ONNX model not found at {}. Download {} and {} or set FNDR_MODEL_DIR.",
+                "ONNX model not found at {}. Download {} and {} or set CONTINUUM_MODEL_DIR.",
                 onnx_path.display(),
                 contract.model_filename,
                 contract.tokenizer_filename
@@ -528,7 +528,7 @@ impl RealEmbedder {
         }
         if !tokenizer_path.exists() {
             return Err(format!(
-                "Tokenizer not found at {}. Download {} and {} or set FNDR_MODEL_DIR.",
+                "Tokenizer not found at {}. Download {} and {} or set CONTINUUM_MODEL_DIR.",
                 tokenizer_path.display(),
                 contract.model_filename,
                 contract.tokenizer_filename
@@ -600,12 +600,12 @@ impl RealEmbedder {
             output_name,
         };
 
-        let probe = embedder.embed_batch(&["FNDR embedding dimension probe".to_string()])?;
+        let probe = embedder.embed_batch(&["Continuum embedding dimension probe".to_string()])?;
         let actual_dim = probe.first().map(|vector| vector.len()).unwrap_or(0);
         if actual_dim != contract.dimensions {
             return Err(format!(
-                "Embedding dimension mismatch for {}: model file at {} returned {actual_dim}-d vectors but the FNDR contract expects {}-d for table {}. \
-                 Ensure FNDR_MODEL_DIR points at a directory containing {} + {} for the active contract.",
+                "Embedding dimension mismatch for {}: model file at {} returned {actual_dim}-d vectors but the Continuum contract expects {}-d for table {}. \
+                 Ensure CONTINUUM_MODEL_DIR points at a directory containing {} + {} for the active contract.",
                 contract.model_id,
                 onnx_path.display(),
                 contract.dimensions,
@@ -820,11 +820,11 @@ impl MockEmbedder {
 }
 
 fn allow_mock_embedder() -> bool {
-    if let Ok(value) = std::env::var("FNDR_ALLOW_MOCK_EMBEDDER") {
+    if let Ok(value) = std::env::var("CONTINUUM_ALLOW_MOCK_EMBEDDER") {
         return parse_env_bool(&value);
     }
 
-    if let Ok(value) = std::env::var("FNDR_DISABLE_MOCK_EMBEDDER") {
+    if let Ok(value) = std::env::var("CONTINUUM_DISABLE_MOCK_EMBEDDER") {
         if parse_env_bool(&value) {
             return false;
         }
@@ -842,14 +842,14 @@ fn parse_env_bool(value: &str) -> bool {
 
 /// Resolve the directory containing ONNX model files.
 /// Priority chain (first match wins):
-///   1. FNDR_EMBED_MODEL_DIR env var (new, embed-specific)
-///   2. FNDR_MODEL_DIR env var (legacy, any model)
-///   3. ~/.fndr/models (user-installed, common for Homebrew/manual installs)
+///   1. CONTINUUM_EMBED_MODEL_DIR env var (new, embed-specific)
+///   2. CONTINUUM_MODEL_DIR env var (legacy, any model)
+///   3. ~/.continuum/models (user-installed, common for Homebrew/manual installs)
 ///   4. ProjectDirs data dir / models (app data location)
 ///   5. CARGO_MANIFEST_DIR/models (dev build fallback)
 fn resolve_model_dir(contract: TextEmbeddingContract) -> Option<PathBuf> {
-    // 1. FNDR_EMBED_MODEL_DIR (new, dedicated embed env var)
-    for env_key in &["FNDR_EMBED_MODEL_DIR", "FNDR_MODEL_DIR"] {
+    // 1. CONTINUUM_EMBED_MODEL_DIR (new, dedicated embed env var)
+    for env_key in &["CONTINUUM_EMBED_MODEL_DIR", "CONTINUUM_MODEL_DIR"] {
         if let Ok(dir) = std::env::var(env_key) {
             let p = PathBuf::from(&dir);
             if model_assets_present(&p, contract) {
@@ -900,18 +900,18 @@ fn candidate_embedding_model_dirs() -> Vec<(&'static str, PathBuf)> {
         // Canonical Tauri 2 app-data path from tauri.conf.json identifier.
         dirs.push((
             "tauri-app-data",
-            home.join("Library/Application Support/com.fndr.app/models"),
+            home.join("Library/Application Support/com.continuum.app/models"),
         ));
         // Legacy path from older README/bootstrap scripts. Keep it readable so
         // existing local downloads still work, but do not make it the default.
         dirs.push((
             "legacy-readme-path",
-            home.join("Library/Application Support/com.fndr.FNDR/models"),
+            home.join("Library/Application Support/com.continuum.Continuum/models"),
         ));
-        dirs.push(("user-home", home.join(".fndr").join("models")));
+        dirs.push(("user-home", home.join(".continuum").join("models")));
     }
 
-    if let Some(project_models) = directories::ProjectDirs::from("com", "fndr", "FNDR")
+    if let Some(project_models) = directories::ProjectDirs::from("com", "continuum", "Continuum")
         .map(|proj| proj.data_dir().join("models"))
     {
         dirs.push(("project-dirs-legacy", project_models));
@@ -946,7 +946,7 @@ pub enum EmbeddingPreflight {
     /// as a hard build error; production should never see this.
     ContractDrift { detail: String },
     /// No usable model directory could be located on disk. Embedding
-    /// will fall back to mock if `FNDR_ALLOW_MOCK_EMBEDDER=1`.
+    /// will fall back to mock if `CONTINUUM_ALLOW_MOCK_EMBEDDER=1`.
     MissingModelDir {
         searched: Vec<String>,
         detail: String,
@@ -1130,7 +1130,7 @@ mod tests {
 
     #[test]
     fn similar_phrases_score_higher_than_unrelated() {
-        std::env::set_var("FNDR_ALLOW_MOCK_EMBEDDER", "1");
+        std::env::set_var("CONTINUUM_ALLOW_MOCK_EMBEDDER", "1");
         let embedder = Embedder::new().expect("embedder should initialize in tests");
         let phrases = vec![
             "schedule project kickoff meeting with alice".to_string(),
@@ -1172,7 +1172,7 @@ mod tests {
 
         assert!(
             canonical < legacy,
-            "com.fndr.app must be searched before the legacy com.fndr.FNDR path"
+            "com.continuum.app must be searched before the legacy com.continuum.Continuum path"
         );
     }
 }

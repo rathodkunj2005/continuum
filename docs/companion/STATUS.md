@@ -1,4 +1,4 @@
-# FNDR Mobile Companion — slice status board
+# Continuum Mobile Companion — slice status board
 
 Treat this as the single source of truth for "what's shipped, what's
 next." Every slice ends by flipping its row to ✅ and writing a fresh
@@ -7,8 +7,8 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 | #  | Slice                                    | Branch                                       | Status | Notes                                                                                  |
 |----|------------------------------------------|----------------------------------------------|--------|----------------------------------------------------------------------------------------|
 | 1  | Companion API foundation (Rust)          | `companion/slice-1-api-foundation`           | ✅      | Pair/status/capture-control/manual-memory + device registry + React Settings panel, verified with companion Rust tests. |
-| 2  | iOS shell + pairing                      | `companion/slice-2-ios-shell`                | 🟡      | `FNDRKit`, `FNDR.xcodeproj`, QR pairing, Keychain token persistence, and Status-tab connectivity are in the device build. Physical-device smoke is still pending. |
-| 3  | Ask FNDR on iPhone                       | `companion/slice-3-ios-ask`                  | 🟡      | `/v1/ask` route + FNDRKit/client + Ask tab are included in the device build; live device runtime evidence is still pending. |
+| 2  | iOS shell + pairing                      | `companion/slice-2-ios-shell`                | 🟡      | `ContinuumKit`, `Continuum.xcodeproj`, QR pairing, Keychain token persistence, and Status-tab connectivity are in the device build. Physical-device smoke is still pending. |
+| 3  | Ask Continuum on iPhone                       | `companion/slice-3-ios-ask`                  | 🟡      | `/v1/ask` route + ContinuumKit/client + Ask tab are included in the device build; live device runtime evidence is still pending. |
 | 4  | Memory search + detail                   | `companion/slice-4-ios-search`               | 🟡      | `/v1/memories/search` uses canonical hybrid retrieval and the iOS memory tab is included in the device build; live device runtime evidence is still pending. |
 | 5  | Manual capture + offline queue           | `companion/slice-5-ios-capture`              | 🟡      | Manual capture + durable queue are included in the device build with idempotency; real offline-retry smoke is still pending. |
 | 6  | Apple Watch MVP                          | `companion/slice-6-watch`                    | 🟡      | WatchConnectivity relay is retained by the iPhone app at startup and the watch app is built for device; watch device validation is still pending. |
@@ -17,8 +17,8 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 
 ## Reference
 
-- PRD: `~/Downloads/fndr_ios_watch_mvp_prd.md`
-- Plan: `~/.claude/plans/users-anurupkumar-downloads-fndr-ios-wa-melodic-starfish.md`
+- PRD: `~/Downloads/continuum_ios_watch_mvp_prd.md`
+- Plan: `~/.claude/plans/users-anurupkumar-downloads-continuum-ios-wa-melodic-starfish.md`
 - ADR: [009-companion-api-architecture.md](../decisions/009-companion-api-architecture.md)
 - ADR: [009-mobile-pairing-trust-model.md](../decisions/009-mobile-pairing-trust-model.md)
 - API contract: [api-contract.md](./api-contract.md)
@@ -41,8 +41,8 @@ next." Every slice ends by flipping its row to ✅ and writing a fresh
 ## Device install path
 
 - Real-device install script: `scripts/ios/install-real-device.sh`
-- Signing is configured through `FNDR_DEVELOPMENT_TEAM` and
-  `FNDR_BUNDLE_PREFIX`, so the same project can build with a personal Apple
+- Signing is configured through `CONTINUUM_DEVELOPMENT_TEAM` and
+  `CONTINUUM_BUNDLE_PREFIX`, so the same project can build with a personal Apple
   team and unique bundle id without editing `project.yml`.
 - The iPhone app now includes camera QR pairing plus local-network permission
   text for real device pairing against the Mac companion endpoint.

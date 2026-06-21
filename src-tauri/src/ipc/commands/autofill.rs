@@ -93,7 +93,7 @@ pub fn create_autofill_overlay_window<R: tauri::Runtime>(app: &AppHandle<R>) {
         .unwrap_or((800.0, 400.0));
 
     match tauri::WebviewWindowBuilder::new(app, AUTOFILL_OVERLAY_LABEL, url)
-        .title("FNDR Autofill")
+        .title("Continuum Autofill")
         .inner_size(AUTOFILL_OVERLAY_WIDTH, AUTOFILL_OVERLAY_HEIGHT)
         .position(x, y)
         .decorations(false)
@@ -156,7 +156,7 @@ pub fn register_autofill_shortcut<R: tauri::Runtime>(
             tracing::info!("Auto-fill hotkey fired");
             let handle = handle.clone();
             tauri::async_runtime::spawn(async move {
-                // Capture the focused field before FNDR steals focus, otherwise we may
+                // Capture the focused field before Continuum steals focus, otherwise we may
                 // end up describing the overlay window instead of the target form input.
                 let payload = match crate::accessibility::capture_focused_context() {
                     Ok(ctx) => {
@@ -220,7 +220,7 @@ pub fn register_autofill_shortcut<R: tauri::Runtime>(
         .map_err(|err| err.to_string())
 }
 
-/// A single candidate memory value FNDR can inject into the active field.
+/// A single candidate memory value Continuum can inject into the active field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutofillCandidate {
     pub value: String,
@@ -233,7 +233,7 @@ pub struct AutofillCandidate {
     pub memory_id: String,
 }
 
-/// Result of resolving the active field against FNDR's memory store.
+/// Result of resolving the active field against Continuum's memory store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutofillResolution {
     pub query: String,

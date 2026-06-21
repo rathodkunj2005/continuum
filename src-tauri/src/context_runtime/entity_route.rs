@@ -239,15 +239,15 @@ mod tests {
             .await
             .expect("store task");
         let config = SearchConfig::default().normalized();
-        let graph_nodes = vec![node("FNDR", GraphNodeType::Project, "entity-1")];
+        let graph_nodes = vec![node("Continuum", GraphNodeType::Project, "entity-1")];
         let plan = crate::context_runtime::query_plan::plan(
-            "FNDR",
+            "Continuum",
             &crate::context_runtime::query_plan::PlanHints {
                 entity_aliases: vec![crate::context_runtime::query_plan::EntityAliasHint {
-                    alias: "fndr".to_string(),
-                    canonical_name: "FNDR".to_string(),
+                    alias: "continuum".to_string(),
+                    canonical_name: "Continuum".to_string(),
                     entity_type: "project".to_string(),
-                    project: Some("FNDR".to_string()),
+                    project: Some("Continuum".to_string()),
                 }],
                 ..Default::default()
             },

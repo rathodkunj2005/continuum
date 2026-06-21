@@ -15,7 +15,7 @@ use std::time::UNIX_EPOCH;
 use tauri::{Manager, State};
 use tokio::time::{Duration, Instant};
 
-use super::common::{strip_internal_fndr_results, truncate_chars};
+use super::common::{strip_internal_continuum_results, truncate_chars};
 use super::search::{memory_card_from_result, refine_memory_card_titles};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +59,7 @@ pub struct HermesBridgeStatus {
     pub context_path: String,
     pub context_ready: bool,
     pub last_synced_at: Option<i64>,
-    pub fndr_local_model_id: Option<String>,
+    pub continuum_local_model_id: Option<String>,
     pub ollama_installed: bool,
     pub ollama_reachable: bool,
     pub ollama_models: Vec<String>,
@@ -153,7 +153,7 @@ fn hermes_home_dir(state: &AppState) -> PathBuf {
 }
 
 fn hermes_context_path(state: &AppState) -> PathBuf {
-    hermes_gateway_dir(state).join("FNDR_CONTEXT.md")
+    hermes_gateway_dir(state).join("CONTINUUM_CONTEXT.md")
 }
 
 fn hermes_project_context_path(state: &AppState) -> PathBuf {
@@ -173,7 +173,7 @@ fn hermes_config_path(state: &AppState) -> PathBuf {
 }
 
 fn hermes_setup_record_path(state: &AppState) -> PathBuf {
-    hermes_home_dir(state).join("fndr_setup.json")
+    hermes_home_dir(state).join("continuum_setup.json")
 }
 
 fn hermes_soul_path(state: &AppState) -> PathBuf {
@@ -202,7 +202,7 @@ fn read_hermes_profile_name(state: &AppState) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-fn read_fndr_local_model_id(state: &AppState) -> Option<String> {
+fn read_continuum_local_model_id(state: &AppState) -> Option<String> {
     let path = state.app_data_dir.join("onboarding.json");
     let raw = std::fs::read_to_string(path).ok()?;
     serde_json::from_str::<HermesOnboardingProfile>(&raw)
@@ -281,7 +281,7 @@ fn is_hermes_repo(path: &Path) -> bool {
 fn resolve_bundled_hermes_repo() -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Some(value) = std::env::var_os("FNDR_HERMES_REPO") {
+    if let Some(value) = std::env::var_os("CONTINUUM_HERMES_REPO") {
         candidates.push(PathBuf::from(value));
     }
 
@@ -448,19 +448,19 @@ fn ensure_uv_available(state: &AppState) -> Result<PathBuf, String> {
 
     if !output.status.success() {
         return Err(format!(
-            "FNDR could not prepare its private Hermes runtime because uv failed to install. {}",
+            "Continuum could not prepare its private Hermes runtime because uv failed to install. {}",
             command_failure_detail(&output)
         ));
     }
 
     detect_uv_executable(state).ok_or_else(|| {
-        "uv installed successfully, but FNDR could not locate the resulting binary.".to_string()
+        "uv installed successfully, but Continuum could not locate the resulting binary.".to_string()
     })
 }
 
 fn prepare_vendored_hermes_runtime(state: &AppState) -> Result<(), String> {
     let repo_root = resolve_bundled_hermes_repo().ok_or_else(|| {
-        "FNDR could not find the vendored hermes-agent clone. Expected a bundled `hermes-agent/` directory."
+        "Continuum could not find the vendored hermes-agent clone. Expected a bundled `hermes-agent/` directory."
             .to_string()
     })?;
     let uv = ensure_uv_available(state)?;
@@ -476,10 +476,10 @@ fn prepare_vendored_hermes_runtime(state: &AppState) -> Result<(), String> {
     let venv_output = venv_command
         .current_dir(&repo_root)
         .output()
-        .map_err(|e| format!("Failed to create the FNDR Hermes environment: {e}"))?;
+        .map_err(|e| format!("Failed to create the Continuum Hermes environment: {e}"))?;
     if !venv_output.status.success() {
         return Err(format!(
-            "FNDR could not create the bundled Hermes environment. {}",
+            "Continuum could not create the bundled Hermes environment. {}",
             command_failure_detail(&venv_output)
         ));
     }
@@ -493,17 +493,17 @@ fn prepare_vendored_hermes_runtime(state: &AppState) -> Result<(), String> {
     let sync_output = sync_command
         .current_dir(&repo_root)
         .output()
-        .map_err(|e| format!("Failed to install Hermes dependencies for FNDR: {e}"))?;
+        .map_err(|e| format!("Failed to install Hermes dependencies for Continuum: {e}"))?;
     if !sync_output.status.success() {
         return Err(format!(
-            "FNDR could not finish installing Hermes dependencies. {}",
+            "Continuum could not finish installing Hermes dependencies. {}",
             command_failure_detail(&sync_output)
         ));
     }
 
     if !hermes_runtime_python_path(state).exists() {
         return Err(
-            "FNDR prepared the Hermes runtime, but the private Python interpreter is missing."
+            "Continuum prepared the Hermes runtime, but the private Python interpreter is missing."
                 .to_string(),
         );
     }
@@ -769,13 +769,13 @@ fn persist_hermes_setup_files(state: &AppState, setup: &HermesSetupPayload) -> R
         _ => {}
     }
 
-    let soul_md = r#"# FNDR Agent Identity
+    let soul_md = r#"# Continuum Agent Identity
 
-You are the native FNDR agent experience, powered by Hermes under the hood.
+You are the native Continuum agent experience, powered by Hermes under the hood.
 
-- Present yourself as FNDR's built-in agent unless the user asks how you are implemented.
-- FNDR is the user's trusted interface and source of truth for personal context.
-- Treat FNDR-provided memory, tasks, and focus context as private and read-only.
+- Present yourself as Continuum's built-in agent unless the user asks how you are implemented.
+- Continuum is the user's trusted interface and source of truth for personal context.
+- Treat Continuum-provided memory, tasks, and focus context as private and read-only.
 - Ask before destructive actions, external sends, purchases, or credential changes.
 - Prefer helping with recall, planning, drafting, research, and safe computer-use assistance.
 "#;
@@ -865,7 +865,7 @@ async fn build_hermes_bridge_status(state: &AppState) -> Result<HermesBridgeStat
         .list_recent_results(18, None)
         .await
         .map_err(|e| e.to_string())?;
-    let mut recent_memories: Vec<MemoryCard> = strip_internal_fndr_results(recent_results)
+    let mut recent_memories: Vec<MemoryCard> = strip_internal_continuum_results(recent_results)
         .into_iter()
         .map(memory_card_from_result)
         .collect();
@@ -966,7 +966,7 @@ async fn build_hermes_bridge_status(state: &AppState) -> Result<HermesBridgeStat
         context_path: context_path.display().to_string(),
         context_ready: context_path.exists(),
         last_synced_at: file_modified_at_ms(&context_path),
-        fndr_local_model_id: read_fndr_local_model_id(state),
+        continuum_local_model_id: read_continuum_local_model_id(state),
         ollama_installed,
         ollama_reachable,
         ollama_models,
@@ -982,7 +982,7 @@ async fn build_hermes_bridge_status(state: &AppState) -> Result<HermesBridgeStat
         recent_memories,
         last_error,
         install_command: if bundled_repo_available {
-            "Prepare the bundled Hermes runtime inside FNDR.".to_string()
+            "Prepare the bundled Hermes runtime inside Continuum.".to_string()
         } else {
             "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash".to_string()
         },
@@ -994,12 +994,12 @@ fn render_hermes_context_markdown(status: &HermesBridgeStatus) -> String {
         .profile_name
         .as_deref()
         .map(|name| format!("- Preferred name: {name}"))
-        .unwrap_or_else(|| "- Preferred name: not set in FNDR onboarding".to_string());
+        .unwrap_or_else(|| "- Preferred name: not set in Continuum onboarding".to_string());
     let focus_line = status
         .focus_task
         .as_deref()
         .map(|task| format!("- Focus task: {task}"))
-        .unwrap_or_else(|| "- Focus task: none currently pinned in FNDR".to_string());
+        .unwrap_or_else(|| "- Focus task: none currently pinned in Continuum".to_string());
 
     let app_lines = if status.top_apps.is_empty() {
         "- No recent app clusters captured yet.".to_string()
@@ -1025,7 +1025,7 @@ fn render_hermes_context_markdown(status: &HermesBridgeStatus) -> String {
                     memory.app_name,
                     format_hermes_timestamp(memory.timestamp),
                     memory.summary,
-                    "Treat this as private user context from FNDR."
+                    "Treat this as private user context from Continuum."
                 )
             })
             .collect::<Vec<_>>()
@@ -1033,23 +1033,23 @@ fn render_hermes_context_markdown(status: &HermesBridgeStatus) -> String {
     };
 
     format!(
-        "# FNDR Hermes Gateway\n\n\
-This workspace is generated by FNDR and should feel like part of FNDR, not a separate product.\n\n\
+        "# Continuum Hermes Gateway\n\n\
+This workspace is generated by Continuum and should feel like part of Continuum, not a separate product.\n\n\
 ## Operating mode\n\n\
-- FNDR is the source of truth for personal context.\n\
-- Use the FNDR snapshot below to help the user with recall, planning, drafting, research, and safe computer-use support.\n\
-- Be grounded: if the FNDR snapshot is missing or stale, ask the user to refresh it in FNDR instead of guessing.\n\
-- Operate as FNDR's built-in agent experience unless the user asks about implementation details.\n\
+- Continuum is the source of truth for personal context.\n\
+- Use the Continuum snapshot below to help the user with recall, planning, drafting, research, and safe computer-use support.\n\
+- Be grounded: if the Continuum snapshot is missing or stale, ask the user to refresh it in Continuum instead of guessing.\n\
+- Operate as Continuum's built-in agent experience unless the user asks about implementation details.\n\
 - Ask for approval before sending messages, making purchases, changing credentials, or doing irreversible actions.\n\
-- Treat FNDR context as read-only and privacy-sensitive.\n\n\
-## FNDR snapshot\n\n\
+- Treat Continuum context as read-only and privacy-sensitive.\n\n\
+## Continuum snapshot\n\n\
 {profile_line}\n\
 {focus_line}\n\
-- Open FNDR tasks: {}\n\
+- Open Continuum tasks: {}\n\
 - Recent memory cards included: {}\n\n\
-## Recent apps from FNDR\n\n\
+## Recent apps from Continuum\n\n\
 {app_lines}\n\n\
-## Recent memories from FNDR\n\n\
+## Recent memories from Continuum\n\n\
 {memory_lines}\n",
         status.open_task_count, status.recent_memory_count
     )
@@ -1057,12 +1057,12 @@ This workspace is generated by FNDR and should feel like part of FNDR, not a sep
 
 fn render_hermes_gateway_readme(status: &HermesBridgeStatus) -> String {
     format!(
-        "# FNDR Hermes Gateway\n\n\
-FNDR generated this workspace so Hermes can operate with FNDR-curated context.\n\n\
+        "# Continuum Hermes Gateway\n\n\
+Continuum generated this workspace so Hermes can operate with Continuum-curated context.\n\n\
 Files:\n\
-- `.hermes.md` keeps the FNDR-native operating instructions and latest snapshot.\n\
-- `FNDR_CONTEXT.md` mirrors the same snapshot in a user-readable file.\n\n\
-If the snapshot feels stale, refresh it from FNDR's Agent page.\n\n\
+- `.hermes.md` keeps the Continuum-native operating instructions and latest snapshot.\n\
+- `CONTINUUM_CONTEXT.md` mirrors the same snapshot in a user-readable file.\n\n\
+If the snapshot feels stale, refresh it from Continuum's Agent page.\n\n\
 Gateway directory: {}\n",
         status.gateway_dir
     )
@@ -1091,16 +1091,16 @@ async fn sync_hermes_bridge_files(state: &AppState) -> Result<HermesBridgeStatus
                 .profile_name
                 .as_deref()
                 .map(|name| format!("- Preferred name: {name}"))
-                .unwrap_or_else(|| "- Preferred name: not set in FNDR onboarding".to_string());
+                .unwrap_or_else(|| "- Preferred name: not set in Continuum onboarding".to_string());
             let focus_line = status
                 .focus_task
                 .as_deref()
                 .map(|task| format!("- Focus task: {task}"))
-                .unwrap_or_else(|| "- Focus task: none currently pinned in FNDR".to_string());
+                .unwrap_or_else(|| "- Focus task: none currently pinned in Continuum".to_string());
 
             format!(
-                "# FNDR Hermes Gateway\n\n\
-This workspace is generated by FNDR and should feel like part of FNDR, not a separate product.\n\n\
+                "# Continuum Hermes Gateway\n\n\
+This workspace is generated by Continuum and should feel like part of Continuum, not a separate product.\n\n\
 {profile_line}\n\
 {focus_line}\n\n\
 {}",
@@ -1140,31 +1140,31 @@ async fn wait_for_hermes_api(timeout_ms: u64) -> bool {
 fn validate_hermes_gateway_prerequisites(status: &HermesBridgeStatus) -> Result<(), String> {
     if !status.installed {
         return Err(if status.bundled_repo_available {
-            "FNDR has a bundled Hermes clone, but the private runtime is not prepared yet. Click Enable Agent in the FNDR Agent panel first."
+            "Continuum has a bundled Hermes clone, but the private runtime is not prepared yet. Click Enable Agent in the Continuum Agent panel first."
                 .to_string()
         } else {
             "Hermes is not installed yet.".to_string()
         });
     }
     if !status.configured {
-        return Err("Finish FNDR Agent setup before starting the runtime.".to_string());
+        return Err("Finish Continuum Agent setup before starting the runtime.".to_string());
     }
     if status.provider_kind.as_deref() == Some("ollama") {
         if !status.ollama_installed {
             return Err(
-                "Install Ollama on this Mac before starting the FNDR agent in Ollama mode."
+                "Install Ollama on this Mac before starting the Continuum agent in Ollama mode."
                     .to_string(),
             );
         }
         if !status.ollama_reachable {
             return Err(format!(
-                "FNDR could not reach Ollama at {OLLAMA_HOME_URL}. Open Ollama or run `ollama serve`, then try again."
+                "Continuum could not reach Ollama at {OLLAMA_HOME_URL}. Open Ollama or run `ollama serve`, then try again."
             ));
         }
     }
     if status.provider_kind.as_deref() == Some("codex") && !status.codex_logged_in {
         return Err(
-            "FNDR could not find an active Codex login for the agent runtime. Sign in to Codex on this Mac first."
+            "Continuum could not find an active Codex login for the agent runtime. Sign in to Codex on this Mac first."
                 .to_string(),
         );
     }
@@ -1186,7 +1186,7 @@ async fn ensure_hermes_gateway_ready(
     if !running {
         let launcher = detect_hermes_runtime(state)
             .launcher
-            .ok_or_else(|| "FNDR could not resolve a Hermes runtime to launch.".to_string())?;
+            .ok_or_else(|| "Continuum could not resolve a Hermes runtime to launch.".to_string())?;
         let mut command = launcher.command();
         command
             .arg("gateway")
@@ -1278,7 +1278,7 @@ pub async fn save_hermes_setup(
     let provider_kind = payload.provider_kind.trim();
     let model_name = payload.model_name.trim();
     if model_name.is_empty() {
-        return Err("Choose a model name for the FNDR agent.".to_string());
+        return Err("Choose a model name for the Continuum agent.".to_string());
     }
 
     let api_key = payload
@@ -1291,7 +1291,7 @@ pub async fn save_hermes_setup(
         "openrouter" => {
             if api_key.is_none() {
                 return Err(
-                    "An OpenRouter API key is required to finish FNDR Agent setup.".to_string(),
+                    "An OpenRouter API key is required to finish Continuum Agent setup.".to_string(),
                 );
             }
         }
@@ -1308,7 +1308,7 @@ pub async fn save_hermes_setup(
             let (ollama_installed, _, _) = detect_ollama_state().await;
             if !ollama_installed {
                 return Err(
-                    "FNDR could not find Ollama on this Mac. Install Ollama first, then return to the Agent page."
+                    "Continuum could not find Ollama on this Mac. Install Ollama first, then return to the Agent page."
                         .to_string(),
                 );
             }
@@ -1317,14 +1317,14 @@ pub async fn save_hermes_setup(
             let (_, codex_logged_in, _) = detect_codex_state();
             if !codex_logged_in {
                 return Err(
-                    "FNDR could not find a local Codex login yet. Sign in to Codex on this Mac first, then choose Codex again."
+                    "Continuum could not find a local Codex login yet. Sign in to Codex on this Mac first, then choose Codex again."
                         .to_string(),
                 );
             }
         }
         _ => {
             return Err(
-                "FNDR currently supports agent setup via Ollama, Codex OAuth, OpenRouter, or a custom endpoint."
+                "Continuum currently supports agent setup via Ollama, Codex OAuth, OpenRouter, or a custom endpoint."
                     .to_string(),
             );
         }
@@ -1375,7 +1375,7 @@ pub async fn send_direct_chat(
 ) -> Result<String, String> {
     let _ = sync_hermes_bridge_files(state.inner()).await?;
     let setup = read_hermes_setup_record(state.inner())
-        .ok_or_else(|| "Configure a provider in FNDR's Agent page first.".to_string())?;
+        .ok_or_else(|| "Configure a provider in Continuum's Agent page first.".to_string())?;
 
     let base_url = if setup.provider_kind == "ollama" {
         setup
@@ -1390,13 +1390,13 @@ pub async fn send_direct_chat(
         );
     };
 
-    // Build a system message with FNDR context
+    // Build a system message with Continuum context
     let context_path = hermes_context_path(state.inner());
     let system_content = if context_path.exists() {
         std::fs::read_to_string(&context_path)
-            .unwrap_or_else(|_| "You are a helpful assistant embedded in FNDR.".to_string())
+            .unwrap_or_else(|_| "You are a helpful assistant embedded in Continuum.".to_string())
     } else {
-        "You are a helpful assistant embedded in FNDR, a privacy-first local memory app. Help the user with recall, planning, drafting, and research using context they provide.".to_string()
+        "You are a helpful assistant embedded in Continuum, a privacy-first local memory app. Help the user with recall, planning, drafting, and research using context they provide.".to_string()
     };
 
     let mut all_messages: Vec<serde_json::Value> =
@@ -1447,13 +1447,13 @@ pub async fn send_hermes_message(
     let status = ensure_hermes_gateway_ready(state.inner(), 12_000).await?;
 
     let api_key = read_hermes_api_key(state.inner())
-        .ok_or_else(|| "FNDR could not read the Hermes API server key.".to_string())?;
+        .ok_or_else(|| "Continuum could not read the Hermes API server key.".to_string())?;
     let input = input.trim();
     if input.is_empty() {
         return Err("Message cannot be empty.".to_string());
     }
 
-    let instructions = "You are the native FNDR agent experience, powered by Hermes under the hood. Use FNDR's context files and private snapshot to help with planning, recall, drafting, research, and safe computer-use support. Ask before destructive actions, external messages, purchases, or credential changes.";
+    let instructions = "You are the native Continuum agent experience, powered by Hermes under the hood. Use Continuum's context files and private snapshot to help with planning, recall, drafting, research, and safe computer-use support. Ask before destructive actions, external messages, purchases, or credential changes.";
     let request_body = serde_json::json!({
         "model": "hermes-agent",
         "input": input,
@@ -1695,7 +1695,7 @@ pub async fn generate_daily_briefing(
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut cards: Vec<MemoryCard> = strip_internal_fndr_results(results)
+    let mut cards: Vec<MemoryCard> = strip_internal_continuum_results(results)
         .into_iter()
         .map(memory_card_from_result)
         .collect();
@@ -1769,7 +1769,7 @@ pub async fn quick_setup_ollama(
     }
     if !reachable {
         return Err(
-            "FNDR could not reach Ollama. Make sure Ollama is running (`ollama serve`)."
+            "Continuum could not reach Ollama. Make sure Ollama is running (`ollama serve`)."
                 .to_string(),
         );
     }

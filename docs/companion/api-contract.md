@@ -2,7 +2,7 @@
 
 Base URL: `https://<host>:<port>/v1` (TLS is mandatory; the cert is the
 same self-signed cert the MCP server uses, written to
-`~/.fndr/mcp_cert.pem`). Read `~/.fndr/companion.json` for the live
+`~/.continuum/mcp_cert.pem`). Read `~/.continuum/companion.json` for the live
 `host`, `port`, and `cert_fingerprint_sha256`.
 
 Auth: `Authorization: Bearer <access_token>` on every route EXCEPT
@@ -18,7 +18,7 @@ and revocable from the Mac UI.
 | `GET  /v1/status`           | yes  | 1     | capture + runtime status               |
 | `POST /v1/capture/control`  | yes  | 1     | pause / resume / incognito             |
 | `POST /v1/memories/manual`  | yes  | 1     | text capture from phone/watch          |
-| `POST /v1/ask`              | yes  | 3     | Ask FNDR                               |
+| `POST /v1/ask`              | yes  | 3     | Ask Continuum                               |
 | `POST /v1/memories/search`  | yes  | 4     | cards-oriented memory search           |
 | `GET  /v1/memories/:id`     | yes  | 4     | memory detail card                     |
 | `POST /v1/feedback`         | yes  | 7     | thumbs / open-source events            |
@@ -111,7 +111,7 @@ Authorization: Bearer <token>
   "text":            "Remember to ship the companion API.",
   "client_event_id": "uuid-from-iphone",
   "capture_type":    "idea",        // idea | todo | decision | note | link | question
-  "project":         "FNDR",
+  "project":         "Continuum",
   "topic":           null,
   "source_override": null            // reserved; default derives from device type
 }
@@ -130,7 +130,7 @@ memory id is derived deterministically from `(device_id, client_event_id)`
 — retrying the same capture from the iOS offline queue yields the same id,
 and the Mac's content-hash dedup absorbs the duplicate silently.
 
-## Ask FNDR
+## Ask Continuum
 
 ```json
 POST /v1/ask
@@ -159,18 +159,18 @@ Authorization: Bearer <token>
 POST /v1/memories/search
 Authorization: Bearer <token>
 {
-  "query": "fndr companion",
+  "query": "continuum companion",
   "limit": 20,
   "time_filter": "today",
   "app_filter": "Xcode",
-  "project_filter": "FNDR"
+  "project_filter": "Continuum"
 }
 ```
 
 ```json
 200
 {
-  "query": "fndr companion",
+  "query": "continuum companion",
   "cards": [ { "memory_id": "...", "title": "...", "summary": "..." } ],
   "total": 1,
   "latency_ms": 15
@@ -231,11 +231,11 @@ Stable `error` codes (used by mobile to decide UX, not parsed from `message`):
 
 Tested end-to-end against `npm run tauri dev`. Substitute the
 `HOST`, `PORT`, and `CODE` placeholders with the values from
-`~/.fndr/companion.json` and the React Settings panel.
+`~/.continuum/companion.json` and the React Settings panel.
 
 ```bash
-HOST=$(jq -r .host ~/.fndr/companion.json)
-PORT=$(jq -r .port  ~/.fndr/companion.json)
+HOST=$(jq -r .host ~/.continuum/companion.json)
+PORT=$(jq -r .port  ~/.continuum/companion.json)
 BASE="https://$HOST:$PORT"
 
 # 1. Liveness — should return {"ok": true}

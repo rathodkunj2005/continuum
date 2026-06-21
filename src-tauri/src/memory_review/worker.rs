@@ -96,7 +96,7 @@ pub async fn tick_once(
         return TickOutcome::Idle;
     };
     tracing::info!(
-        target: "fndr::memory_review",
+        target: "continuum::memory_review",
         memory_id = %job.memory_id,
         queue_depth = state.pending_memory_reviews.len(),
         "memory_review job started"
@@ -114,7 +114,7 @@ pub async fn tick_once(
                     LAST_REVIEW_AT_MS.store(now_ms, Ordering::Relaxed);
                     clear_last_error();
                     tracing::info!(
-                        target: "fndr::memory_review",
+                        target: "continuum::memory_review",
                         memory_review_outcome = ?outcome,
                         "memory_review write-back complete"
                     );
@@ -122,7 +122,7 @@ pub async fn tick_once(
                 MemoryReviewOutcome::Failed { reason, .. } => {
                     set_last_error(reason.label());
                     tracing::warn!(
-                        target: "fndr::memory_review",
+                        target: "continuum::memory_review",
                         memory_review_outcome = ?outcome,
                         "memory_review job failed"
                     );
@@ -130,7 +130,7 @@ pub async fn tick_once(
                 MemoryReviewOutcome::Skipped { memory_id, reason } => {
                     clear_last_error();
                     tracing::info!(
-                        target: "fndr::memory_review",
+                        target: "continuum::memory_review",
                         memory_id = %memory_id,
                         reason = %reason,
                         "memory_review job skipped"

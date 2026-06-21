@@ -18,7 +18,7 @@ export function Stamp({
     style,
     ...rest
 }: StampProps) {
-    const cls = `fndr-stamp fndr-stamp--${tone}${className ? ` ${className}` : ""}`;
+    const cls = `continuum-stamp continuum-stamp--${tone}${className ? ` ${className}` : ""}`;
     const mergedStyle = rotate !== undefined ? { transform: `rotate(${rotate}deg)`, ...style } : style;
     return (
         <span className={cls} style={mergedStyle} {...rest}>

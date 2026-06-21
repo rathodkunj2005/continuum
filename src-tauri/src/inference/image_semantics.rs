@@ -454,7 +454,7 @@ pub fn compose_visual_metadata_fallback_import(
         .filter(|value| !value.is_empty())
         .unwrap_or("visual_semantics_unavailable");
     let memory_context = format!(
-        "{}: {filename}. FNDR stored a CLIP visual fingerprint and available metadata; pixel-level VLM semantics were unavailable ({reason}). No raw image pixels were persisted.",
+        "{}: {filename}. Continuum stored a CLIP visual fingerprint and available metadata; pixel-level VLM semantics were unavailable ({reason}). No raw image pixels were persisted.",
         source.header_label()
     );
     ImportMemoryText {
@@ -839,7 +839,7 @@ pub fn insight_from_structured(
 /// The actual error reason belongs in [`build_import_raw_evidence`]'s
 /// `extraction_failure_reason` field, not in `summary_short`/`summary_detailed`.
 ///
-/// The output is intentionally honest: it summarizes *what FNDR could read*
+/// The output is intentionally honest: it summarizes *what Continuum could read*
 /// without pretending to have analyzed pixels. Confidence is set below the
 /// success threshold so retrieval ranking treats it as supporting evidence,
 /// not as a primary vision insight.
@@ -964,7 +964,7 @@ pub fn insight_from_ocr_only(
     }
 }
 
-/// Strip FNDR's own OCR/quality annotations and structural junk before we
+/// Strip Continuum's own OCR/quality annotations and structural junk before we
 /// hand the text to span ranking or entity extraction. These markers
 /// (`[LOW_CONF]`, `[OCR]`, etc.) are produced by upstream OCR cleanup —
 /// they are metadata about the OCR, not content. Echoing them as topics
@@ -1336,7 +1336,7 @@ impl MtmdVlmRuntime {
     }
 }
 
-const VISION_SYSTEM_PROMPT: &str = r#"You are FNDR's local visual memory extractor. Analyze the imported photo **from pixels** and return **compact JSON only** (no markdown fences, no commentary).
+const VISION_SYSTEM_PROMPT: &str = r#"You are Continuum's local visual memory extractor. Analyze the imported photo **from pixels** and return **compact JSON only** (no markdown fences, no commentary).
 
 Rules:
 - Do **not** identify people by name or guess private identities.

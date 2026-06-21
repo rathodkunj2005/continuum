@@ -5488,8 +5488,8 @@ mod tests {
         assert!(!should_skip_capture_context(
             "Chrome",
             Some("com.google.Chrome"),
-            "FNDR architecture notes",
-            Some("https://docs.example.com/fndr"),
+            "Continuum architecture notes",
+            Some("https://docs.example.com/continuum"),
             &blocklist,
         ));
     }
@@ -5499,8 +5499,8 @@ mod tests {
         let blocklist: Vec<String> = Vec::new();
         assert_eq!(
             capture_context_skip_reason(
-                "FNDR",
-                Some("com.fndr.desktop"),
+                "Continuum",
+                Some("com.continuum.desktop"),
                 "Settings",
                 None,
                 &blocklist,
@@ -5712,7 +5712,7 @@ Activity patterns and insights dashboard
         existing.tags = vec!["ai".to_string(), "tooling".to_string()];
         existing.entities = vec!["Hacker News".to_string()];
         existing.decisions = vec!["Track browser research sessions".to_string()];
-        existing.project = "FNDR".to_string();
+        existing.project = "Continuum".to_string();
         existing.outcome = "in_progress".to_string();
         existing.extraction_confidence = 0.9;
         existing.dedup_fingerprint = "hn_research".to_string();
@@ -5740,7 +5740,7 @@ Activity patterns and insights dashboard
 
         assert_eq!(merged.schema_version, 2);
         assert_eq!(merged.activity_type, "research");
-        assert_eq!(merged.project, "FNDR");
+        assert_eq!(merged.project, "Continuum");
         assert_eq!(merged.tags, vec!["ai".to_string(), "tooling".to_string()]);
         assert_eq!(merged.entities, vec!["Hacker News".to_string()]);
         assert_eq!(
@@ -5829,12 +5829,12 @@ Activity patterns and insights dashboard
     fn extraction_validator_keeps_supported_fields_when_grounded() {
         let mut extraction = StructuredMemoryExtraction {
             confidence: 0.91,
-            project: "FNDR".to_string(),
+            project: "Continuum".to_string(),
             user_intent: "Improve memory card search ranking".to_string(),
             topic: "ranking quality".to_string(),
             files_touched: vec!["src-tauri/src/search/memory_cards.rs".to_string()],
             entities: vec!["MemoryCardSynthesizer".to_string()],
-            dedup_fingerprint: "fndr:ranking:memory_cards".to_string(),
+            dedup_fingerprint: "continuum:ranking:memory_cards".to_string(),
             ..Default::default()
         };
 
@@ -5849,18 +5849,18 @@ Activity patterns and insights dashboard
         assert!(!issues
             .iter()
             .any(|item| item == "possible_ungrounded_extraction"));
-        assert_eq!(extraction.project, "FNDR");
+        assert_eq!(extraction.project, "Continuum");
         assert_eq!(extraction.user_intent, "Improve memory card search ranking");
         assert_eq!(extraction.files_touched.len(), 1);
         assert_eq!(extraction.entities.len(), 1);
-        assert_eq!(extraction.dedup_fingerprint, "fndr:ranking:memory_cards");
+        assert_eq!(extraction.dedup_fingerprint, "continuum:ranking:memory_cards");
     }
 
     #[test]
     fn primary_embedding_text_is_structured_first_with_capped_evidence() {
         let extraction = StructuredMemoryExtraction {
             user_intent: "Refactor OCR scoring".to_string(),
-            project: "FNDR".to_string(),
+            project: "Continuum".to_string(),
             topic: "capture quality".to_string(),
             entities: vec!["Apple Vision".to_string()],
             files_touched: vec!["src-tauri/src/capture/text_cleanup.rs".to_string()],
@@ -5879,7 +5879,7 @@ Activity patterns and insights dashboard
         );
 
         assert!(text.contains("intent: Refactor OCR scoring"));
-        assert!(text.contains("project: FNDR"));
+        assert!(text.contains("project: Continuum"));
         assert!(text.contains("files: src-tauri/src/capture/text_cleanup.rs"));
         assert!(!text.contains("evidence:"));
         assert!(!text.contains(&"evidence ".repeat(20)));
@@ -5915,7 +5915,7 @@ Activity patterns and insights dashboard
     fn durable_memory_context_respects_min_max_bounds_with_empty_chain() {
         let extraction = StructuredMemoryExtraction {
             user_intent: "Refactor the synthesis pipeline".to_string(),
-            project: "FNDR".to_string(),
+            project: "Continuum".to_string(),
             topic: "memory synthesis".to_string(),
             decisions: vec!["Use durable memory_context as embedding seed".to_string()],
             next_steps: vec!["Wire compress_to_salient_evidence into the tail".to_string()],

@@ -1,6 +1,6 @@
 # Repository layout (high-signal map)
 
-This is a **concise orientation** for the FNDR macOS app. Authoritative detail remains in `README.md` and `docs/architecture/ARCHITECTURE.md`. Start with **`docs/README.md`** for a doc index.
+This is a **concise orientation** for the Continuum macOS app. Authoritative detail remains in `README.md` and `docs/architecture/ARCHITECTURE.md`. Start with **`docs/README.md`** for a doc index.
 
 ## Top level
 

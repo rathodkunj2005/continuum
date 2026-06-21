@@ -48,7 +48,7 @@ impl StateStore {
 
         let (tx, rx) = mpsc::channel::<StateCommand>();
         std::thread::Builder::new()
-            .name("fndr-state-store".to_string())
+            .name("continuum-state-store".to_string())
             .spawn(move || run_worker(table, rx))?;
 
         Ok(Self { tx })

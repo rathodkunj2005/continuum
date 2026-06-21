@@ -150,7 +150,7 @@ async fn download_with_resume(
     use tokio::io::AsyncWriteExt;
 
     let client = reqwest::Client::builder()
-        .user_agent("FNDR/1.0")
+        .user_agent("Continuum/1.0")
         .connect_timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to create HTTP client for {}: {}", label, e))?;
@@ -255,7 +255,7 @@ fn pip_for_venv(venv_dir: &Path) -> PathBuf {
 }
 
 fn speech_venv_dir() -> Option<PathBuf> {
-    dirs::document_dir().map(|root| root.join("FNDR Speech").join("venv"))
+    dirs::document_dir().map(|root| root.join("Continuum Speech").join("venv"))
 }
 
 /// Probe for a usable Python 3 interpreter, preferring versions ≤ 3.13
@@ -356,7 +356,7 @@ fn llama_cpp_extra_index() -> &'static str {
 
 fn ensure_venv_ready() -> Result<PathBuf, String> {
     let Some(venv_dir) = speech_venv_dir() else {
-        return Err("Could not determine Documents directory for FNDR Speech".to_string());
+        return Err("Could not determine Documents directory for Continuum Speech".to_string());
     };
 
     let python3 = find_python3().ok_or_else(|| {
@@ -370,9 +370,9 @@ fn ensure_venv_ready() -> Result<PathBuf, String> {
         let status = Command::new(&python3)
             .args(["-m", "venv", &venv_dir.to_string_lossy()])
             .status()
-            .map_err(|e| format!("Failed creating FNDR Speech venv: {}", e))?;
+            .map_err(|e| format!("Failed creating Continuum Speech venv: {}", e))?;
         if !status.success() {
-            return Err("Failed creating FNDR Speech venv".to_string());
+            return Err("Failed creating Continuum Speech venv".to_string());
         }
     }
 
@@ -617,7 +617,7 @@ async fn transcribe_audio_file_with_hint(
 
     ensure_whisper_backend().await?;
 
-    if let Ok(custom_cmd) = std::env::var("FNDR_WHISPER_GGUF_COMMAND") {
+    if let Ok(custom_cmd) = std::env::var("CONTINUUM_WHISPER_GGUF_COMMAND") {
         let audio = audio_path.to_path_buf();
         let model = model_path.clone();
         let hint_value = hint.env_value().to_string();
@@ -625,17 +625,17 @@ async fn transcribe_audio_file_with_hint(
             Command::new("sh")
                 .arg("-c")
                 .arg(custom_cmd)
-                .env("FNDR_AUDIO_PATH", audio.to_string_lossy().to_string())
+                .env("CONTINUUM_AUDIO_PATH", audio.to_string_lossy().to_string())
                 .env(
-                    "FNDR_WHISPER_MODEL_PATH",
+                    "CONTINUUM_WHISPER_MODEL_PATH",
                     model.to_string_lossy().to_string(),
                 )
-                .env("FNDR_TRANSCRIBE_HINT", hint_value)
+                .env("CONTINUUM_TRANSCRIBE_HINT", hint_value)
                 .output()
         })
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| format!("FNDR_WHISPER_GGUF_COMMAND failed to start: {}", e))?;
+        .map_err(|e| format!("CONTINUUM_WHISPER_GGUF_COMMAND failed to start: {}", e))?;
 
         if output.status.success() {
             let text = normalize_transcript_text(&String::from_utf8_lossy(&output.stdout));
@@ -697,7 +697,7 @@ pub async fn synthesize_speech(
     }
     let voice = voice_id.unwrap_or("tara").to_string();
 
-    if let Ok(custom_cmd) = std::env::var("FNDR_ORPHEUS_COMMAND") {
+    if let Ok(custom_cmd) = std::env::var("CONTINUUM_ORPHEUS_COMMAND") {
         let model = model_path.clone();
         let output = output_path.clone();
         let text = text.to_string();
@@ -706,15 +706,15 @@ pub async fn synthesize_speech(
             Command::new("sh")
                 .arg("-c")
                 .arg(custom_cmd)
-                .env("FNDR_TTS_MODEL_PATH", model.to_string_lossy().to_string())
-                .env("FNDR_TTS_OUTPUT_PATH", output.to_string_lossy().to_string())
-                .env("FNDR_TTS_TEXT", text)
-                .env("FNDR_TTS_VOICE", voice_for_cmd)
+                .env("CONTINUUM_TTS_MODEL_PATH", model.to_string_lossy().to_string())
+                .env("CONTINUUM_TTS_OUTPUT_PATH", output.to_string_lossy().to_string())
+                .env("CONTINUUM_TTS_TEXT", text)
+                .env("CONTINUUM_TTS_VOICE", voice_for_cmd)
                 .output()
         })
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| format!("FNDR_ORPHEUS_COMMAND failed to start: {}", e))?;
+        .map_err(|e| format!("CONTINUUM_ORPHEUS_COMMAND failed to start: {}", e))?;
 
         if !custom_output.status.success() {
             return Err(String::from_utf8_lossy(&custom_output.stderr)

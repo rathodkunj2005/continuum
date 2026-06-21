@@ -17,7 +17,7 @@ describe("SurfacingReason", () => {
                 }}
             />,
         );
-        expect(screen.getByTestId("fndr-surfacing-reason")).toBeTruthy();
+        expect(screen.getByTestId("continuum-surfacing-reason")).toBeTruthy();
         expect(screen.getByText(/Reached via SameTaskAs/)).toBeTruthy();
     });
 

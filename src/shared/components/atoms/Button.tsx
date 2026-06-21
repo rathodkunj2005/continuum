@@ -20,9 +20,9 @@ export function Button({
     ...rest
 }: ButtonProps) {
     const cls = [
-        "fndr-button",
-        `fndr-button--${variant}`,
-        mono ? "fndr-button--mono" : "",
+        "continuum-button",
+        `continuum-button--${variant}`,
+        mono ? "continuum-button--mono" : "",
         className ?? "",
     ]
         .filter(Boolean)

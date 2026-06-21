@@ -61,7 +61,7 @@ impl Blocklist {
             .map(str::to_string)
     }
 
-    /// Check if the frontmost app belongs to FNDR itself and should never be captured.
+    /// Check if the frontmost app belongs to Continuum itself and should never be captured.
     ///
     /// This is **not** the user blocklist — it is a hard privacy rule so the
     /// app does not OCR/embed its own UI. Pipeline stats use
@@ -69,16 +69,16 @@ impl Blocklist {
     /// UI does not read this as "Finder" or a mistaken privacy block.
     pub fn is_internal_app(app_name: &str, bundle_id: Option<&str>) -> bool {
         let normalized_name = app_name.trim().to_lowercase();
-        if normalized_name.starts_with("fndr") && !normalized_name.contains("meeting") {
+        if normalized_name.starts_with("continuum") && !normalized_name.contains("meeting") {
             return true;
         }
 
         bundle_id.is_some_and(|bundle| {
             let normalized_bundle = bundle.trim().to_lowercase();
-            normalized_bundle == "com.fndr"
-                || normalized_bundle.starts_with("com.fndr.")
-                || normalized_bundle.ends_with(".fndr")
-                || normalized_bundle.contains(".fndr.")
+            normalized_bundle == "com.continuum"
+                || normalized_bundle.starts_with("com.continuum.")
+                || normalized_bundle.ends_with(".continuum")
+                || normalized_bundle.contains(".continuum.")
         })
     }
 
@@ -209,15 +209,15 @@ mod tests {
 
     #[test]
     fn test_detects_internal_app_by_name() {
-        assert!(Blocklist::is_internal_app("FNDR", None));
-        assert!(!Blocklist::is_internal_app("FNDR Meetings", None));
+        assert!(Blocklist::is_internal_app("Continuum", None));
+        assert!(!Blocklist::is_internal_app("Continuum Meetings", None));
     }
 
     #[test]
     fn test_detects_internal_app_by_bundle() {
         assert!(Blocklist::is_internal_app(
             "Anything",
-            Some("com.fndr.desktop")
+            Some("com.continuum.desktop")
         ));
         assert!(!Blocklist::is_internal_app(
             "Finder",

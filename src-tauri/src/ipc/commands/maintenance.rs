@@ -7,7 +7,7 @@ use crate::capture::{
 };
 use crate::embedding::prefixes::prefix_document_for_index;
 use crate::embedding::{select_salient_memory_chunks, Embedder, EmbeddingBackend};
-use crate::inference::model_config::{embedding_v5_contract, FNDR_MODEL_PROFILE};
+use crate::inference::model_config::{embedding_v5_contract, CONTINUUM_MODEL_PROFILE};
 use crate::memory_compaction::{
     compact_memory_record_payload, is_low_signal_embedding, mean_pool_embeddings,
 };
@@ -172,7 +172,7 @@ async fn reindex_memories_v5_for_state(
     let embedder = Embedder::new_bge_v5_for_reindex().map_err(|err| {
         format!(
             "BGE v5 reindex unavailable for {}: {}. Install {} and {} with scripts/bootstrap/download-embedding-model.sh. No v5 rows were written.",
-            FNDR_MODEL_PROFILE,
+            CONTINUUM_MODEL_PROFILE,
             err,
             contract.model_filename,
             contract.tokenizer_filename
@@ -454,7 +454,7 @@ fn build_v5_reindexed_record(
 }
 
 fn bge_v5_resource_status() -> String {
-    if FNDR_MODEL_PROFILE == "m1_8gb_default" {
+    if CONTINUUM_MODEL_PROFILE == "m1_8gb_default" {
         "BGE v5 load is deferred until this explicit reindex command on m1_8gb_default; startup and live search remain v4 MiniLM".to_string()
     } else {
         "BGE v5 load is explicit to the reindex command; startup and live search remain v4 MiniLM"

@@ -1,6 +1,6 @@
 /**
  * Settings UI for the iPhone / Apple Watch Companion API:
- *  - Server status (host/port/TLS, written to ~/.fndr/companion.json)
+ *  - Server status (host/port/TLS, written to ~/.continuum/companion.json)
  *  - "Pair a device" flow — issues a short-lived 6-digit code + QR payload
  *  - List of paired devices with revoke
  *
@@ -92,7 +92,7 @@ export function CompanionDevicesPanel({ pollIntervalMs = 5000 }: CompanionDevice
             <header>
                 <h2>iPhone &amp; Apple Watch</h2>
                 <p className="muted">
-                    Pair your iPhone or Apple Watch to ask FNDR, search memories,
+                    Pair your iPhone or Apple Watch to ask Continuum, search memories,
                     and capture notes from your phone. Mac stays the brain;
                     nothing leaves the local network.
                 </p>
@@ -129,7 +129,7 @@ export function CompanionDevicesPanel({ pollIntervalMs = 5000 }: CompanionDevice
                 {pending ? (
                     <div className="pending-pair" data-testid="pending-pair">
                         <p>
-                            On your iPhone or Apple Watch, open FNDR and enter
+                            On your iPhone or Apple Watch, open Continuum and enter
                             this code:
                         </p>
                         <p className="pair-code" aria-label="pairing code">

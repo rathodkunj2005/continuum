@@ -2,7 +2,7 @@
   {
     "id": "code_debug_rust",
     "app_name": "Cursor",
-    "window_title": "heap_allocator.rs - fndr",
+    "window_title": "heap_allocator.rs - continuum",
     "ocr_text": "error[E0502]: cannot borrow `self.buffer` as mutable because it is also borrowed as immutable\n  --> src/allocator.rs:47:9\n   |\n45 |         let view = self.buffer.as_slice();\n46 |         println!(\"{:?}\", view);\n47 |         self.buffer.push(new_item);\n   |         ^^^^^^^^^^^ mutable borrow occurs here",
     "domain_hint": "programming"
   },
@@ -45,7 +45,7 @@
     "id": "terminal_build",
     "app_name": "Terminal",
     "window_title": "Terminal - bash - 80x24",
-    "ocr_text": "$ cargo build --release\n   Compiling fndr v0.1.0 (/Users/anurup/projects/fndr)\n   Finished release [optimized] target(s) in 47.3s\n$ ./target/release/fndr --help\nfndr 0.1.0 - local memory engine\n$ ",
+    "ocr_text": "$ cargo build --release\n   Compiling continuum v0.1.0 (/Users/anurup/projects/continuum)\n   Finished release [optimized] target(s) in 47.3s\n$ ./target/release/continuum --help\ncontinuum 0.1.0 - local memory engine\n$ ",
     "domain_hint": "programming"
   },
   {
@@ -65,7 +65,7 @@
   {
     "id": "github_pr",
     "app_name": "Google Chrome",
-    "window_title": "Refactor auth middleware (#247) - fndr/fndr - GitHub",
+    "window_title": "Refactor auth middleware (#247) - continuum/continuum - GitHub",
     "ocr_text": "Refactor auth middleware #247\nOpen anurup wants to merge 5 commits into main from refactor/auth\n\nThis PR rewrites the session token validation to use the new compliance-approved approach. Closes #241.\n\nReviews: @sarah requested changes, @bob approved\nChecks: 12 passed, 1 failing (lint)",
     "domain_hint": "code review"
   },

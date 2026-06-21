@@ -53,7 +53,7 @@
 
 ```rust
 // src-tauri/src/inference/model_config.rs
-pub const FNDR_MODEL_PROFILE: &str = "m1_8gb_default";
+pub const CONTINUUM_MODEL_PROFILE: &str = "m1_8gb_default";
 
 pub const MULTIMODAL_MODEL_REPO: &str = "Qwen/Qwen3-VL-2B-Instruct-GGUF";
 pub const MULTIMODAL_MODEL_QUANT: &str = "Q4_K_M";
@@ -106,7 +106,7 @@ pub mod model_config;
 - [ ] **Step 3: Compile check**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -40
+cd src-tauri && cargo check -p continuum 2>&1 | head -40
 ```
 Expected: zero new errors.
 
@@ -261,7 +261,7 @@ pub fn pixel_vlm_available(_model_id: Option<&str>, app_data_dir: Option<&Path>)
 - [ ] **Step 5: Compile check**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -60
+cd src-tauri && cargo check -p continuum 2>&1 | head -60
 ```
 Fix any compile errors from callers of the removed functions (grep for `smolvlm`, `qwen3_vl_4b`, `QWEN3_VL_4B`, `resolve_smolvlm`, `resolve_qwen3_vl_mmproj`).
 
@@ -329,7 +329,7 @@ EmbeddingConfig {
 - [ ] **Step 6: Compile check**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -60
+cd src-tauri && cargo check -p continuum 2>&1 | head -60
 ```
 Fix callers referencing `vlm_model_size` or `vlm_model_id` on Config (grep: `vlm_model_size`, `vlm_model_id`).
 
@@ -384,7 +384,7 @@ fn load(app_data_dir: &Path) -> Result<Self, String> {
     let model_path = {
         let resolved = models::resolve_model(Some("qwen3-vl-2b"), Some(app_data_dir))
             .ok_or_else(|| {
-                "Qwen3-VL-2B not found. Download Qwen3VL-2B-Instruct-Q4_K_M.gguf and its mmproj into ~/Library/Application Support/FNDR/models/qwen3-vl-2b/".to_string()
+                "Qwen3-VL-2B not found. Download Qwen3VL-2B-Instruct-Q4_K_M.gguf and its mmproj into ~/Library/Application Support/Continuum/models/qwen3-vl-2b/".to_string()
             })?;
         models::validate_qwen3_vl_2b_main_gguf_file(&resolved.path)
             .map_err(|e| format!("Qwen3-VL-2B GGUF invalid: {e}"))?;
@@ -431,7 +431,7 @@ Also update `ocr_only_insight_never_mentions_failure_or_extraction` test — add
 - [ ] **Step 5: Compile + test**
 
 ```bash
-cd src-tauri && cargo test -p fndr inference::image_semantics 2>&1 | tail -20
+cd src-tauri && cargo test -p continuum inference::image_semantics 2>&1 | tail -20
 ```
 Expected: all tests pass.
 
@@ -671,7 +671,7 @@ For each callsite, update to use `RunQwenVlm` and `host_supports_qwen_vlm`.
 - [ ] **Step 6: Compile + test**
 
 ```bash
-cd src-tauri && cargo test -p fndr inference::vlm_router 2>&1 | tail -20
+cd src-tauri && cargo test -p continuum inference::vlm_router 2>&1 | tail -20
 ```
 
 - [ ] **Step 7: Commit**
@@ -748,7 +748,7 @@ pub struct MemorySynthesisOutput {
 - [ ] **Step 2: Write the prompt template and JSON schema types**
 
 ```rust
-const MEMORY_SYNTHESIS_PROMPT: &str = r#"You are FNDR's local memory extraction model.
+const MEMORY_SYNTHESIS_PROMPT: &str = r#"You are Continuum's local memory extraction model.
 
 Create a structured memory from the user's screen.
 
@@ -1033,7 +1033,7 @@ pub mod qwen_vl_memory;
 ```
 
 ```bash
-cd src-tauri && cargo test -p fndr inference::qwen_vl_memory 2>&1 | tail -20
+cd src-tauri && cargo test -p continuum inference::qwen_vl_memory 2>&1 | tail -20
 ```
 Expected: all 4 tests pass.
 
@@ -1294,7 +1294,7 @@ pub mod model_worker;
 ```
 
 ```bash
-cd src-tauri && cargo test -p fndr inference::model_worker 2>&1 | tail -20
+cd src-tauri && cargo test -p continuum inference::model_worker 2>&1 | tail -20
 ```
 
 - [ ] **Step 7: Commit**
@@ -1465,13 +1465,13 @@ pub mod embed;
 - [ ] **Step 6: Compile + test**
 
 ```bash
-cd src-tauri && cargo test -p fndr embed::embedding_gemma 2>&1 | tail -20
+cd src-tauri && cargo test -p continuum embed::embedding_gemma 2>&1 | tail -20
 ```
 Expected: 3 tests pass.
 
 Also check:
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -40
+cd src-tauri && cargo check -p continuum 2>&1 | head -40
 ```
 
 - [ ] **Step 7: Commit**
@@ -1583,7 +1583,7 @@ pub async fn open_or_create_memories_v3(&self) -> Result<lancedb::Table, Box<dyn
 - [ ] **Step 4: Compile check**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -40
+cd src-tauri && cargo check -p continuum 2>&1 | head -40
 ```
 
 - [ ] **Step 5: Commit**
@@ -1751,8 +1751,8 @@ async fn temp_screenshot_deleted_after_inference() {
 - [ ] **Step 5: Compile check + tests**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -40
-cd src-tauri && cargo test -p fndr inference::model_worker 2>&1 | tail -20
+cd src-tauri && cargo check -p continuum 2>&1 | head -40
+cd src-tauri && cargo test -p continuum inference::model_worker 2>&1 | tail -20
 ```
 
 - [ ] **Step 6: Commit**
@@ -1827,11 +1827,11 @@ pub fn evaluate(
         }
     }
 
-    // Internal FNDR surfaces
+    // Internal Continuum surfaces
     if let Some(id) = bundle_id {
         let id_lower = id.to_ascii_lowercase();
-        if id_lower.starts_with("com.fndr") || id_lower.contains(".fndr.") {
-            if !app.contains("fndr meeting") {
+        if id_lower.starts_with("com.continuum") || id_lower.contains(".continuum.") {
+            if !app.contains("continuum meeting") {
                 return SafetyDecision::SkipStorage;
             }
         }
@@ -2102,7 +2102,7 @@ pub mod extract_from_memory;
 - [ ] **Step 6: Compile + test**
 
 ```bash
-cd src-tauri && cargo test -p fndr privacy::safety_gate tasks::extract_from_memory 2>&1 | tail -30
+cd src-tauri && cargo test -p continuum privacy::safety_gate tasks::extract_from_memory 2>&1 | tail -30
 ```
 Expected: all tests pass.
 
@@ -2152,7 +2152,7 @@ raw_screenshot_stored: false,
 - [ ] **Step 3: Compile check**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -60
+cd src-tauri && cargo check -p continuum 2>&1 | head -60
 ```
 Fix any struct literal errors from code that constructs `MemoryRecord` directly — add the new fields with their defaults.
 
@@ -2271,7 +2271,7 @@ In `src-tauri/src/ipc/commands/mod.rs`, find the handler registration (`.invoke_
 - [ ] **Step 3: Compile check**
 
 ```bash
-cd src-tauri && cargo check -p fndr 2>&1 | head -40
+cd src-tauri && cargo check -p continuum 2>&1 | head -40
 ```
 
 - [ ] **Step 4: Commit**

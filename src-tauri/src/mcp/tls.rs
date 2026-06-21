@@ -2,7 +2,7 @@
 //!
 //! On first launch, generates an ECDSA P-256 self-signed certificate valid for
 //! localhost, 127.0.0.1, and 0.0.0.0. The cert and key are cached to
-//! `~/.fndr/mcp_cert.pem` and `~/.fndr/mcp_key.pem` so mobile clients only
+//! `~/.continuum/mcp_cert.pem` and `~/.continuum/mcp_key.pem` so mobile clients only
 //! need to trust the certificate once.
 
 use rcgen::{CertificateParams, DnType, KeyPair, SanType};
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 fn cert_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".fndr")
+        .join(".continuum")
 }
 
 fn cert_path() -> PathBuf {
@@ -50,10 +50,10 @@ pub async fn load_or_create_rustls_config() -> Result<axum_server::tls_rustls::R
     let mut params = CertificateParams::default();
     params
         .distinguished_name
-        .push(DnType::CommonName, "FNDR MCP Server");
+        .push(DnType::CommonName, "Continuum MCP Server");
     params
         .distinguished_name
-        .push(DnType::OrganizationName, "FNDR");
+        .push(DnType::OrganizationName, "Continuum");
     params.subject_alt_names = vec![
         SanType::DnsName(
             "localhost"

@@ -1,7 +1,7 @@
 # 008: Companion API architecture
 
 The Mac is the brain; mobile clients are thin. The iPhone / Apple Watch
-companion apps need a stable, secure local-network surface to ask FNDR
+companion apps need a stable, secure local-network surface to ask Continuum
 questions, search memories, save manual notes, and control capture state —
 without copying any of the runtime, models, or memory store onto the phone.
 
@@ -71,7 +71,7 @@ existing `MemoryRecord.source_type` field with new values
 
 ## Discovery file
 
-The server writes `~/.fndr/companion.json` on start and removes it on stop,
+The server writes `~/.continuum/companion.json` on start and removes it on stop,
 mirroring the MCP discovery convention. iOS uses this in the future for
 diagnostic surfaces; primary configuration still flows through QR pairing.
 
@@ -81,4 +81,4 @@ diagnostic surfaces; primary configuration still flows through QR pairing.
 - Per-permission allowlist on the token (today everyone gets all four).
 - mDNS / Bonjour discovery (P2).
 - Encrypted-at-rest token storage on Mac side (currently relies on
-  filesystem permissions of `~/.fndr/`).
+  filesystem permissions of `~/.continuum/`).

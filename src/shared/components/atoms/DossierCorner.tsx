@@ -8,7 +8,7 @@ interface DossierCornerProps {
 export function DossierCorner({ position }: DossierCornerProps) {
     return (
         <span
-            className={`fndr-dossier-corner fndr-dossier-corner--${position}`}
+            className={`continuum-dossier-corner continuum-dossier-corner--${position}`}
             aria-hidden="true"
         />
     );

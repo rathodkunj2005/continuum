@@ -3,7 +3,7 @@
 
 ## Context
 
-The FNDR home screen hero currently shows a static "Memory, developed." heading with two CTAs over a radial-gradient background and a drifting constellation SVG. The AuroraWallpaper WebGL background already tracks mouse position and click ripples, but:
+The Continuum home screen hero currently shows a static "Memory, developed." heading with two CTAs over a radial-gradient background and a drifting constellation SVG. The AuroraWallpaper WebGL background already tracks mouse position and click ripples, but:
 
 1. Hero DOM elements do not respond to mouse — there is no layered parallax on the text.
 2. Aurora colors are hardcoded to two themes (`film` / `paper`) independent of the cinematic palette system.
@@ -152,7 +152,7 @@ A pill-shaped input (height 56px, border-radius 28px) using existing `--cp-surfa
 
 On submit → `onScrollToSearch(query)` callback (new prop on HeroSection) which:
 1. Sets the query in the SearchSection state (via lifted state or event).
-2. Smooth-scrolls to `#fndr-section-search`.
+2. Smooth-scrolls to `#continuum-section-search`.
 
 ### Voice Button (HeroVoiceButton)
 

@@ -8,10 +8,10 @@ use genpdf::Element;
 /// Path to the macOS Supplemental font directory where Arial ships.
 const MACOS_SUPPLEMENTAL_FONT_DIR: &str = "/System/Library/Fonts/Supplemental";
 
-/// PDF page margins applied uniformly to FNDR exports (millimetres).
+/// PDF page margins applied uniformly to Continuum exports (millimetres).
 const PDF_PAGE_MARGIN: u8 = 18;
 
-/// Load the macOS Arial font family used by FNDR PDF exports.
+/// Load the macOS Arial font family used by Continuum PDF exports.
 fn load_pdf_font_family() -> Result<genpdf::fonts::FontFamily<genpdf::fonts::FontData>, String> {
     let font_dir = std::path::Path::new(MACOS_SUPPLEMENTAL_FONT_DIR);
     let load = |name: &str| {
@@ -38,11 +38,11 @@ pub async fn export_daily_summary_pdf(
 
     // 2. Prepare filename
     let safe_date = date_str.replace('/', "-").replace(' ', "_");
-    let filename = format!("FNDR_Daily_Summary_{}.pdf", safe_date);
+    let filename = format!("CONTINUUM_Daily_Summary_{}.pdf", safe_date);
     let target_path = downloads_dir.join(filename);
 
     let mut doc = genpdf::Document::new(load_pdf_font_family()?);
-    doc.set_title(format!("FNDR Daily Summary: {}", date_str));
+    doc.set_title(format!("Continuum Daily Summary: {}", date_str));
 
     let mut decorator = genpdf::SimplePageDecorator::new();
     decorator.set_margins(PDF_PAGE_MARGIN);
@@ -50,7 +50,7 @@ pub async fn export_daily_summary_pdf(
 
     // Title & Header
     doc.push(
-        genpdf::elements::Text::new("FNDR Daily Summary")
+        genpdf::elements::Text::new("Continuum Daily Summary")
             .styled(genpdf::style::Style::new().bold().with_font_size(20)),
     );
     doc.push(
@@ -93,7 +93,7 @@ pub async fn export_daily_summary_pdf(
     Ok(target_path.to_string_lossy().to_string())
 }
 
-/// Open a PDF exported by FNDR from the user's Downloads folder.
+/// Open a PDF exported by Continuum from the user's Downloads folder.
 #[tauri::command]
 pub async fn open_exported_pdf(path: String) -> Result<(), String> {
     let downloads_dir = dirs::download_dir()
@@ -107,7 +107,7 @@ pub async fn open_exported_pdf(path: String) -> Result<(), String> {
         .map_err(|e| format!("Could not find exported PDF: {}", e))?;
 
     if !target_path.starts_with(&downloads_dir) {
-        return Err("FNDR can only open exported PDFs from your Downloads folder.".to_string());
+        return Err("Continuum can only open exported PDFs from your Downloads folder.".to_string());
     }
 
     let is_pdf = target_path
@@ -115,7 +115,7 @@ pub async fn open_exported_pdf(path: String) -> Result<(), String> {
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
     if !is_pdf {
-        return Err("FNDR can only open exported PDF files.".to_string());
+        return Err("Continuum can only open exported PDF files.".to_string());
     }
 
     open_path_with_system(&target_path)
