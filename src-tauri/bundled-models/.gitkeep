@@ -1,0 +1,16 @@
+# Placeholder so this directory exists for Tauri resource bundling.
+#
+# At release time, CI populates this directory with the small, essential
+# embedding models that must be present on first launch:
+#   - all-MiniLM-L6-v2.onnx   (text embeddings, 384-d — the active contract)
+#   - tokenizer.json          (MiniLM tokenizer)
+#   - clip-vit-base-patch32-vision_q4.onnx  (image embeddings for visual search)
+#
+# These are copied into <Resources>/models/ in the .app and seeded into the
+# user's app-data models directory on first run (see seed_bundled_models in
+# src-tauri/src/main.rs). The large Qwen3-VL GGUF + mmproj are downloaded
+# in-app during onboarding instead of being bundled here.
+#
+# Model binaries are intentionally NOT committed (see .gitignore). Populate
+# locally with: scripts/bootstrap/download-minilm.sh src-tauri/bundled-models
+#               scripts/bootstrap/download-clip-vision-onnx.sh src-tauri/bundled-models

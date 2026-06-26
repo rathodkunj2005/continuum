@@ -43,12 +43,125 @@ const MEMORY_REVIEW_INTERVAL: Duration = Duration::from_secs(45);
 /// identity/policy refresh). Cheap no-op when cloud is unconfigured.
 const CLOUD_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 
+/// Secrets the release pipeline can bake into the binary so a distributed
+/// build has working cloud sync + model/key access without any per-user setup.
+///
+/// Each value comes from a `CONTINUUM_BAKED_*` env var read **at compile time**
+/// via `option_env!`. The release CI injects these from GitHub Secrets; local
+/// and dev builds leave them unset, so the binary contains no embedded secrets
+/// and continues to read real values from `.env` (loaded in `main`).
+///
+/// Runtime env / `.env` always wins — baked values only fill the gaps. We use a
+/// distinct `CONTINUUM_BAKED_` prefix (instead of reading e.g. `SUPABASE_URL`
+/// directly) so a developer's ambient shell env can never get silently embedded
+/// into a local build.
+const BAKED_SECRETS: &[(&str, Option<&str>)] = &[
+    ("SUPABASE_URL", option_env!("CONTINUUM_BAKED_SUPABASE_URL")),
+    (
+        "SUPABASE_ANON_KEY",
+        option_env!("CONTINUUM_BAKED_SUPABASE_ANON_KEY"),
+    ),
+    (
+        "SUPABASE_FUNCTIONS_URL",
+        option_env!("CONTINUUM_BAKED_SUPABASE_FUNCTIONS_URL"),
+    ),
+    (
+        "AGENT_SYNC_SECRET",
+        option_env!("CONTINUUM_BAKED_AGENT_SYNC_SECRET"),
+    ),
+    (
+        "ANTHROPIC_API_KEY",
+        option_env!("CONTINUUM_BAKED_ANTHROPIC_API_KEY"),
+    ),
+];
+
+/// Set process env from `BAKED_SECRETS` for any key not already provided at
+/// runtime (shell or `.env`). Subprocesses (e.g. the Python agent runner)
+/// inherit these, and `CloudConfig::from_env()` picks them up unchanged.
+fn hydrate_baked_secrets() {
+    for (key, baked) in BAKED_SECRETS {
+        if std::env::var_os(key).is_some() {
+            continue; // runtime env / .env wins
+        }
+        if let Some(value) = baked {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                std::env::set_var(key, trimmed);
+            }
+        }
+    }
+}
+
+/// Copy any models bundled inside the app (`<Resources>/models`) into the
+/// canonical app-data models directory on first run, so a freshly installed
+/// build has the text + image embedders present with no network round-trip.
+///
+/// Only fills gaps: an existing file of the same size is left untouched, and a
+/// missing/short file (e.g. an interrupted earlier copy) is (re)seeded. A no-op
+/// in `tauri dev`, where the bundled resource directory does not exist and
+/// developers rely on `scripts/bootstrap/*` downloads instead.
+fn seed_bundled_models(app: &tauri::App) {
+    let Ok(resource_dir) = app.path().resource_dir() else {
+        return;
+    };
+    let Ok(data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let src = resource_dir.join("models");
+    if !src.is_dir() {
+        return;
+    }
+    let dst = models::models_dir(&data_dir);
+    if let Err(e) = std::fs::create_dir_all(&dst) {
+        tracing::warn!("seed_bundled_models: cannot create {}: {e}", dst.display());
+        return;
+    }
+
+    let entries = match std::fs::read_dir(&src) {
+        Ok(entries) => entries,
+        Err(e) => {
+            tracing::warn!("seed_bundled_models: cannot read {}: {e}", src.display());
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name();
+        // `.gitkeep` and similar bookkeeping files are never models.
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let src_path = entry.path();
+        let dst_path = dst.join(&name);
+        let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let dst_len = std::fs::metadata(&dst_path).map(|m| m.len()).ok();
+        if dst_len == Some(src_len) {
+            continue; // already seeded
+        }
+        match std::fs::copy(&src_path, &dst_path) {
+            Ok(_) => tracing::info!("Seeded bundled model {}", dst_path.display()),
+            Err(e) => tracing::warn!(
+                "seed_bundled_models: copy {} -> {} failed: {e}",
+                src_path.display(),
+                dst_path.display()
+            ),
+        }
+    }
+}
+
 fn main() {
     // Install default TLS crypto provider (required by rustls 0.23+)
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     // Load environment variables from .env if present
     let _ = dotenvy::dotenv();
+
+    // Fill any still-unset secrets from values baked into the binary at build
+    // time (see `hydrate_baked_secrets`). Local/dev builds keep using `.env`.
+    hydrate_baked_secrets();
 
     // Quiet ggml / Metal chatter before any llama.cpp init (shell can override).
     if std::env::var_os("GGML_METAL_LOG_INFO").is_none() {
@@ -91,6 +204,11 @@ fn main() {
             Some(vec!["--hidden"]),
         ))
         .setup(|app| {
+            // Populate the app-data models directory from any models shipped
+            // inside the bundle before the embedding preflight runs, so a fresh
+            // install finds the text + image embedders on first launch.
+            seed_bundled_models(app);
+
             // Load configuration
             let config = Config::load_or_create()?;
             tracing::info!("Configuration loaded");

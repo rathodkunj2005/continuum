@@ -16,7 +16,21 @@ const HERMES_SKIP_DIRS: &[&str] = &[
 
 const HERMES_SKIP_FILES: &[&str] = &[".DS_Store"];
 
+/// Build-time secret env vars consumed by `option_env!` in `src/main.rs`.
+/// Declaring them here makes Cargo recompile when the release pipeline changes
+/// their values, so the baked-in secrets never go stale across CI builds.
+const BAKED_SECRET_ENV_VARS: &[&str] = &[
+    "CONTINUUM_BAKED_SUPABASE_URL",
+    "CONTINUUM_BAKED_SUPABASE_ANON_KEY",
+    "CONTINUUM_BAKED_SUPABASE_FUNCTIONS_URL",
+    "CONTINUUM_BAKED_AGENT_SYNC_SECRET",
+    "CONTINUUM_BAKED_ANTHROPIC_API_KEY",
+];
+
 fn main() {
+    for var in BAKED_SECRET_ENV_VARS {
+        println!("cargo:rerun-if-env-changed={var}");
+    }
     if let Err(err) = stage_vendored_hermes_bundle() {
         panic!("failed to stage vendored Hermes bundle: {err}");
     }

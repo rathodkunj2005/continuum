@@ -35,6 +35,7 @@
         ],
         "resources": {
             "target/hermes-agent-bundle/": "hermes-agent/",
+            "bundled-models/": "models/",
             "sidecars/parakeet_runner.py": "sidecars/parakeet_runner.py",
             "sidecars/whisper_gguf_runner.py": "sidecars/whisper_gguf_runner.py",
             "sidecars/orpheus_tts_runner.py": "sidecars/orpheus_tts_runner.py"
@@ -46,7 +47,8 @@
         "macOS": {
             "entitlements": "Entitlements.plist",
             "infoPlist": "Info.plist",
-            "minimumSystemVersion": "13.0"
+            "minimumSystemVersion": "13.0",
+            "signingIdentity": "-"
         }
     }
 }

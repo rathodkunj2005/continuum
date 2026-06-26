@@ -336,6 +336,19 @@ mod tests {
     }
 
     #[test]
+    fn onboarding_mmproj_download_filename_is_resolvable() {
+        // The onboarding flow downloads the projector under
+        // MULTIMODAL_MMPROJ_FILENAME; `resolve_qwen3_vl_2b_mmproj` only finds
+        // files named in QWEN3_VL_2B_MMPROJ_FILENAMES. Keep them in sync so a
+        // freshly downloaded mmproj is actually picked up and the VLM enables.
+        use crate::inference::model_config::MULTIMODAL_MMPROJ_FILENAME;
+        assert!(
+            QWEN3_VL_2B_MMPROJ_FILENAMES.contains(&MULTIMODAL_MMPROJ_FILENAME),
+            "downloaded mmproj '{MULTIMODAL_MMPROJ_FILENAME}' is not in the resolver candidate list {QWEN3_VL_2B_MMPROJ_FILENAMES:?}"
+        );
+    }
+
+    #[test]
     fn inference_preferred_model_id_always_returns_qwen3_vl_2b() {
         let temp_dir = make_temp_dir();
         let cfg = crate::config::Config::default();

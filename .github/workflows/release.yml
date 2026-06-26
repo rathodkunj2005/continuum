@@ -1,0 +1,97 @@
+name: Release (macOS .dmg)
+
+# Builds the packaged Continuum .dmg for teammates and attaches it to a GitHub
+# Release. Triggered by pushing a version tag (e.g. v0.2.11) or run manually.
+#
+# Team secrets are baked into the binary at build time from GitHub repo secrets
+# (Settings -> Secrets and variables -> Actions). They are never committed.
+# See docs/RELEASE.md for the required secret names and the teammate install
+# steps (the build is ad-hoc signed, not notarized, so first launch needs a
+# one-time quarantine-removal step).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish the release under (e.g. v0.2.11)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    name: Build and publish .dmg (Apple Silicon)
+    # macos-14 is an Apple Silicon (arm64) runner — matches the team's M-series Macs.
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Stage bundled models (MiniLM + CLIP)
+        run: bash scripts/release/stage-bundled-models.sh src-tauri/bundled-models
+
+      - name: Build app + .dmg (bakes in team secrets)
+        env:
+          # Compile-time baked secrets (option_env! in src-tauri/src/main.rs).
+          # Optional ones may be empty; the app then reports them "not configured".
+          CONTINUUM_BAKED_SUPABASE_URL: ${{ secrets.CONTINUUM_SUPABASE_URL }}
+          CONTINUUM_BAKED_SUPABASE_ANON_KEY: ${{ secrets.CONTINUUM_SUPABASE_ANON_KEY }}
+          CONTINUUM_BAKED_SUPABASE_FUNCTIONS_URL: ${{ secrets.CONTINUUM_SUPABASE_FUNCTIONS_URL }}
+          CONTINUUM_BAKED_AGENT_SYNC_SECRET: ${{ secrets.CONTINUUM_AGENT_SYNC_SECRET }}
+          CONTINUUM_BAKED_ANTHROPIC_API_KEY: ${{ secrets.CONTINUUM_ANTHROPIC_API_KEY }}
+        run: npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Collect .dmg
+        id: collect
+        run: |
+          set -euo pipefail
+          dmg="$(find src-tauri/target -path '*/release/bundle/dmg/*.dmg' | head -n 1)"
+          if [[ -z "$dmg" ]]; then
+            echo "No .dmg found under src-tauri/target" >&2
+            find src-tauri/target -name '*.dmg' || true
+            exit 1
+          fi
+          echo "Found dmg: $dmg"
+          echo "dmg_path=$dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Continuum ${{ github.event.inputs.tag || github.ref_name }}
+          fail_on_unmatched_files: true
+          files: ${{ steps.collect.outputs.dmg_path }}
+          body: |
+            Continuum desktop build for Apple Silicon (arm64), ad-hoc signed (not notarized).
+
+            First launch (one-time): download the .dmg, drag Continuum to Applications, then run:
+
+                xattr -dr com.apple.quarantine /Applications/continuum.app
+
+            Open Continuum and complete onboarding (grant Screen Recording /
+            Accessibility / Microphone, then let it download the local model).
+            See docs/INSTALL.md for the full walkthrough.

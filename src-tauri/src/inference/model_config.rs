@@ -12,6 +12,16 @@ pub const MULTIMODAL_MODEL_RAM_GB: f32 = 3.5;
 /// Minimum on-disk size to accept as a real Qwen3-VL-2B GGUF (rejects LFS pointers).
 pub const QWEN3_VL_2B_MAIN_GGUF_MIN_BYTES: u64 = 900_000_000;
 
+/// Multimodal projector (mmproj) that pairs with the Qwen3-VL-2B GGUF above to
+/// enable pixel/vision understanding. Without it the runtime falls back to
+/// OCR + text-only synthesis. The filename matches one of
+/// [`crate::models::QWEN3_VL_2B_MMPROJ_FILENAMES`] so it is discovered by
+/// `resolve_qwen3_vl_2b_mmproj` once present. Fetched alongside the main GGUF
+/// during onboarding (see `ipc::onboarding`), not bundled, because of its size.
+pub const MULTIMODAL_MMPROJ_FILENAME: &str = "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf";
+pub const MULTIMODAL_MMPROJ_DOWNLOAD_URL: &str =
+    "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf";
+
 // ── Embedding contracts (single source of truth) ────────────────────────────
 //
 // v4 is the current durable runtime contract. v5 is the explicit BGE target

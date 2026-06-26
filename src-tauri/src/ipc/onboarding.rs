@@ -710,7 +710,9 @@ async fn do_download(
     url: &str,
     filename: &str,
 ) -> Result<(), String> {
-    use tokio::io::AsyncWriteExt;
+    use crate::inference::model_config::{
+        MULTIMODAL_MMPROJ_DOWNLOAD_URL, MULTIMODAL_MMPROJ_FILENAME, MULTIMODAL_MODEL_ID,
+    };
 
     emit_download_log(
         app,
@@ -720,32 +722,89 @@ async fn do_download(
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let models_dir = models::models_dir(app_data_dir.as_path());
-
     std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
+
+    // 1. Main model file — a hard requirement; propagate any failure.
     let dest_path = models_dir.join(filename);
     let partial_path = models::partial_model_path(app_data_dir.as_path(), filename);
-
     mutate_download_status(app, |status| {
         status.destination_path = Some(dest_path.display().to_string());
         status.temp_path = Some(partial_path.display().to_string());
     });
+    stream_model_file(app, model_id, url, &dest_path, &partial_path).await?;
+
+    // 2. For the multimodal model, also fetch the matching vision projector so
+    //    the VLM has pixel understanding on first run. Best-effort: a failure
+    //    here still leaves a working OCR + text-LLM setup, so log and continue
+    //    rather than blocking the user from finishing onboarding.
+    if model_id == MULTIMODAL_MODEL_ID {
+        let mmproj_dest = models_dir.join(MULTIMODAL_MMPROJ_FILENAME);
+        if mmproj_dest.exists() {
+            emit_download_log(app, "Vision projector already present.");
+        } else {
+            let mmproj_partial =
+                models::partial_model_path(app_data_dir.as_path(), MULTIMODAL_MMPROJ_FILENAME);
+            emit_download_log(
+                app,
+                "Fetching vision projector (mmproj) so the model can read screenshots...",
+            );
+            if let Err(e) = stream_model_file(
+                app,
+                model_id,
+                MULTIMODAL_MMPROJ_DOWNLOAD_URL,
+                &mmproj_dest,
+                &mmproj_partial,
+            )
+            .await
+            {
+                emit_download_log(
+                    app,
+                    &format!(
+                        "Vision projector download failed ({e}); continuing in OCR + text mode. \
+                         Retry later from the model panel to enable screenshot understanding."
+                    ),
+                );
+            }
+        }
+    }
+
+    // 3. Single terminal completion event, emitted only once every required
+    //    file is in place so the UI does not advance after just the main GGUF.
+    let final_bytes = std::fs::metadata(&dest_path).map(|m| m.len()).unwrap_or(0);
+    emit_download_log(app, &format!("Model ready at {}", dest_path.display()));
+    emit_download_progress(
+        app,
+        DownloadProgress {
+            model_id: model_id.to_string(),
+            bytes_downloaded: final_bytes,
+            total_bytes: final_bytes,
+            percent: 100.0,
+            done: true,
+            error: None,
+        },
+    );
+
+    Ok(())
+}
+
+/// Download a single model file to `partial_path`, then atomically promote it
+/// to `dest_path`. Emits in-progress `model-download-progress` events but never
+/// a terminal `done = true` — the caller emits that once all required files for
+/// the selected model are present. Honors `HF_TOKEN` for gated repos and
+/// resumes an interrupted partial via a `Range` request.
+async fn stream_model_file(
+    app: &AppHandle,
+    model_id: &str,
+    url: &str,
+    dest_path: &std::path::Path,
+    partial_path: &std::path::Path,
+) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
 
     if dest_path.exists() {
-        let file_size = dest_path.metadata().map(|meta| meta.len()).unwrap_or(0);
         emit_download_log(
             app,
-            "Model file already exists. Marking download as complete.",
-        );
-        emit_download_progress(
-            app,
-            DownloadProgress {
-                model_id: model_id.to_string(),
-                bytes_downloaded: file_size,
-                total_bytes: file_size,
-                percent: 100.0,
-                done: true,
-                error: None,
-            },
+            &format!("{} already present; skipping.", dest_path.display()),
         );
         return Ok(());
     }
@@ -822,7 +881,7 @@ async fn do_download(
             app,
             "Server ignored the resume request. Restarting from byte 0 to avoid corruption.",
         );
-        let _ = tokio::fs::remove_file(&partial_path).await;
+        let _ = tokio::fs::remove_file(partial_path).await;
         0u64
     } else {
         resume_from
@@ -835,7 +894,7 @@ async fn do_download(
         .write(true)
         .append(resume_from > 0)
         .truncate(resume_from == 0)
-        .open(&partial_path)
+        .open(partial_path)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -881,22 +940,9 @@ async fn do_download(
         app,
         "Promoting partial download into the live models directory...",
     );
-    tokio::fs::rename(&partial_path, &dest_path)
+    tokio::fs::rename(partial_path, dest_path)
         .await
         .map_err(|e| format!("Failed to finalize model file: {}", e))?;
-    emit_download_log(app, &format!("Model ready at {}", dest_path.display()));
-
-    emit_download_progress(
-        app,
-        DownloadProgress {
-            model_id: model_id.to_string(),
-            bytes_downloaded,
-            total_bytes,
-            percent: 100.0,
-            done: true,
-            error: None,
-        },
-    );
 
     Ok(())
 }

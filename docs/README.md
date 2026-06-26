@@ -13,6 +13,8 @@ Use this index to find the right document quickly. **Authoritative agent vocabul
 | [`agent.md`](agent.md) | Continuum Agent architecture, modes, provider strategy, and safety |
 | [`agent-context-pack.md`](agent-context-pack.md) | Typed context pack schema, ranking, redaction, and provenance |
 | [`skills-and-evals.md`](skills-and-evals.md) | Skill lifecycle, eval case shape, and approval requirements |
+| [`INSTALL.md`](INSTALL.md) | Teammate install guide for the packaged `.dmg` (quarantine, permissions, onboarding) |
+| [`RELEASE.md`](RELEASE.md) | Maintainer guide: required GitHub secrets and how to cut a packaged release |
 
 ## By topic
 
