@@ -3,12 +3,14 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub const DEFAULT_TEXT_EMBEDDING_DIM: usize = 384;
+pub const DEFAULT_TEXT_EMBEDDING_DIM: usize = 768;
 pub const DEFAULT_IMAGE_EMBEDDING_DIM: usize = 512;
-pub const DEFAULT_EMBEDDING_MODEL_NAME: &str = "sentence-transformers/all-MiniLM-L6-v2";
-pub const DEFAULT_EMBEDDING_MODEL_FILENAME: &str = "all-MiniLM-L6-v2.onnx";
-pub const DEFAULT_EMBEDDING_TOKENIZER_FILENAME: &str = "tokenizer.json";
-pub const DEFAULT_EMBEDDING_MAX_SEQ_LEN: usize = 512;
+pub const DEFAULT_EMBEDDING_MODEL_NAME: &str = "google/embeddinggemma-2";
+pub const DEFAULT_EMBEDDING_MODEL_FILENAME: &str = "embeddinggemma-2-Q8_0.gguf";
+/// The GGUF carries its own tokenizer; the name repeats the model file so the
+/// config keeps one filename per asset.
+pub const DEFAULT_EMBEDDING_TOKENIZER_FILENAME: &str = "embeddinggemma-2-Q8_0.gguf";
+pub const DEFAULT_EMBEDDING_MAX_SEQ_LEN: usize = 2048;
 pub const DEFAULT_EMBEDDING_CACHE_CAPACITY: usize = 1024;
 pub const DEFAULT_EMBEDDING_MAX_BATCH: usize = 16;
 
@@ -1853,7 +1855,7 @@ mod tests {
             .validate()
             .expect_err("wrong embedding dimension must fail at startup");
 
-        assert!(err.contains("384-dimensional text embeddings"));
+        assert!(err.contains("768-dimensional text embeddings"));
     }
 
     #[test]

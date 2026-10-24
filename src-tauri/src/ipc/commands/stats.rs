@@ -1366,7 +1366,10 @@ pub(crate) fn build_focus_task_embedding(
     }
 
     embedder
-        .and_then(|value| value.embed_batch(&[task.to_string()]).ok())
+        .and_then(|value| {
+            let query = crate::embedding::prefixes::query_text_for(value.contract(), task);
+            value.embed_query(&query).ok().map(|vector| vec![vector])
+        })
         .and_then(|mut embeddings| embeddings.drain(..).next())
         .map(Some)
         .ok_or_else(|| "Failed to build focus task embedding".to_string())

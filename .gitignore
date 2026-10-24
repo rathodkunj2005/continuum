@@ -97,3 +97,6 @@ fastlane/test_output/
 .playwright-cli/
 playwright-report/
 test-results/
+src-tauri/helpers/fndr-eg2/target/
+src-tauri/helpers/fndr-eg2/vendor/
+src-tauri/binaries/fndr-eg2-helper-*

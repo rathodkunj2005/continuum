@@ -960,10 +960,10 @@ mod tests {
             "The chunk-first route runs ANN against memory_chunks_v1_bge_1024.".to_string();
         record.snippet = "Chunk-first ANN route".to_string();
         record.enrichment_status = STATUS_PENDING.to_string();
-        record.embedding = vec![0.0; 384];
+        record.embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
         record.image_embedding = vec![0.0; 768];
-        record.snippet_embedding = vec![0.0; 384];
-        record.support_embedding = vec![0.0; 384];
+        record.snippet_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
+        record.support_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
 
         store
             .add_batch_preserving_ids(&[record.clone()])
@@ -1043,10 +1043,10 @@ mod tests {
         record.memory_context = "Original memory context".to_string();
         record.clean_text = "Captured page about something.".to_string();
         record.enrichment_status = STATUS_PENDING.to_string();
-        record.embedding = vec![0.0; 384];
+        record.embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
         record.image_embedding = vec![0.0; 768];
-        record.snippet_embedding = vec![0.0; 384];
-        record.support_embedding = vec![0.0; 384];
+        record.snippet_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
+        record.support_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
 
         store
             .add_batch_preserving_ids(&[record.clone()])
@@ -1108,10 +1108,10 @@ mod tests {
         record.memory_context = "Original memory context".to_string();
         record.clean_text = "Captured page about debounce ticks.".to_string();
         record.enrichment_status = STATUS_PENDING.to_string();
-        record.embedding = vec![0.0; 384];
+        record.embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
         record.image_embedding = vec![0.0; 768];
-        record.snippet_embedding = vec![0.0; 384];
-        record.support_embedding = vec![0.0; 384];
+        record.snippet_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
+        record.support_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
 
         store
             .add_batch_preserving_ids(&[record.clone()])
@@ -1180,10 +1180,10 @@ mod tests {
         record.ocr_block_count = 0;
         record.enrichment_status = STATUS_REVIEW_FAILED.to_string();
         record.storage_outcome = "enriched_memory_card".to_string();
-        record.embedding = vec![0.0; 384];
+        record.embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
         record.image_embedding = vec![0.0; 768];
-        record.snippet_embedding = vec![0.0; 384];
-        record.support_embedding = vec![0.0; 384];
+        record.snippet_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
+        record.support_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
 
         store
             .add_batch_preserving_ids(&[record.clone()])

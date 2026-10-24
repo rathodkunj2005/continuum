@@ -124,7 +124,7 @@ fn normalize_record_for_index_repairs_vector_dimensions() {
         "Research notes",
         "Summarized the research notes for memory card storage.",
     );
-    source.embedding = vec![0.25; 384];
+    source.embedding = vec![0.25; DEFAULT_TEXT_EMBEDDING_DIM];
     source.snippet_embedding = Vec::new();
     source.support_embedding = vec![0.5; DEFAULT_TEXT_EMBEDDING_DIM + 8];
     source.image_embedding = vec![0.0; 12];
@@ -211,9 +211,9 @@ fn memory_schema_dimensions_keep_v4_and_v5_separate() {
     let v5 = memory_v5_schema();
     let chunks = memory_chunk_schema();
 
-    assert_eq!(schema_vector_dim(&v4, "embedding"), Some(384));
-    assert_eq!(schema_vector_dim(&v4, "snippet_embedding"), Some(384));
-    assert_eq!(schema_vector_dim(&v4, "support_embedding"), Some(384));
+    assert_eq!(schema_vector_dim(&v4, "embedding"), Some(768));
+    assert_eq!(schema_vector_dim(&v4, "snippet_embedding"), Some(768));
+    assert_eq!(schema_vector_dim(&v4, "support_embedding"), Some(768));
     assert_eq!(schema_vector_dim(&v4, "image_embedding"), Some(512));
 
     assert_eq!(schema_vector_dim(&v5, "embedding"), Some(1024));
@@ -313,7 +313,7 @@ async fn store_opens_v4_and_creates_v5_parent_table_without_resetting_v4() {
         .unwrap();
     assert_eq!(
         schema_vector_dim(&v4.schema().await.unwrap(), "embedding"),
-        Some(384)
+        Some(768)
     );
     assert_eq!(
         schema_vector_dim(&v5.schema().await.unwrap(), "embedding"),

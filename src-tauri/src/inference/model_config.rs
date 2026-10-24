@@ -25,6 +25,9 @@ pub enum EmbeddingContractVersion {
     /// EmbeddingGemma (VS-47). Defined so the embedder can be checked against
     /// the reference implementation; not the active contract (VS-49 migrates).
     V6EmbeddingGemma,
+    /// EmbeddingGemma 2 (Q8_0 GGUF) through `fndr-eg2-helper`, the same
+    /// pipeline DigUp runs. The active contract.
+    V7EmbeddingGemma2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +81,21 @@ pub const EMBEDDING_GEMMA_FULL_DIMENSIONS: usize = 768;
 pub const EMBEDDING_GEMMA_MAX_SEQ_LEN: usize = 2048;
 pub const EMBEDDING_GEMMA_MAX_BATCH_SIZE: usize = 4;
 
+/// ggml-org's Q8_0 GGUF of google/embeddinggemma-2, the file DigUp runs, pinned
+/// to one repository revision. Never the F16 files: the model's activations
+/// overflow float16.
+pub const EMBEDDING_GEMMA2_MODEL_ID: &str = "google/embeddinggemma-2";
+pub const EMBEDDING_GEMMA2_MODEL_FILENAME: &str = "embeddinggemma-2-Q8_0.gguf";
+pub const EMBEDDING_GEMMA2_MODEL_DOWNLOAD_URL: &str = "https://huggingface.co/ggml-org/embeddinggemma-2-GGUF/resolve/bfcd298762cc34d0357ece5ebdd31791a3a374d8/embeddinggemma-2-Q8_0.gguf";
+pub const EMBEDDING_GEMMA2_MODEL_SHA256: &str =
+    "2188ac1deca4b77dffefd603c2776a9d76d9d74ec01841392982ebb840b09135";
+pub const EMBEDDING_GEMMA2_MODEL_SIZE_BYTES: u64 = 309_855_456;
+pub const EMBEDDING_GEMMA2_DIMENSIONS: usize = 768;
+/// The helper's context: one input holds at most this many tokens.
+pub const EMBEDDING_GEMMA2_MAX_SEQ_LEN: usize = 2048;
+/// The helper embeds up to 16 inputs per call.
+pub const EMBEDDING_GEMMA2_MAX_BATCH_SIZE: usize = 16;
+
 pub const QWEN_CONTEXT_SIZE: u32 = 4096;
 
 /// Default context window (prompt plus output) of the text engine; `FNDR_INFERENCE_N_CTX` overrides it.
@@ -98,6 +116,10 @@ pub const MEMORIES_V4_TABLE: &str = "memories_v4_minilm_384";
 /// and write path together. The name is reserved here so doc references stay
 /// consistent and no other slice accidentally claims the table name.
 pub const MEMORIES_V5_TABLE: &str = "memories_v5_bge_1024";
+
+/// LanceDB table for memories embedded by EmbeddingGemma 2 (768-d). The
+/// **current durable write path**; the v4 table is left untouched beside it.
+pub const MEMORIES_V7_TABLE: &str = "memories_v7_embeddinggemma2_768";
 
 pub const fn embedding_v4_contract() -> TextEmbeddingContract {
     TextEmbeddingContract {
@@ -150,6 +172,20 @@ pub const fn embedding_v6_contract(
     })
 }
 
+pub const fn embedding_v7_contract() -> TextEmbeddingContract {
+    TextEmbeddingContract {
+        version: EmbeddingContractVersion::V7EmbeddingGemma2,
+        model_id: EMBEDDING_GEMMA2_MODEL_ID,
+        model_filename: EMBEDDING_GEMMA2_MODEL_FILENAME,
+        // The GGUF carries its own tokenizer.
+        tokenizer_filename: EMBEDDING_GEMMA2_MODEL_FILENAME,
+        dimensions: EMBEDDING_GEMMA2_DIMENSIONS,
+        max_sequence_length: EMBEDDING_GEMMA2_MAX_SEQ_LEN,
+        max_batch_size: EMBEDDING_GEMMA2_MAX_BATCH_SIZE,
+        table_name: MEMORIES_V7_TABLE,
+    }
+}
+
 impl TextEmbeddingContract {
     /// Whether the model was trained so that its vectors can be cut to fewer
     /// dimensions and renormalized (Matryoshka Representation Learning).
@@ -159,7 +195,7 @@ impl TextEmbeddingContract {
 }
 
 pub const fn active_embedding_contract() -> TextEmbeddingContract {
-    embedding_v4_contract()
+    embedding_v7_contract()
 }
 
 pub fn validate_embedding_config_against_contract(
@@ -213,45 +249,39 @@ mod tests {
 
     #[test]
     fn embedding_contract_constants_are_internally_consistent() {
-        // model identity
-        assert_eq!(EMBEDDING_MODEL_ID, DEFAULT_EMBEDDING_MODEL_NAME);
-        assert_eq!(EMBEDDING_MODEL_FILENAME, DEFAULT_EMBEDDING_MODEL_FILENAME);
+        let active = active_embedding_contract();
+
+        // config defaults are the active contract
+        assert_eq!(active.model_id, DEFAULT_EMBEDDING_MODEL_NAME);
+        assert_eq!(active.model_filename, DEFAULT_EMBEDDING_MODEL_FILENAME);
         assert_eq!(
-            EMBEDDING_TOKENIZER_FILENAME,
+            active.tokenizer_filename,
             DEFAULT_EMBEDDING_TOKENIZER_FILENAME
         );
+        assert_eq!(active.dimensions, DEFAULT_TEXT_EMBEDDING_DIM);
+        assert_eq!(active.max_sequence_length, DEFAULT_EMBEDDING_MAX_SEQ_LEN);
+        assert_eq!(active.dimensions, 768, "EmbeddingGemma 2 is 768-d");
 
-        // vector dimension
-        assert_eq!(EMBEDDING_DIMENSIONS, DEFAULT_TEXT_EMBEDDING_DIM);
+        // the v4 constants still describe the MiniLM contract
         assert_eq!(EMBEDDING_DIMENSIONS_I32, EMBEDDING_DIMENSIONS as i32);
         assert_eq!(EMBEDDING_DIMENSIONS, 384, "v4 MiniLM contract is 384-d");
-
-        // model file matches the model name (MiniLM stem, not BGE / EmbeddingGemma)
         assert!(
             EMBEDDING_MODEL_FILENAME.contains("MiniLM"),
             "filename {EMBEDDING_MODEL_FILENAME} does not match MiniLM model id {EMBEDDING_MODEL_ID}"
         );
-
-        // sequence length
-        assert_eq!(EMBEDDING_MAX_SEQ_LEN, DEFAULT_EMBEDDING_MAX_SEQ_LEN);
-
-        // current durable Lance table reflects the model+dim contract
         assert_eq!(MEMORIES_V4_TABLE, "memories_v4_minilm_384");
-        assert!(
-            MEMORIES_V4_TABLE.contains("minilm")
-                && MEMORIES_V4_TABLE.contains(&EMBEDDING_DIMENSIONS.to_string()),
-            "v4 table name {MEMORIES_V4_TABLE} must mention model + dim"
-        );
 
-        // v5 is a forward placeholder only — it must NOT collide with v4
+        // every table name is its own
         assert_ne!(MEMORIES_V5_TABLE, MEMORIES_V4_TABLE);
+        assert_ne!(MEMORIES_V7_TABLE, MEMORIES_V4_TABLE);
         assert!(
-            MEMORIES_V5_TABLE.contains("v5"),
-            "v5 placeholder {MEMORIES_V5_TABLE} should be tagged v5"
+            MEMORIES_V7_TABLE.contains("embeddinggemma2")
+                && MEMORIES_V7_TABLE.contains(&EMBEDDING_GEMMA2_DIMENSIONS.to_string()),
+            "v7 table name {MEMORIES_V7_TABLE} must mention model + dim"
         );
 
-        // storage::MEMORIES_TABLE re-exports the same write target
-        assert_eq!(crate::storage::MEMORIES_TABLE, MEMORIES_V4_TABLE);
+        // storage::MEMORIES_TABLE re-exports the active write target
+        assert_eq!(crate::storage::MEMORIES_TABLE, active.table_name);
     }
 
     #[test]
@@ -292,7 +322,7 @@ mod tests {
             assert_eq!(contract.table_name, table_name);
             assert_eq!(contract.model_id, EMBEDDING_GEMMA_MODEL_ID);
         }
-        assert_eq!(active_embedding_contract(), embedding_v4_contract());
+        assert_eq!(active_embedding_contract(), embedding_v7_contract());
     }
 
     #[test]

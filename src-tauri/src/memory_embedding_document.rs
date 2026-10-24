@@ -6,7 +6,7 @@
 
 use crate::config::{ChunkingConfig, DEFAULT_IMAGE_EMBEDDING_DIM, DEFAULT_TEXT_EMBEDDING_DIM};
 use crate::graph::schema::GraphNode;
-use crate::inference::model_config::{embedding_v4_contract, embedding_v5_contract};
+use crate::inference::model_config::{active_embedding_contract, embedding_v5_contract};
 use crate::memory_compaction::{
     best_embedding_text, best_snippet_embedding_text, best_support_embedding_texts_with_config,
 };
@@ -41,6 +41,8 @@ pub enum EmbeddingVectorSpace {
     TextBge1024,
     ClipImage512,
     GraphNodeText384,
+    TextGemma768,
+    GraphNodeText768,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -265,9 +267,9 @@ pub fn build_embedding_manifest(
         document_version: EMBEDDING_DOCUMENT_VERSION,
         source_hashes: document.source_hashes(),
         contracts: vec![
-            minilm_contract(EmbeddingRole::Primary),
-            minilm_contract(EmbeddingRole::Snippet),
-            minilm_contract(EmbeddingRole::Support),
+            primary_text_contract(EmbeddingRole::Primary),
+            primary_text_contract(EmbeddingRole::Snippet),
+            primary_text_contract(EmbeddingRole::Support),
             clip_image_contract(),
         ],
         statuses: vec![
@@ -286,11 +288,11 @@ pub fn build_embedding_manifest(
     }
 }
 
-pub fn minilm_contract(role: EmbeddingRole) -> EmbeddingContract {
-    let contract = embedding_v4_contract();
+pub fn primary_text_contract(role: EmbeddingRole) -> EmbeddingContract {
+    let contract = active_embedding_contract();
     EmbeddingContract {
         role,
-        vector_space: EmbeddingVectorSpace::TextMiniLm384,
+        vector_space: EmbeddingVectorSpace::TextGemma768,
         model_id: contract.model_id.to_string(),
         dimension: contract.dimensions,
         table_name: Some(contract.table_name.to_string()),
@@ -321,8 +323,8 @@ pub fn clip_image_contract() -> EmbeddingContract {
 pub fn graph_node_contract() -> EmbeddingContract {
     EmbeddingContract {
         role: EmbeddingRole::GraphNode,
-        vector_space: EmbeddingVectorSpace::GraphNodeText384,
-        model_id: embedding_v4_contract().model_id.to_string(),
+        vector_space: EmbeddingVectorSpace::GraphNodeText768,
+        model_id: active_embedding_contract().model_id.to_string(),
         dimension: DEFAULT_TEXT_EMBEDDING_DIM,
         table_name: Some("graph_nodes".to_string()),
     }
@@ -724,13 +726,13 @@ mod tests {
 
     #[test]
     fn vector_contracts_keep_text_bge_graph_and_image_spaces_separate() {
-        assert_eq!(minilm_contract(EmbeddingRole::Primary).dimension, 384);
+        assert_eq!(primary_text_contract(EmbeddingRole::Primary).dimension, 768);
         assert_eq!(bge_v5_contract_for(EmbeddingRole::Chunk).dimension, 1024);
-        assert_eq!(graph_node_contract().dimension, 384);
+        assert_eq!(graph_node_contract().dimension, 768);
         assert_eq!(clip_image_contract().dimension, 512);
         assert_ne!(
             bge_v5_contract_for(EmbeddingRole::Chunk).vector_space,
-            minilm_contract(EmbeddingRole::Primary).vector_space
+            primary_text_contract(EmbeddingRole::Primary).vector_space
         );
     }
 

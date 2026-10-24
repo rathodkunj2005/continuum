@@ -22,7 +22,8 @@ pub fn query_text_for(contract: TextEmbeddingContract, text: &str) -> String {
     match contract.version {
         EmbeddingContractVersion::V4MiniLm384 => text.trim().to_string(),
         EmbeddingContractVersion::V5Bge1024 => prefix_once(text, BGE_QUERY_PREFIX),
-        EmbeddingContractVersion::V6EmbeddingGemma => {
+        EmbeddingContractVersion::V6EmbeddingGemma
+        | EmbeddingContractVersion::V7EmbeddingGemma2 => {
             prefix_once(text, EMBEDDING_GEMMA_QUERY_PREFIX)
         }
     }
@@ -33,7 +34,8 @@ pub fn document_text_for(contract: TextEmbeddingContract, text: &str) -> String 
     match contract.version {
         EmbeddingContractVersion::V4MiniLm384 => text.trim().to_string(),
         EmbeddingContractVersion::V5Bge1024 => prefix_once(text, BGE_DOCUMENT_PREFIX),
-        EmbeddingContractVersion::V6EmbeddingGemma => {
+        EmbeddingContractVersion::V6EmbeddingGemma
+        | EmbeddingContractVersion::V7EmbeddingGemma2 => {
             prefix_once(text, EMBEDDING_GEMMA_DOCUMENT_PREFIX)
         }
     }

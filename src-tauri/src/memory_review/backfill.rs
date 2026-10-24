@@ -159,10 +159,10 @@ mod tests {
         r.enrichment_status = status.to_string();
         r.clean_text = format!("captured {id}");
         r.app_name = "Chrome".to_string();
-        r.embedding = vec![0.0; 384];
+        r.embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
         r.image_embedding = vec![0.0; 768];
-        r.snippet_embedding = vec![0.0; 384];
-        r.support_embedding = vec![0.0; 384];
+        r.snippet_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
+        r.support_embedding = vec![0.0; crate::config::DEFAULT_TEXT_EMBEDDING_DIM];
         r
     }
 

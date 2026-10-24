@@ -52,10 +52,10 @@ use std::sync::Arc;
 
 /// Active LanceDB table for memory records.
 ///
-/// **Current durable write path:** v4 = all-MiniLM-L6-v2, 384-d vectors.
-/// This re-exports `inference::model_config::MEMORIES_V4_TABLE` so the
+/// **Current durable write path:** v7 = EmbeddingGemma 2, 768-d vectors.
+/// This re-exports `inference::model_config::MEMORIES_V7_TABLE` so the
 /// embedding contract has exactly one source of truth (see `model_config.rs`).
-pub const MEMORIES_TABLE: &str = crate::inference::model_config::MEMORIES_V4_TABLE;
+pub const MEMORIES_TABLE: &str = crate::inference::model_config::MEMORIES_V7_TABLE;
 pub const MEMORIES_V5_PARENT_TABLE: &str = MEMORIES_V5_TABLE;
 pub const MEMORY_CHUNKS_TABLE: &str = "memory_chunks_v1_bge_1024";
 pub use verbatim::{VerbatimEntry, VerbatimStats, MEMORY_VERBATIM_TABLE};

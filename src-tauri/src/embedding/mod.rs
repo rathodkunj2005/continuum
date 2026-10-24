@@ -3,6 +3,7 @@
 mod admission;
 mod chunking;
 mod clip_vision;
+mod gemma_helper;
 mod onnx;
 pub(crate) use onnx::cached_embedder;
 pub mod prefixes;

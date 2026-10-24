@@ -1,6 +1,7 @@
 //! Local text embedding backend via native ONNX Runtime.
 
 use super::admission::{AdmissionGate, EmbeddingPriority};
+use super::gemma_helper::GemmaHelper;
 use super::{chunk_screen_text, TextChunker};
 use crate::config::{
     ChunkingConfig, DEFAULT_EMBEDDING_CACHE_CAPACITY, DEFAULT_EMBEDDING_MODEL_NAME,
@@ -8,7 +9,7 @@ use crate::config::{
 };
 use crate::inference::model_config::{
     active_embedding_contract, embedding_v5_contract, validate_embedding_config_against_contract,
-    TextEmbeddingContract,
+    EmbeddingContractVersion, TextEmbeddingContract,
 };
 use ndarray::Array2;
 use ort::session::Session;
@@ -403,7 +404,35 @@ impl Embedder {
                 }
             })
             .collect::<Vec<_>>();
-        self.embed_chunk_groups(chunk_groups, priority)
+        self.embed_chunk_groups(self.prompt_legacy_documents(chunk_groups), priority)
+    }
+
+    /// The legacy entry points (`embed_batch`, `embed_batch_with_context`)
+    /// carry no role, so what they embed is documents. Contracts whose model
+    /// wants a document prompt get it here, after chunking; text that already
+    /// carries a query prompt (`embed_query` callers) is left as it is.
+    fn prompt_legacy_documents(&self, chunk_groups: Vec<Vec<String>>) -> Vec<Vec<String>> {
+        if self.contract.version != EmbeddingContractVersion::V7EmbeddingGemma2 {
+            return chunk_groups;
+        }
+        use super::prefixes::{document_text_for, EMBEDDING_GEMMA_QUERY_PREFIX};
+        chunk_groups
+            .into_iter()
+            .map(|chunks| {
+                chunks
+                    .into_iter()
+                    .map(|chunk| {
+                        if is_embedding_low_signal(&chunk)
+                            || chunk.starts_with(EMBEDDING_GEMMA_QUERY_PREFIX)
+                        {
+                            chunk
+                        } else {
+                            document_text_for(self.contract, &chunk)
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     /// Prepare the exact prompted chunks used by `embed_inputs`, without
@@ -473,7 +502,10 @@ impl Embedder {
                 }
             })
             .collect::<Vec<_>>();
-        self.embed_chunk_groups(chunk_groups, EmbeddingPriority::Background)
+        self.embed_chunk_groups(
+            self.prompt_legacy_documents(chunk_groups),
+            EmbeddingPriority::Background,
+        )
     }
 
     /// Product-named wrapper for the capture -> chunking -> embedding boundary.
@@ -694,6 +726,16 @@ impl Default for Embedder {
 struct RealEmbedder {
     admission: AdmissionGate,
     contract: TextEmbeddingContract,
+    engine: Engine,
+}
+
+enum Engine {
+    Onnx(OnnxEngine),
+    /// EmbeddingGemma 2 in `fndr-eg2-helper`.
+    Gemma(GemmaHelper),
+}
+
+struct OnnxEngine {
     session: Mutex<Session>,
     tokenizer: tokenizers::Tokenizer,
     input_names: Vec<String>,
@@ -747,6 +789,31 @@ impl RealEmbedder {
     }
 
     fn load(contract: TextEmbeddingContract, model_dir: &std::path::Path) -> Result<Self, String> {
+        let embedder = if contract.version == EmbeddingContractVersion::V7EmbeddingGemma2 {
+            let model_path = model_dir.join(contract.model_filename);
+            if !model_path.exists() {
+                return Err(format!(
+                    "EmbeddingGemma 2 model not found at {}. Download {} or set FNDR_MODEL_DIR.",
+                    model_path.display(),
+                    contract.model_filename
+                ));
+            }
+            Self {
+                admission: AdmissionGate::default(),
+                contract,
+                engine: Engine::Gemma(GemmaHelper::start(&model_path, contract.dimensions)?),
+            }
+        } else {
+            Self::load_onnx(contract, model_dir)?
+        };
+        embedder.probe()?;
+        Ok(embedder)
+    }
+
+    fn load_onnx(
+        contract: TextEmbeddingContract,
+        model_dir: &std::path::Path,
+    ) -> Result<Self, String> {
         let onnx_path = model_dir.join(contract.model_filename);
         let tokenizer_path = model_dir.join(contract.tokenizer_filename);
 
@@ -833,23 +900,28 @@ impl RealEmbedder {
             inputs = ?input_names,
             "Native ort text embedder initialized"
         );
-        let embedder = Self {
+        Ok(Self {
             admission: AdmissionGate::default(),
             contract,
-            session: Mutex::new(session),
-            tokenizer,
-            input_names,
-            output_name,
-        };
+            engine: Engine::Onnx(OnnxEngine {
+                session: Mutex::new(session),
+                tokenizer,
+                input_names,
+                output_name,
+            }),
+        })
+    }
 
-        let probe = embedder.embed_batch(&["FNDR embedding dimension probe".to_string()])?;
+    /// One embedding must come back at the contract's size and not be all zero.
+    fn probe(&self) -> Result<(), String> {
+        let contract = self.contract;
+        let probe = self.embed_batch(&["FNDR embedding dimension probe".to_string()])?;
         let actual_dim = probe.first().map(|vector| vector.len()).unwrap_or(0);
         if actual_dim != contract.dimensions {
             return Err(format!(
-                "Embedding dimension mismatch for {}: model file at {} returned {actual_dim}-d vectors but the FNDR contract expects {}-d for table {}. \
+                "Embedding dimension mismatch for {}: the model returned {actual_dim}-d vectors but the FNDR contract expects {}-d for table {}. \
                  Ensure FNDR_MODEL_DIR points at a directory containing {} + {} for the active contract.",
                 contract.model_id,
-                onnx_path.display(),
                 contract.dimensions,
                 contract.table_name,
                 contract.model_filename,
@@ -863,7 +935,7 @@ impl RealEmbedder {
         {
             return Err("Embedding probe returned an all-zero vector".to_string());
         }
-        Ok(embedder)
+        Ok(())
     }
 
     fn embed_scheduled(
@@ -904,8 +976,20 @@ impl RealEmbedder {
             return Ok(Vec::new());
         }
 
+        let onnx = match &self.engine {
+            Engine::Onnx(onnx) => onnx,
+            Engine::Gemma(helper) => {
+                let t_helper = std::time::Instant::now();
+                let vectors = helper.embed(texts)?;
+                crate::telemetry::runtime_metrics::record_ms(
+                    "embedding.eg2_batch_ms",
+                    t_helper.elapsed().as_millis() as u64,
+                );
+                return Ok(vectors);
+            }
+        };
         let t_onnx = std::time::Instant::now();
-        let encodings = self
+        let encodings = onnx
             .tokenizer
             .encode_batch(texts.to_vec(), true)
             .map_err(|e| format!("Tokenization failed: {e}"))?;
@@ -945,7 +1029,7 @@ impl RealEmbedder {
             .map_err(|e| format!("Failed to create attention_mask tensor: {e}"))?;
         let types_t = ort::value::Tensor::from_array(token_type_ids)
             .map_err(|e| format!("Failed to create token_type_ids tensor: {e}"))?;
-        let mut session_guard = self
+        let mut session_guard = onnx
             .session
             .lock()
             .map_err(|e| format!("Session mutex poisoned: {e}"))?;
@@ -953,7 +1037,7 @@ impl RealEmbedder {
             "input_ids" => ids_t,
             "attention_mask" => mask_t,
         ];
-        if self.input_names.iter().any(|name| name == "token_type_ids") {
+        if onnx.input_names.iter().any(|name| name == "token_type_ids") {
             inputs.push((Cow::from("token_type_ids"), types_t.into()));
         }
 
@@ -962,7 +1046,7 @@ impl RealEmbedder {
             .map_err(|e| format!("ONNX inference failed: {e}"))?;
 
         let output = outputs
-            .get(&self.output_name)
+            .get(&onnx.output_name)
             .or_else(|| outputs.get("last_hidden_state"))
             .or_else(|| outputs.get("token_embeddings"))
             .or_else(|| {
@@ -972,7 +1056,7 @@ impl RealEmbedder {
             .ok_or_else(|| {
                 format!(
                     "ONNX inference produced no usable embedding output. Expected '{}'",
-                    self.output_name
+                    onnx.output_name
                 )
             })?;
 
