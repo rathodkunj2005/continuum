@@ -1,18 +1,20 @@
 <p align="center">
-  <img src="website/favicon.svg" alt="FNDR mark" width="76" height="76">
+  <img src="docs/brand/continuum-mark.svg" alt="Continuum mark" width="88" height="88">
 </p>
 
-<h1 align="center">FNDR</h1>
+<h1 align="center">Continuum</h1>
 
 <p align="center">
-  A local-first macOS memory system for finding and resuming work across apps.
+  A local-first macOS memory system for finding and resuming work across apps, searched with EmbeddingGemma 2.
 </p>
 
 <p align="center">
-  <strong>React + TypeScript</strong> | <strong>Tauri 2</strong> | <strong>Rust</strong> | <strong>LanceDB</strong> | <strong>Apple Silicon</strong>
+  <strong>React + TypeScript</strong> | <strong>Tauri 2</strong> | <strong>Rust</strong> | <strong>LanceDB</strong> | <strong>EmbeddingGemma 2</strong> | <strong>Apple Silicon</strong>
 </p>
 
-FNDR turns explicitly enabled desktop context into local, source-aware memory records. It combines native screen access, OCR and text cleanup, versioned local embeddings, lexical and semantic retrieval, evidence-grounded answers, and bounded integrations for agents. The durable product path is a structured memory index, not a screenshot archive.
+Continuum is the EmbeddingGemma 2 edition of [FNDR](https://github.com/anurupkumar18/FNDR), kept in step with its main branch. Capture, chunking, dedup, privacy admission and the product surfaces are FNDR's; the text embedding engine is replaced (see [ADR 039](docs/decisions/039-embeddinggemma-2-engine.md)). Source paths, crate names and commands below keep the `fndr` name.
+
+Continuum turns explicitly enabled desktop context into local, source-aware memory records. It combines native screen access, OCR and text cleanup, local EmbeddingGemma 2 embeddings, lexical and semantic retrieval, evidence-grounded answers, and bounded integrations for agents. The durable product path is a structured memory index, not a screenshot archive.
 
 > **Privacy boundary:** memory and indexes stay on the Mac by default. Network integrations are separate, configured paths. Outbound tasks and actions require their own user review and policy checks.
 
@@ -34,7 +36,7 @@ flowchart LR
     API --> CAP["Capture and privacy admission"]
     CAP --> OCR["Accessibility text and Vision OCR"]
     OCR --> DOC["Canonical memory document"]
-    DOC --> EMB["Local ONNX embedding"]
+    DOC --> EMB["EmbeddingGemma 2 helper process"]
     DOC --> DB["LanceDB records and indexes"]
     EMB --> DB
     UI --> RET["Shared retrieval runtime"]
@@ -65,7 +67,7 @@ flowchart LR
   F --> G
   G --> H["Source evidence + app, URL, time, reopen metadata"]
   H --> I["Continuity merge and canonical embedding document"]
-  I --> J["384-d MiniLM vector + local lexical index"]
+  I --> J["768-d EmbeddingGemma 2 vector + local lexical index"]
   J --> K["LanceDB parent record"]
   K -. "optional indexing paths" .-> L["BGE chunks and graph relations"]
 ```
@@ -85,7 +87,7 @@ The durable object is a `MemoryRecord` with text, time, app/window and source me
 | `raw_evidence.embedding_manifest` | Input and vector-role provenance for embedding writes | Supports repair and contract audits |
 | Graph nodes and edges | Typed, persisted relationships attached to source memories | Available to graph and browse surfaces; the active query planner does not select graph retrieval |
 
-**Embedding contract.** The live durable parent table is `memories_v4_minilm_384`: `all-MiniLM-L6-v2`, ONNX Runtime, 384 dimensions. Model identity, tokenizer, dimension, and table are one contract. A vector from another model space cannot be written as if it belonged to this one.
+**Embedding contract.** The live durable parent table is `memories_v7_embeddinggemma2_768`: `google/embeddinggemma-2` (Q8_0 GGUF), 768 dimensions, 2048-token inputs, with DigUp's prompts (`task: search result | query: ` and `title: none | text: `). The model runs in `fndr-eg2-helper`, a child process with its own pinned llama.cpp b11461 and a no-logits patch, because the `llama-cpp-2` crate used for Qwen cannot load it and two ggml copies cannot share one binary. Model identity, dimension, and table are one contract. A vector from another model space cannot be written as if it belonged to this one, and there is no silent fallback to another model: a missing helper or model file is an error. The earlier MiniLM table, `memories_v4_minilm_384`, is left in place and is not read.
 
 The optional child table, `memory_chunks_v1_bge_1024`, uses BGE-large vectors and a separate BM25 path. The chunk route is disabled unless configured and usable chunk rows exist. It scores child text, rolls evidence up to its parent, and returns the parent record for presentation. Model candidates and reindex work do not become the active contract just because they compile or match a vector dimension.
 
@@ -170,7 +172,7 @@ Notch Do separates planning from execution. A request may be planned by an expli
 | Desktop shell | `src/app/`, `src/domains/`, `src/shared/` | React surfaces, domain state, typed IPC wrappers, event subscriptions |
 | Native boundary | `src-tauri/src/ipc/`, Tauri command registration | Permission-aware macOS operations and frontend/backend contract |
 | Capture | `src-tauri/src/capture/`, `src-tauri/src/privacy/`, `src-tauri/src/ocr/` | Sampling, admission, OCR, normalization, dedupe, memory assembly |
-| Embedding | `src-tauri/src/inference/`, `memory_embedding_document.rs` | Versioned text contracts, local ONNX sessions, canonical input provenance |
+| Embedding | `src-tauri/src/inference/`, `src-tauri/src/embedding/`, `src-tauri/helpers/fndr-eg2/`, `memory_embedding_document.rs` | Versioned text contracts, the EmbeddingGemma 2 helper client, canonical input provenance |
 | Persistence | `src-tauri/src/storage/lance_store/`, `src-tauri/src/graph/` | LanceDB schemas, migrations, records, chunks, indexes, graph relations |
 | Retrieval and answers | `src-tauri/src/context_runtime/`, `src-tauri/src/search/` | Query planning, route execution, access filtering, fusion, evidence, verification |
 | Resume and actions | `src-tauri/src/operator/`, `src-tauri/src/agent/`, reopen commands | Typed targets, action policy, reviewed peer tasks, outcomes and activity records |
@@ -178,7 +180,7 @@ Notch Do separates planning from execution. A request may be planned by an expli
 
 Tauri commands are the native capability boundary. The renderer does not read the database or call macOS APIs directly. Backend status is pushed to the UI over typed events where the state is continuous; UI components do not need to poll native state independently.
 
-Local model initialization and inference can block on filesystem, tokenizer, or native runtime work, so these jobs run outside Tokio's async executor. Shared ONNX sessions reuse the same model contract while per-caller batching and preprocessing remain local. Model residency is managed deliberately; a replaced handle is not evidence that native weights have been unloaded.
+Local model initialization and inference can block on filesystem, tokenizer, or native runtime work, so these jobs run outside Tokio's async executor. The embedding helper is one shared process per model contract; per-caller batching, caching and preprocessing remain local. Model residency is managed deliberately; a replaced handle is not evidence that native weights have been unloaded.
 
 ### Stack
 
@@ -188,7 +190,7 @@ Local model initialization and inference can block on filesystem, tokenizer, or 
 | UI | React 18, TypeScript, Vite |
 | Backend | Rust 2021, Tokio, Serde, Specta-typed IPC |
 | Local memory | LanceDB and Arrow schemas, versioned vector tables, local full-text indexes |
-| Text embeddings | ONNX Runtime + Hugging Face tokenizer; MiniLM 384-d active contract |
+| Text embeddings | EmbeddingGemma 2 Q8_0 on llama.cpp (Metal) in `fndr-eg2-helper`; 768-d active contract. ONNX Runtime remains for the optional BGE chunk index |
 | Optional local generation | `llama.cpp` through `llama-cpp-2` with Metal; model files are separate assets |
 | Native screen path | ScreenCaptureKit, Apple Vision, Accessibility and AppKit |
 | MCP transport | Axum, Streamable HTTP and supported SSE compatibility, bearer auth and origin controls |
@@ -212,7 +214,17 @@ npm install
 npm run tauri dev
 ```
 
-On first run, onboarding obtains the required local embedding assets. macOS may request Screen Recording, Accessibility, or microphone permission for the enabled feature being used. Permission denial should leave an explicit unavailable state; it should not be represented as a successful capture or voice turn.
+Build the embedding helper once. It compiles a pinned, patched llama.cpp, which takes several minutes and needs CMake:
+
+```bash
+scripts/eg2/build-helper.sh
+```
+
+Development builds find the result under `src-tauri/binaries/` or `src-tauri/helpers/fndr-eg2/target/release/`; `FNDR_EG2_HELPER` overrides the path. Check it against DigUp's reference vectors with `fndr-eg2-helper --text <model.gguf> --check src-tauri/helpers/fndr-eg2/reference`; every cosine must be at least 0.999.
+
+On first run, onboarding downloads the 310 MB `embeddinggemma-2-Q8_0.gguf` (sha256 pinned). A profile that holds MiniLM vectors needs a re-embed, and a `config.toml` that still sets 384 dimensions is refused at startup.
+
+Capture and the rest of the first run are unchanged. macOS may request Screen Recording, Accessibility, or microphone permission for the enabled feature being used. Permission denial should leave an explicit unavailable state; it should not be represented as a successful capture or voice turn.
 
 ## Verification
 
@@ -239,6 +251,23 @@ make qa-retrieval-check PERSONA=software-engineer
 
 The gate reseeds a disposable QA profile and compares per-surface results with accepted references. It is evidence about the labeled synthetic cases, not proof of native permissions, capture quality on every app, owner-vault usefulness, or participant outcomes. Native and human checks are reported separately. Never point a seeder or migration at the real profile to make a README claim.
 
+## Status of this edition
+
+Measured with `make qa-retrieval-check` on disposable profiles against the MiniLM references, with no other change:
+
+| Persona | Recall@5 | MRR@10 | Gate |
+|---|---|---|---|
+| knowledge-worker | 1.000 to 0.955 | 0.966 to 0.937 | pass |
+| office-pm | 0.900 to 0.850 | 0.661 to 0.785 | fail: one paraphrase fell from rank 9 to a miss |
+| software-engineer | 1.000 to 1.000 | 0.831 to 0.883 | pass |
+
+The model ranks the top result better on two of three personas, and search p95 fell from 315 to 372 ms to 167 to 199 ms (the reference timings come from another run). Two gaps are open:
+
+- The strong-match bar (0.25) and the other score thresholds (focus drift 0.30, proactive 0.82, same-task 0.80, graph link 0.82) were tuned for MiniLM. Under EmbeddingGemma 2, no-match queries score 0.55 to 0.60, so every no-match query is currently reported as a strong match. Recalibration is the next step.
+- The helper is not yet bundled as a Tauri `externalBin`, so a packaged app does not carry it.
+
+Use of the model is under the Gemma Terms of Use.
+
 ## Repository map
 
 ```text
@@ -249,11 +278,14 @@ src/
 src-tauri/src/
   capture/                     Screen sampling and memory assembly
   context_runtime/             Query planning, routes, fusion and answer evidence
-  inference/                   Embedding and local generation runtimes
+  inference/                   Embedding contracts and local generation runtimes
+  embedding/                   Chunking, prompts, and the EmbeddingGemma 2 helper client
   ipc/                         Tauri command handlers and native API boundary
   mcp/                         MCP server, tools, resources, authorization
   operator/                    Registered local actions and risk policy
   storage/lance_store/         Local records, vector schemas and indexes
+src-tauri/helpers/fndr-eg2/    EmbeddingGemma 2 helper (own llama.cpp, JSON over stdio)
+scripts/eg2/                   Pinned llama.cpp build and helper staging
 docs/
   architecture/                System maps and schema notes
   decisions/                   Accepted and proposed architecture decisions
@@ -272,8 +304,9 @@ docs/
 - [Memory Journey evidence contract](docs/product/memory-journey.md)
 - [Quality Lab](docs/product/quality-lab.md)
 - [October product plan](docs/team/2026-10-month-plan.md)
+- [ADR 039: EmbeddingGemma 2 engine](docs/decisions/039-embeddinggemma-2-engine.md)
 - [Change history](CHANGELOG.md)
 
 ## License
 
-Source code is licensed under the [Apache License 2.0](LICENSE).
+Source code is licensed under the [Apache License 2.0](LICENSE). llama.cpp (MIT) and DigUp's embedding pipeline (MIT) are used under their own licenses; the EmbeddingGemma 2 weights carry the Gemma Terms of Use.
