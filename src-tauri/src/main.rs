@@ -925,6 +925,7 @@ fn main() {
             ipc::commands::calendar_meeting_prep_state,
             ipc::commands::set_calendar_meeting_prep,
             ipc::commands::open_calendar_privacy_settings,
+            ipc::commands::next_meeting_brief,
             ipc::commands::get_retention_days,
             ipc::commands::set_retention_days,
             ipc::commands::delete_older_than,

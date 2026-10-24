@@ -365,6 +365,30 @@ export async function setCalendarMeetingPrep(enabled: boolean): Promise<Calendar
     return invoke<CalendarPrepState>("set_calendar_meeting_prep", { enabled });
 }
 
+export type MeetingBriefState = "off" | "no_access" | "private" | "no_meeting" | "ready";
+
+export interface MeetingBriefMemory {
+    id: string;
+    title: string;
+    appName: string;
+    timestamp: number;
+    snippet: string;
+}
+
+/** The next calendar meeting and what FNDR remembers that bears on it. */
+export interface MeetingBrief {
+    state: MeetingBriefState;
+    title: string | null;
+    startsAt: number | null;
+    strongMatch: boolean;
+    thread: { key: string; title: string } | null;
+    memories: MeetingBriefMemory[];
+}
+
+export async function nextMeetingBrief(): Promise<MeetingBrief> {
+    return invoke<MeetingBrief>("next_meeting_brief");
+}
+
 export async function openCalendarPrivacySettings(): Promise<void> {
     return invoke("open_calendar_privacy_settings");
 }

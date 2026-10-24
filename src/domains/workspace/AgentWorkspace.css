@@ -405,10 +405,11 @@
     position: absolute;
     left: 24px;
     right: 24px;
-    bottom: calc(100% - 8px);
+    bottom: calc(100% + 8px);
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 8px;
-    max-height: 360px;
+    max-height: min(360px, 50vh);
     padding: 10px;
     border: 1px solid var(--hairline-2);
     border-radius: 14px;
@@ -452,6 +453,7 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    min-height: 0;
     overflow-y: auto;
 }
 

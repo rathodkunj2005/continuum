@@ -11,6 +11,11 @@ use serde::Serialize;
 /// Events starting within this long are read.
 pub const LOOKAHEAD_MS: i64 = 30 * 60_000;
 
+/// A brief covers events starting within this long...
+pub const BRIEF_AHEAD_MS: i64 = 24 * 60 * 60_000;
+/// ...or that started this long ago.
+pub const BRIEF_STARTED_MS: i64 = 15 * 60_000;
+
 /// Whether FNDR may read the calendar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -121,6 +126,23 @@ pub fn upcoming_meetings(
         .collect()
 }
 
+/// The meeting a brief is for: the earliest titled, timed, accepted event
+/// from a calendar being read that starts within a day or began in the last
+/// quarter hour.
+pub fn next_event(
+    events: Vec<CalendarEvent>,
+    calendar_ids: &[String],
+    now_ms: i64,
+) -> Option<CalendarEvent> {
+    events
+        .into_iter()
+        .filter(|event| !event.all_day && !event.declined)
+        .filter(|event| calendar_ids.contains(&event.calendar_id))
+        .filter(|event| (now_ms - BRIEF_STARTED_MS..=now_ms + BRIEF_AHEAD_MS).contains(&event.starts_at))
+        .filter(|event| event.title.as_deref().is_some_and(|t| !t.trim().is_empty()))
+        .min_by_key(|event| event.starts_at)
+}
+
 /// The calendar meetings prep is due for now. Nothing is read when the
 /// switch is off, in Private Mode, or without access; a failed read is
 /// logged without any event text and gives nothing.
@@ -176,6 +198,29 @@ pub(crate) mod tests {
             all_day: false,
             declined: false,
         }
+    }
+
+    #[test]
+    fn the_brief_is_for_the_earliest_accepted_timed_event_within_a_day() {
+        let work = vec!["work".to_string()];
+        let mut declined = event("d", "work", "Declined", 5);
+        declined.declined = true;
+        let mut all_day = event("a", "work", "Offsite", 1);
+        all_day.all_day = true;
+        let events = vec![
+            event("late", "work", "Later", 120),
+            declined,
+            all_day,
+            event("far", "work", "Tomorrow+", 25 * 60),
+            event("other", "home", "Dentist", 10),
+            event("soon", "work", "Design review", 45),
+            event("over", "work", "Long over", -30),
+        ];
+        let picked = next_event(events, &work, NOW).expect("an event");
+        assert_eq!(picked.id, "soon");
+        assert!(next_event(Vec::new(), &work, NOW).is_none());
+        let started = vec![event("on", "work", "Just began", -10)];
+        assert_eq!(next_event(started, &work, NOW).unwrap().id, "on");
     }
 
     /// A calendar on a fake Mac. It returns every event it holds, whatever

@@ -2,10 +2,16 @@
 //! access. The calendar is read on this Mac only; see
 //! `proactive_signals::calendar`.
 
-use crate::proactive_signals::calendar::{CalendarSource, CalendarStatus};
+use crate::context_runtime::{retrieve_search_results, RetrieveRequest};
+use crate::proactive_signals::calendar::{
+    calendars_to_read, next_event, CalendarSource, CalendarStatus, BRIEF_AHEAD_MS,
+    BRIEF_STARTED_MS,
+};
 use crate::proactive_signals::eventkit::EventKitCalendar;
+use crate::proactive_signals::meeting_prep::related_thread;
 use crate::AppState;
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::State;
 
@@ -72,6 +78,151 @@ pub async fn set_calendar_meeting_prep(
         return Err(err.to_string());
     }
     Ok(next)
+}
+
+const BRIEF_MEMORIES: usize = 6;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BriefMemory {
+    pub id: String,
+    pub title: String,
+    pub app_name: String,
+    pub timestamp: i64,
+    pub snippet: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BriefThread {
+    pub key: String,
+    pub title: String,
+}
+
+/// Why a brief is empty, or that it holds a meeting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BriefState {
+    /// The calendar switch is off.
+    Off,
+    /// The switch is on but macOS has not granted calendar access.
+    NoAccess,
+    /// Private Mode: nothing is read.
+    Private,
+    /// No meeting in the next day.
+    NoMeeting,
+    Ready,
+}
+
+/// The next meeting and what FNDR remembers that bears on it. The event
+/// title goes only to this Mac's own search and to the window that asked.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingBrief {
+    pub state: BriefState,
+    pub title: Option<String>,
+    pub starts_at: Option<i64>,
+    pub strong_match: bool,
+    pub thread: Option<BriefThread>,
+    pub memories: Vec<BriefMemory>,
+}
+
+impl MeetingBrief {
+    fn empty(state: BriefState) -> Self {
+        Self {
+            state,
+            title: None,
+            starts_at: None,
+            strong_match: false,
+            thread: None,
+            memories: Vec::new(),
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn next_meeting_brief(state: State<'_, Arc<AppState>>) -> Result<MeetingBrief, String> {
+    let app = state.inner();
+    if app.is_incognito.load(Ordering::SeqCst) {
+        return Ok(MeetingBrief::empty(BriefState::Private));
+    }
+    let (enabled, selected) = {
+        let config = app.config.read();
+        (
+            config.proactive_signals.calendar_meeting_prep,
+            config.proactive_signals.calendar_ids.clone(),
+        )
+    };
+    if !enabled {
+        return Ok(MeetingBrief::empty(BriefState::Off));
+    }
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let event = blocking(move || -> Result<_, String> {
+        let source = EventKitCalendar;
+        if source.status() != CalendarStatus::Granted {
+            return Ok(None);
+        }
+        let calendars = source.calendars()?;
+        let ids = calendars_to_read(&calendars, &selected);
+        if ids.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let events = source.events(&ids, now_ms - BRIEF_STARTED_MS, now_ms + BRIEF_AHEAD_MS)?;
+        Ok(Some(next_event(events, &ids, now_ms).into_iter().collect()))
+    })
+    .await??;
+    let Some(events) = event else {
+        return Ok(MeetingBrief::empty(BriefState::NoAccess));
+    };
+    let Some(event) = events.into_iter().next() else {
+        return Ok(MeetingBrief::empty(BriefState::NoMeeting));
+    };
+    let title = event.title.clone().unwrap_or_default().trim().to_string();
+
+    let request = RetrieveRequest {
+        query: title.clone(),
+        time: None,
+        app: None,
+        limit: BRIEF_MEMORIES,
+    };
+    let (retrieved, results) = retrieve_search_results(app, &request)
+        .await
+        .unwrap_or_default();
+    let thread = related_thread(app, &title).await.map(|thread| BriefThread {
+        key: thread.key,
+        title: thread.title,
+    });
+    let memories = if retrieved.strong_match {
+        results
+            .into_iter()
+            .take(BRIEF_MEMORIES)
+            .map(|hit| BriefMemory {
+                title: if hit.window_title.trim().is_empty() {
+                    hit.app_name.clone()
+                } else {
+                    hit.window_title.clone()
+                },
+                id: hit.id,
+                app_name: hit.app_name,
+                timestamp: hit.timestamp,
+                snippet: if hit.display_summary.trim().is_empty() {
+                    hit.snippet
+                } else {
+                    hit.display_summary
+                },
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Ok(MeetingBrief {
+        state: BriefState::Ready,
+        title: Some(title),
+        starts_at: Some(event.starts_at),
+        strong_match: retrieved.strong_match,
+        thread,
+        memories,
+    })
 }
 
 /// Opens System Settings at Privacy and Security, Calendars.

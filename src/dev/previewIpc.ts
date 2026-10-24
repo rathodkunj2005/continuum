@@ -1215,6 +1215,22 @@ export function createPreviewIpcHandler(): PreviewIpcHandler {
             }
             case "open_calendar_privacy_settings":
                 return undefined;
+            case "next_meeting_brief": {
+                const startsAt = Date.now() + 12 * 60_000;
+                const ago = (minutes: number) => Date.now() - minutes * 60_000;
+                return {
+                    state: "ready",
+                    title: "FNDR demo walkthrough",
+                    startsAt,
+                    strongMatch: true,
+                    thread: { key: "FNDR", title: "FNDR" },
+                    memories: [
+                        { id: "preview-memory-1", title: "Meeting prep card design", appName: "Cursor", timestamp: ago(14), snippet: "Drafting the Home card that compiles related memories before a calendar event." },
+                        { id: "preview-memory-2", title: "FNDR demo video voiceover script", appName: "Terminal", timestamp: ago(41), snippet: "Voiceover script for the demo: capture, recall, Hermes, and meeting prep." },
+                        { id: "preview-memory-3", title: "Capstone sprint notes", appName: "Notion", timestamp: ago(190), snippet: "Open items for the demo: polish Hermes chat, fix the memory picker overlay." },
+                    ],
+                };
+            }
             case "get_app_names":
                 return ["Visual Studio Code", "Google Chrome", "Terminal", "Figma"];
             case "get_privacy_alerts":

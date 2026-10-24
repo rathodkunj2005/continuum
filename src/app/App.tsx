@@ -3,6 +3,7 @@ import { AppPanels } from "./AppPanels";
 import { isMountedPanelKey, type MountedPanelKey } from "./panels";
 import { BiometricLockScreen } from "./BiometricLockScreen";
 import { HomeHero } from "./HomeHero";
+import { MeetingBriefCard } from "./MeetingBriefCard";
 import { ResumeWork } from "./ResumeWork";
 import type { AppToast } from "./types";
 import { SearchBar } from "@/domains/search/SearchBar";
@@ -666,6 +667,9 @@ function App() {
                                 }}
                             />
                         </div>
+                        {isHomeActive && !EVAL_UI && (
+                            <MeetingBriefCard onOpenMemory={handleOpenMemoryById} />
+                        )}
                         {isHomeActive && !EVAL_UI && (
                             <ResumeWork
                                 onOpenMemory={handleOpenMemoryById}
